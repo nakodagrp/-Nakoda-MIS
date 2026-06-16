@@ -171,6 +171,7 @@
     },
 
     listBranchesFull:function(){ return call('listBranches',{token:getToken()}); },
+    uploadFile:function(args){ return call('uploadFile',Object.assign({token:getToken()},args||{})); },
     createBranch:function(data){ return call('createBranch',{token:getToken(),data:data}); },
     updateBranch:function(id,data){ return call('updateBranch',{token:getToken(),branchId:id,data:data}); },
 

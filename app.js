@@ -11,7 +11,7 @@ function initials(n){ var p=String(n||'N').trim().split(/\s+/); return ((p[0]||'
 
 /* boot */
 document.addEventListener('DOMContentLoaded', function(){
-  registerSW(); initInstall(); bindAuth(); bindApp(); bindStatus();
+  registerSW(); initInstall(); bindAuth(); bindApp(); bindStatus(); setupTableLabels();
   if(!API.configured()){
     setMsg('loginMsg','This app is not connected yet. Open config.js and paste your Apps Script URL.','error');
     show('view-login'); return;
@@ -31,6 +31,22 @@ document.addEventListener('DOMContentLoaded', function(){
   });
 });
 function kvRead(k){ return new Promise(function(res){ var r=indexedDB.open('nakoda_mis');r.onsuccess=function(){try{var s=r.result.transaction('kv','readonly').objectStore('kv').get(k);s.onsuccess=function(){res(s.result);};s.onerror=function(){res(null);};}catch(e){res(null);}};r.onerror=function(){res(null);}; }); }
+
+/* mobile: auto-label table cells for stacked-card view */
+function labelizeTables(){
+  document.querySelectorAll('table').forEach(function(tbl){
+    var ths=tbl.querySelectorAll('thead th'); if(!ths.length) return;
+    var labels=Array.prototype.map.call(ths,function(th){ return th.textContent.trim(); });
+    tbl.querySelectorAll('tbody tr').forEach(function(tr){
+      Array.prototype.forEach.call(tr.children,function(td,i){ if(labels[i]!=null && td.getAttribute('data-label')===null) td.setAttribute('data-label',labels[i]); });
+    });
+  });
+}
+function setupTableLabels(){
+  var t; var run=function(){ clearTimeout(t); t=setTimeout(labelizeTables,60); };
+  try{ new MutationObserver(run).observe(document.body,{childList:true,subtree:true}); }catch(e){}
+  run();
+}
 
 /* service worker + update banner */
 function registerSW(){

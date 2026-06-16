@@ -148,3 +148,39 @@ tbody tr:hover{background:#fcfcfd}
   .greet h1{font-size:20px}
 }
 .hamburger{display:none}
+.themegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px}
+.themetile{border-radius:8px;padding:16px 6px;text-align:center;font-weight:600;font-size:12px;line-height:1.2;cursor:pointer;border:2px solid transparent;transition:.12s}
+.themetile.on{border-color:#DA1017;box-shadow:0 0 0 2px #fde8e9}
+.themetile:hover{filter:brightness(1.08)}
+
+/* ============ MOBILE OPTIMISATION ============ */
+html,body{overflow-x:hidden}
+@media(max-width:760px){
+  .topbar{height:56px;padding:0 12px;gap:8px}
+  .topbar img.logo{height:26px}
+  .syncchip{padding:4px 8px} .syncchip #syncText{display:none}
+  .userchip{padding:4px 6px 4px 8px;gap:6px} .avatar{width:30px;height:30px;font-size:12px}
+  .iconbtn{padding:8px 10px}
+  .content{padding:14px 12px}
+  .greet{padding:16px;border-radius:14px;gap:10px}
+  .greet h1{font-size:19px} .greet-actions{width:100%} .greet-select{flex:1}
+  .page-head h1{font-size:18px}
+  .kpis{gap:10px} .kpi{padding:13px 14px} .kpi .n{font-size:22px}
+  .btn{padding:11px 15px} .btn.sm{padding:8px 12px}
+  .overlay{padding:8px;align-items:flex-end}
+  .modal{max-width:100%;border-radius:16px 16px 0 0}
+  .modal-body{max-height:74vh}
+  .toolbar{padding:12px} .toolbar .search{min-width:0;width:100%}
+}
+/* data tables -> stacked cards on phones */
+@media(max-width:620px){
+  table thead{display:none}
+  table,table tbody,table tr,table td{display:block;width:100%}
+  table tr{border:1px solid var(--line);border-radius:12px;margin:0 12px 10px;background:#fff;padding:4px 0;width:auto}
+  table tr:hover{background:#fff}
+  table td{display:flex;justify-content:space-between;align-items:center;gap:14px;border:none!important;padding:8px 14px;white-space:normal;text-align:right;font-size:13.5px}
+  table td:before{content:attr(data-label);font-weight:600;color:var(--muted);text-align:left;flex-shrink:0}
+  table td:empty{display:none}
+  .table-wrap{overflow:visible}
+  th{position:static}
+}
