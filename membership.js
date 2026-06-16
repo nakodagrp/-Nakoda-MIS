@@ -116,15 +116,24 @@
         document.getElementById('cardTypesBtn').style.display=(r.perms&&r.perms.canManageTypes)?'':'none';
         var list=r.cards||[]; box.className='';
         if(!list.length){ box.innerHTML='<div class="empty">No cards yet. Tap “+ Issue card”. <br><small>(If you migrated old cards, make sure the Membership_Cards sheet is copied in.)</small></div>'; return; }
-        box.innerHTML='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;padding:14px">'+
-          list.map(function(c,i){ return '<div data-cn="'+esc(c.cardNumber)+'" class="mcardwrap" style="cursor:pointer"><div id="lc'+i+'"></div>'+
-            '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:12.5px"><span style="color:#888">'+esc(c.holderName)+' · '+esc(c.mobile)+'</span>'+cstatus(c.status)+'</div></div>'; }).join('')+'</div>';
-        list.forEach(function(c,i){ var cv=newCardCanvas(); document.getElementById('lc'+i).appendChild(cv); drawCard(cv,c,TYPEMAP[c.typeId]); });
-        box.querySelectorAll('.mcardwrap').forEach(function(el){ el.onclick=function(){ openCardDetail(el.getAttribute('data-cn')); }; });
+        box.innerHTML='<div class="table-wrap"><table><thead><tr><th>Card No</th><th>Name</th><th>Mobile</th><th>Type</th><th>Branch</th><th>Valid thru</th><th>Status</th><th></th></tr></thead><tbody>'+
+          list.map(function(c){ var t=TYPEMAP[c.typeId];
+            return '<tr class="crow" data-cn="'+esc(c.cardNumber)+'" style="cursor:pointer">'+
+              '<td><b>'+esc(c.cardNumber)+'</b></td>'+
+              '<td>'+esc(c.holderName)+'</td>'+
+              '<td>'+esc(c.mobile||'—')+'</td>'+
+              '<td>'+esc(t?t.name:c.typeId)+'</td>'+
+              '<td>'+esc(bName(c.branchId))+'</td>'+
+              '<td>'+esc(fmtExpiry(c.expiryDate))+'</td>'+
+              '<td>'+cstatus(c.status)+'</td>'+
+              '<td><button class="btn ghost sm">View</button></td></tr>';
+          }).join('')+'</tbody></table></div>';
+        box.querySelectorAll('.crow').forEach(function(el){ el.onclick=function(){ openCardDetail(el.getAttribute('data-cn')); }; });
       });
     }
   }
   function cstatus(s){ var m={active:'#1a7f37',expired:'#9aa0a6',cancelled:'#C0392B',renewed:'#185fa5'}; return '<span class="badge" style="background:'+(m[s]||'#999')+'22;color:'+(m[s]||'#999')+'">'+esc(s||'active')+'</span>'; }
+  function bName(id){ var b=((S.meta&&S.meta.branches)||[]).filter(function(x){return String(x.BranchID)===String(id);})[0]; return b?b.BranchName:(id||'—'); }
 
   /* ── card detail ──────────────────────────────────────────────────────── */
   function branchPhone(branchId){ var b=((S.meta&&S.meta.branches)||[]).filter(function(x){return String(x.BranchID)===String(branchId);})[0]; return b&&b.Phone?String(b.Phone):''; }
