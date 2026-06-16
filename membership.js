@@ -81,7 +81,12 @@
 
   /* ── state ────────────────────────────────────────────────────────────── */
   var TYPES=[], TYPEMAP={}, PRICEMAP={};
-  function loadTypes(){ return API.listCardTypes().then(function(r){ if(r.ok){ TYPES=r.types||[]; TYPEMAP={}; TYPES.forEach(function(t){ TYPEMAP[t.typeId]=t; }); } return TYPES; }).catch(function(){ return TYPES; }); }
+  function setTypes(arr){ TYPES=arr||[]; TYPEMAP={}; TYPES.forEach(function(t){ TYPEMAP[t.typeId]=t; }); }
+  function loadTypes(){
+    return API.cachedCardTypes().then(function(c){ if(c&&c.length) setTypes(c);
+      return API.listCardTypes().then(function(r){ if(r.ok) setTypes(r.types); return TYPES; }).catch(function(){ return TYPES; });
+    });
+  }
 
   /* ── list page ────────────────────────────────────────────────────────── */
   var _canIssue=false;
@@ -204,7 +209,6 @@
 
   /* ── issue modal ──────────────────────────────────────────────────────── */
   function openIssueCardModal(){
-    if(!TYPES.length){ toast('No card types yet. Add one in “Card types”, or migrate them in.',true); }
     var branches=(S.meta&&S.meta.branches)||[];
     var brOpts=branches.map(function(b){ return '<option value="'+esc(b.BranchID)+'"'+(b.BranchID===(S.user&&S.user.Branch)?' selected':'')+'>'+esc(b.BranchName)+'</option>'; }).join('');
     var typeOpts=TYPES.map(function(t){ return '<option value="'+esc(t.typeId)+'">'+esc(t.name)+'</option>'; }).join('');
@@ -233,6 +237,7 @@
     document.getElementById('ic_name').addEventListener('input',redraw);
     document.getElementById('ic_amount').addEventListener('input',function(){ amtTouched=true; });
     redraw();
+    loadTypes().then(function(){ var sel=document.getElementById('ic_type'); if(sel && sel.options.length<TYPES.length){ sel.innerHTML=TYPES.map(function(t){ return '<option value="'+esc(t.typeId)+'">'+esc(t.name)+'</option>'; }).join(''); redraw(); } });
     document.getElementById('ic_save').onclick=function(){
       var data={ holderName:val('ic_name'), mobile:val('ic_mobile'), branchId:document.getElementById('ic_branch').value, typeId:document.getElementById('ic_type').value, referByName:val('ic_refer'), amount:(val('ic_amount')||'').replace(/[^\d.]/g,'')||0 };
       if(!data.holderName){ toast('Member name is required.',true); return; }

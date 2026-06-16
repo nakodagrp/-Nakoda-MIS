@@ -186,6 +186,7 @@
     cachedEmployees:function(){ return kvGet('employees'); },
     cachedCards:function(){ return kvGet('cards'); },
     cachedPrices:function(){ return kvGet('cardprices'); },
+    cachedCardTypes:function(){ return kvGet('cardtypes'); },
     listCardPrices:function(){ return call('listCardPrices',{token:getToken()}).then(function(r){ if(r.ok) kvSet('cardprices',r.prices); return r; }).catch(function(){ return kvGet('cardprices').then(function(p){ return {ok:true,prices:p||[],canSet:false}; }); }); },
     setCardPrice:function(typeId,branchId,price){ return call('setCardPrice',{token:getToken(),typeId:typeId,branchId:branchId,price:price}); },
     markCardSent:function(n){ return call('markCardSent',{token:getToken(),cardNumber:n}); },
