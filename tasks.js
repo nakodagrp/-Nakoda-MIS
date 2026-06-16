@@ -51,6 +51,7 @@
         '<span class="tbox'+(done?' on':'')+'" data-tog="'+esc(t.taskId)+'"></span>'+
         '<div class="tbody">'+
           '<div class="ttitle">'+esc(t.title)+pend(t)+'</div>'+
+          (t.source==='assigned'?'<div style="margin-top:3px"><span style="background:#eef2ff;color:#4253c5;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">Assigned by '+esc(t.assignedByName||'manager')+'</span></div>':'')+
           '<div class="tmeta"><span class="pdot" style="background:'+(PRI[t.priority]||'#999')+'"></span>'+
             '<span'+(over?' style="color:#C0392B;font-weight:600"':'')+'>'+esc(dueLabel(t))+'</span> · '+esc(t.priority||'Normal')+
             (cl.length?(' · ☑ '+cldone+'/'+cl.length):'')+'</div>'+
@@ -72,7 +73,7 @@
     var body='<div style="font-size:13px;color:#8a8f98;margin-bottom:8px"><span class="pdot" style="background:'+(PRI[t.priority]||'#999')+'"></span> Due '+esc(dueLabel(t))+' · '+esc(t.priority||'Normal')+' · <b style="color:'+(t.status==='done'?'#1a7f37':'#DA1017')+'">'+(t.status==='done'?'Done':'Open')+'</b></div>'+
       (t.description?'<div style="font-size:13px;background:#f6f7f9;border-radius:8px;padding:10px;white-space:pre-line">'+esc(t.description)+'</div>':'')+
       clHtml+
-      '<div style="font-size:11px;color:#aaa;margin-top:10px">Created by you · self task</div>';
+      '<div style="font-size:11px;color:#aaa;margin-top:10px">'+(t.source==='assigned'?('Assigned by '+esc(t.assignedByName||'manager')):'Created by you · self task')+'</div>';
     var foot='<button class="btn ghost" onclick="closeModal()">Close</button><button class="btn ghost" id="tdEdit">Edit</button><button class="btn" id="tdComplete">'+(t.status==='done'?'Reopen':'✓ Complete')+'</button>';
     openModal(t.title, body, foot);
     document.querySelectorAll('#modalRoot [data-ci]').forEach(function(cb){ cb.onchange=function(){ cl[parseInt(cb.getAttribute('data-ci'),10)].done=cb.checked; var sp=cb.parentNode.querySelector('span'); if(sp) sp.style.cssText=cb.checked?'text-decoration:line-through;color:#999':''; t.checklist=cl; t._pending=true; API.updateTask(t.taskId,{checklist:cl}); }; });
@@ -87,6 +88,7 @@
     function clRows(){ return cl.map(function(it,i){ return '<div style="display:flex;gap:6px;margin-bottom:6px" data-cr="'+i+'"><input class="fld clitem" value="'+esc(it.text)+'" style="flex:1" placeholder="Sub-step"><button class="btn ghost sm" data-rm="'+i+'" type="button">✕</button></div>'; }).join(''); }
     var body='<div class="grid2">'+
       '<div class="field full"><label>Title *</label><input id="tk_title" value="'+esc(t.title||'')+'"></div>'+
+      '<div class="field full" id="tk_assignWrap" style="display:none"><label>Assign to</label><select id="tk_assign"></select><div style="font-size:11px;color:#9aa0a6;margin-top:4px">You can assign to anyone below you.</div></div>'+
       '<div class="field"><label>Due date</label><input id="tk_date" type="date" value="'+esc(t.dueDate||'')+'"></div>'+
       '<div class="field"><label>Due time</label><input id="tk_time" type="time" value="'+esc(t.dueTime||'')+'"></div>'+
       '<div class="field full"><label>Priority</label><div class="pseggrp" id="tk_pri">'+seg+'</div><input type="hidden" id="tk_priv" value="'+esc(pri)+'"></div>'+
@@ -100,9 +102,11 @@
     function wireCl(){ document.querySelectorAll('#tk_clist [data-rm]').forEach(function(b){ b.onclick=function(){ syncClFromInputs(); cl.splice(parseInt(b.getAttribute('data-rm'),10),1); rerenderCl(); }; }); }
     wireCl();
     document.getElementById('tk_addcl').onclick=function(){ syncClFromInputs(); cl.push({text:'',done:false}); rerenderCl(); };
+    if(!editing){ API.assignableEmployees().then(function(r){ if(r.ok && r.canAssign && (r.employees||[]).length){ var s=document.getElementById('tk_assign'); s.innerHTML='<option value="">Myself</option>'+r.employees.map(function(e){ return '<option value="'+esc(e.EmpID)+'">'+esc(e.FullName)+' ('+esc(e.Role)+(e.Branch&&e.Branch!=='HQ'?' · '+esc(e.Branch):'')+')</option>'; }).join(''); document.getElementById('tk_assignWrap').style.display=''; } }); }
     document.getElementById('tk_save').onclick=function(){
       syncClFromInputs(); var checklist=cl.filter(function(x){return (x.text||'').trim();});
       var data={ title:val('tk_title'), dueDate:val('tk_date'), dueTime:val('tk_time'), priority:document.getElementById('tk_priv').value, description:val('tk_notes'), checklist:checklist };
+      var asg=document.getElementById('tk_assign'); if(asg && asg.value) data.assignedToEmpId=asg.value;
       if(!data.title){ toast('Title is required.',true); return; }
       var btn=document.getElementById('tk_save'); btn.disabled=true; btn.innerHTML='<span class="loader"></span>';
       var p=editing?API.updateTask(t.taskId,data):API.createTask(data);
@@ -117,8 +121,8 @@
     var v=document.getElementById('page-taskmon'), ALL=[];
     var canPick=S.perms&&S.perms.canViewAll, branches=(S.meta&&S.meta.branches)||[];
     var brOpts='<option value="">All branches</option>'+branches.map(function(b){return '<option value="'+esc(b.BranchID)+'">'+esc(b.BranchName)+'</option>';}).join('');
-    v.innerHTML='<div class="page-head"><h1>Task Monitor</h1></div>'+
-      '<div style="color:#888;font-size:13px;margin-bottom:12px">All employees’ tasks — chase the overdue ones.</div>'+
+    v.innerHTML='<div class="page-head"><h1>Process Flow Monitor</h1></div>'+
+      '<div style="color:#888;font-size:13px;margin-bottom:12px">Every task &amp; process timeline — chase the overdue ones. (More processes will appear here.)</div>'+
       (canPick?'<div style="margin-bottom:12px"><select id="tmBranch" class="greet-select">'+brOpts+'</select></div>':'')+
       '<div id="tmKpis" class="kpis"></div>'+
       '<div class="section-label">Overdue — follow up</div><div id="tmList"></div>';
