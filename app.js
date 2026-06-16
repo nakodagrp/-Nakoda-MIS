@@ -123,11 +123,11 @@ function refreshMeta(goDash){
 function renderIdentity(){ var u=S.user||{}; $('meName').textContent=u.FullName||'—'; $('meRole').textContent=u.Role||''; $('meAvatar').textContent=initials(u.FullName); }
 function populateSelectors(){
   if(!S.meta) return;
-  var fb=$('filterBranch'); fb.innerHTML='<option value="">All branches</option>';
-  S.meta.branches.forEach(function(b){ fb.appendChild(el('<option value="'+esc(b.BranchID)+'">'+esc(b.BranchName)+'</option>')); });
+  var opts='<option value="">All branches</option>'+S.meta.branches.map(function(b){ return '<option value="'+esc(b.BranchID)+'">'+esc(b.BranchName)+'</option>'; }).join('');
+  $('filterBranch').innerHTML=opts;
   var ds=$('dashBranch'), canPick=S.perms&&S.perms.canViewAll;
   ds.style.display=canPick?'':'none';
-  if(canPick){ ds.innerHTML='<option value="">All branches</option>'; S.meta.branches.forEach(function(b){ ds.appendChild(el('<option value="'+esc(b.BranchID)+'">'+esc(b.BranchName)+'</option>')); }); }
+  if(canPick){ ds.innerHTML=opts; }
 }
 function applyPerms(){
   if(!S.perms) return;
@@ -177,7 +177,7 @@ function renderDashboard(){
   var recent=emp.slice().sort(function(a,b){return a.EmpID<b.EmpID?1:-1;}).slice(0,6);
   var tb=$('recentTable').querySelector('tbody'); tb.innerHTML='';
   if(!recent.length){ tb.innerHTML='<tr><td class="empty">No staff yet. Go to Employees → Add Staff.</td></tr>'; return; }
-  recent.forEach(function(e){ tb.appendChild(el('<tr><td><b>'+esc(e.FullName)+'</b>'+pend(e)+'</td><td>'+esc(e.Role)+'</td><td>'+officeBadge(e)+'</td><td>'+statusBadge(e.Status)+'</td></tr>')); });
+  var rhtml=''; recent.forEach(function(e){ rhtml+='<tr><td><b>'+esc(e.FullName)+'</b>'+pend(e)+'</td><td>'+esc(e.Role)+'</td><td>'+officeBadge(e)+'</td><td>'+statusBadge(e.Status)+'</td></tr>'; }); tb.innerHTML=rhtml;
 }
 function kpi(n,l){ return '<div class="kpi"><div class="n">'+n+'</div><div class="l">'+esc(l)+'</div></div>'; }
 
@@ -197,11 +197,12 @@ function renderEmpTable(){
   var tb=$('empTable').querySelector('tbody'); tb.innerHTML='';
   if(!list.length){ $('empEmpty').classList.remove('hidden'); return; }
   $('empEmpty').classList.add('hidden');
+  var html='';
   list.forEach(function(e){
     var canEdit=S.perms&&(S.perms.canManageAll||S.perms.level==='BRANCH_MGR'||(S.user&&e.EmpID===S.user.EmpID));
     var acts='<button class="btn ghost sm" onclick="viewEmp(\''+e.EmpID+'\')">View</button>';
     if(canEdit && !e._pending) acts+=' <button class="btn ghost sm" onclick="openEmpModal(\''+e.EmpID+'\')">Edit</button>';
-    tb.appendChild(el('<tr>'+
+    html+='<tr>'+
       '<td>'+esc(e._pending?'—':e.EmpID)+'</td>'+
       '<td><b>'+esc(e.FullName)+'</b>'+pend(e)+'</td>'+
       '<td>'+esc(e.LoginID||'—')+'</td>'+
@@ -209,8 +210,9 @@ function renderEmpTable(){
       '<td>'+officeBadge(e)+'</td>'+
       '<td>'+esc(e.Phone||'—')+'</td>'+
       '<td>'+statusBadge(e.Status)+'</td>'+
-      '<td><div class="row-actions">'+acts+'</div></td></tr>'));
+      '<td><div class="row-actions">'+acts+'</div></td></tr>';
   });
+  tb.innerHTML=html;
 }
 function pend(e){ return e._pending?' <span class="badge pending">syncing</span>':''; }
 function officeBadge(e){ return e.OfficeType==='Corporate'?'<span class="badge office">Corporate</span>':'<span class="badge branch">'+esc(branchName(e.Branch))+'</span>'; }
