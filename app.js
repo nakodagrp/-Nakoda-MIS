@@ -1,6 +1,4 @@
-/* ============================================================
- *  Nakoda MIS — app UI (uses window.API offline data layer)
- * ============================================================ */
+/* Nakoda MIS — app UI (uses window.API offline data layer) */
 var S={ user:null, perms:null, meta:null, employees:[] };
 
 function $(id){ return document.getElementById(id); }
@@ -11,40 +9,30 @@ function show(id){ ['view-login','view-changepw','view-app'].forEach(function(v)
 function setMsg(id,t,ty){ var e=$(id); e.innerHTML=t?('<div class="msg '+(ty||'error')+'">'+esc(t)+'</div>'):''; }
 function initials(n){ var p=String(n||'N').trim().split(/\s+/); return ((p[0]||'')[0]||'N').toUpperCase()+(p.length>1?(p[p.length-1][0]||'').toUpperCase():''); }
 
-/* ---------- boot ---------- */
+/* boot */
 document.addEventListener('DOMContentLoaded', function(){
-  registerSW();
-  initInstall();
-  bindAuth(); bindApp(); bindStatus();
-
+  registerSW(); initInstall(); bindAuth(); bindApp(); bindStatus();
   if(!API.configured()){
     setMsg('loginMsg','This app is not connected yet. Open config.js and paste your Apps Script URL.','error');
     show('view-login'); return;
   }
-
   var token=API.getToken();
-  Promise.all([idbUser(),idbMeta(),idbPerms()]).then(function(a){
-    var cachedU=a[0], cachedM=a[1], cachedP=a[2];
-    if(token && cachedU){
-      S.user=cachedU; S.meta=cachedM; S.perms=cachedP;
-      enterAppInstant();
-      // background validate + refresh
+  Promise.all([kvRead('me'),kvRead('meta'),kvRead('perms')]).then(function(a){
+    var cu=a[0], cm=a[1], cp=a[2];
+    if(token && cu){
+      S.user=cu; S.meta=cm; S.perms=cp; enterAppInstant();
       API.validate().then(function(r){
         if(r&&r.ok){ if(r.mustChange){ forcePw(); return; } refreshMeta(); }
-        else if(r&&!r.offline){ /* invalid session */ API.clearLocal(); show('view-login'); }
-      }).catch(function(){ /* offline: stay in app */ });
+        else if(r&&!r.offline){ API.clearLocal(); show('view-login'); }
+      }).catch(function(){});
     } else if(token){
-      API.validate().then(function(r){ if(r.ok){ afterAuth(r.mustChange); } else { show('view-login'); } })
-        .catch(function(){ show('view-login'); });
+      API.validate().then(function(r){ if(r.ok){ afterAuth(r.mustChange); } else { show('view-login'); } }).catch(function(){ show('view-login'); });
     } else { show('view-login'); }
   });
 });
-function idbUser(){ return new Promise(function(res){ var r=indexedDB.open('nakoda_mis');r.onsuccess=function(){try{var s=r.result.transaction('kv','readonly').objectStore('kv').get('me');s.onsuccess=function(){res(s.result);};s.onerror=function(){res(null);};}catch(e){res(null);}};r.onerror=function(){res(null);}; }); }
-function idbMeta(){ return kvRead('meta'); }
-function idbPerms(){ return kvRead('perms'); }
 function kvRead(k){ return new Promise(function(res){ var r=indexedDB.open('nakoda_mis');r.onsuccess=function(){try{var s=r.result.transaction('kv','readonly').objectStore('kv').get(k);s.onsuccess=function(){res(s.result);};s.onerror=function(){res(null);};}catch(e){res(null);}};r.onerror=function(){res(null);}; }); }
 
-/* ---------- service worker + update banner ---------- */
+/* service worker + update banner */
 function registerSW(){
   if(!('serviceWorker' in navigator)) return;
   navigator.serviceWorker.register('sw.js').then(function(reg){
@@ -58,33 +46,27 @@ function registerSW(){
   navigator.serviceWorker.addEventListener('controllerchange', function(){ if(reloaded) return; reloaded=true; location.reload(); });
 }
 
-/* ---------- install app prompt ---------- */
+/* install app prompt */
 var _deferredInstall=null;
 function isStandalone(){ return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone===true; }
 function isIOS(){ return /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream; }
 function showInstallBar(){ $('installBar').classList.remove('hidden'); }
 function hideInstallBar(){ $('installBar').classList.add('hidden'); }
 function initInstall(){
-  if(isStandalone()){ hideInstallBar(); return; }   // already installed
+  if(isStandalone()){ hideInstallBar(); return; }
   if(sessionStorage.getItem('nk_install_dismiss')==='1') return;
-
-  window.addEventListener('beforeinstallprompt', function(e){
-    e.preventDefault(); _deferredInstall=e; showInstallBar();
-  });
+  window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); _deferredInstall=e; showInstallBar(); });
   window.addEventListener('appinstalled', function(){ hideInstallBar(); _deferredInstall=null; toast('App installed'); });
-
-  // iOS Safari has no install prompt — guide the user instead
   if(isIOS()){ $('installText').textContent='Install this app: tap the Share button, then “Add to Home Screen”.'; showInstallBar(); }
-
   $('installBtn').addEventListener('click', function(){
     if(_deferredInstall){ _deferredInstall.prompt(); _deferredInstall.userChoice.then(function(){ _deferredInstall=null; hideInstallBar(); }); }
-    else if(isIOS()){ openModal('Install on iPhone / iPad','<p>1. Tap the <b>Share</b> button (the square with an up-arrow) at the bottom of Safari.</p><p>2. Scroll down and tap <b>Add to Home Screen</b>.</p><p>3. Tap <b>Add</b> — the Nakoda icon appears on your home screen.</p>','<button class="btn" onclick="closeModal()">Got it</button>'); }
+    else if(isIOS()){ openModal('Install on iPhone / iPad','<p>1. Tap the <b>Share</b> button at the bottom of Safari.</p><p>2. Tap <b>Add to Home Screen</b>.</p><p>3. Tap <b>Add</b>.</p>','<button class="btn" onclick="closeModal()">Got it</button>'); }
     else { toast('To install: open this site in Chrome, then use the install icon in the address bar.'); }
   });
   $('installDismiss').addEventListener('click', function(){ hideInstallBar(); try{ sessionStorage.setItem('nk_install_dismiss','1'); }catch(e){} });
 }
 
-/* ---------- status chip / offline banner ---------- */
+/* status chip / offline banner */
 function bindStatus(){
   API.onStatus(function(st){
     var chip=$('syncChip'), txt=$('syncText');
@@ -104,7 +86,7 @@ document.addEventListener('click', function(e){
   }
 });
 
-/* ---------- auth ---------- */
+/* auth */
 function bindAuth(){
   $('loginForm').addEventListener('submit', function(e){
     e.preventDefault(); setMsg('loginMsg','');
@@ -130,17 +112,11 @@ function bindAuth(){
 }
 function forcePw(){ $('oldPwField').classList.add('hidden'); show('view-changepw'); }
 function afterAuth(mustChange){ if(mustChange){ forcePw(); } else { enterApp(); } }
-
-function enterApp(){
-  show('view-app');
-  refreshMeta(true);
-}
+function enterApp(){ show('view-app'); refreshMeta(true); }
 function enterAppInstant(){ renderIdentity(); show('view-app'); populateSelectors(); applyPerms(); go('dashboard'); }
-
 function refreshMeta(goDash){
   API.getMetadata().then(function(r){
-    if(r.ok){ S.meta={roles:r.roles,branches:r.branches}; S.perms=r.perms; S.user=r.me||S.user;
-      renderIdentity(); populateSelectors(); applyPerms(); if(goDash) go('dashboard'); }
+    if(r.ok){ S.meta={roles:r.roles,branches:r.branches}; S.perms=r.perms; S.user=r.me||S.user; renderIdentity(); populateSelectors(); applyPerms(); if(goDash) go('dashboard'); }
     else { toast(r.error||'Could not load data',true); }
   });
 }
@@ -160,7 +136,7 @@ function applyPerms(){
   $('addEmpBtn').classList.toggle('hidden', !S.perms.canCreate);
 }
 
-/* ---------- nav ---------- */
+/* nav */
 function bindApp(){
   $('logoutBtn').addEventListener('click', function(){ API.logout(); API.clearLocal(); location.reload(); });
   $('menuBtn').addEventListener('click', function(){ $('sidebar').classList.toggle('open'); });
@@ -180,7 +156,7 @@ function go(page){
   if(page==='profile') loadProfile();
 }
 
-/* ---------- dashboard ---------- */
+/* dashboard */
 function greetWord(){ var h=new Date().getHours(); return h<12?'Good morning':(h<17?'Good afternoon':'Good evening'); }
 function loadDashboard(){
   var u=S.user||{};
@@ -204,7 +180,7 @@ function renderDashboard(){
 }
 function kpi(n,l){ return '<div class="kpi"><div class="n">'+n+'</div><div class="l">'+esc(l)+'</div></div>'; }
 
-/* ---------- employees ---------- */
+/* employees */
 function loadEmployees(){
   $('empLoad').classList.remove('hidden'); $('empEmpty').classList.add('hidden'); $('empTable').querySelector('tbody').innerHTML='';
   API.listEmployees().then(function(r){ S.employees=r.employees||[]; S.perms=r.perms||S.perms; $('empLoad').classList.add('hidden'); renderEmpTable(); });
@@ -321,7 +297,7 @@ function showCredentials(title, loginId, pw){
 }
 function copyCred(id,pw){ var t='Nakoda MIS login\nLogin ID: '+id+'\nPassword: '+pw; try{ navigator.clipboard.writeText(t); toast('Copied'); }catch(e){ toast('Copy not available',true); } }
 
-/* ---------- profile ---------- */
+/* profile */
 function loadProfile(){
   API.getEmployee(S.user.EmpID).then(function(r){
     if(!r.ok){ toast(r.error,true); return; }
@@ -349,4 +325,25 @@ function loadProfile(){
   });
 }
 function openChangePwModal(){
-  var body='<div class="field"><label>Current pa
+  var body='<div class="field"><label>Current password</label><div class="pw-row"><input id="cp_old" type="password"><span class="toggle" data-for="cp_old">show</span></div></div>'+
+    '<div class="field"><label>New password (min 6)</label><div class="pw-row"><input id="cp_new" type="password"><span class="toggle" data-for="cp_new">show</span></div></div>'+
+    '<div class="field"><label>Confirm new password</label><div class="pw-row"><input id="cp_new2" type="password"><span class="toggle" data-for="cp_new2">show</span></div></div>'+
+    '<div id="cpModalMsg"></div>';
+  openModal('Change password', body, '<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="cpSave">Update</button>');
+  $('cpSave').addEventListener('click', function(){
+    var o=val('cp_old'),n=val('cp_new'),n2=val('cp_new2');
+    if(n!==n2){ $('cpModalMsg').innerHTML='<div class="msg error">Passwords do not match.</div>'; return; }
+    if((n||'').length<6){ $('cpModalMsg').innerHTML='<div class="msg error">At least 6 characters.</div>'; return; }
+    var b=$('cpSave'); b.disabled=true; b.innerHTML='<span class="loader"></span>';
+    API.changePassword(o,n).then(function(r){ if(r.ok){ closeModal(); toast('Password changed'); } else { $('cpModalMsg').innerHTML='<div class="msg error">'+esc(r.error)+'</div>'; b.disabled=false; b.textContent='Update'; } });
+  });
+}
+
+/* modal */
+function openModal(title, bodyHtml, footHtml){
+  closeModal();
+  var m=el('<div class="overlay" id="ov"><div class="modal"><div class="modal-head"><h3>'+esc(title)+'</h3><button class="x" onclick="closeModal()">&times;</button></div><div class="modal-body">'+bodyHtml+'</div><div class="modal-foot">'+(footHtml||'')+'</div></div></div>');
+  m.addEventListener('mousedown', function(ev){ if(ev.target.id==='ov') closeModal(); });
+  $('modalRoot').appendChild(m);
+}
+function closeModal(){ $('modalRoot').innerHTML=''; }
