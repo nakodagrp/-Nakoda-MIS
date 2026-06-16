@@ -8,17 +8,19 @@
 
   function pc(t){ try{ return Array.isArray(t.checklist)?t.checklist:JSON.parse(t.checklist||'[]'); }catch(e){ return []; } }
   function todayStr(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  function dd10(t){ return String(t.dueDate||'').slice(0,10); }
   function dueLabel(t){
-    if(!t.dueDate) return t.dueTime?('Today '+t.dueTime):'No date';
-    var d=new Date(t.dueDate+'T00:00'), tdy=todayStr();
-    var nm=(t.dueDate===tdy)?'Today':(d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'}));
+    var ds=dd10(t);
+    if(!ds) return t.dueTime?('Today '+t.dueTime):'No date';
+    var d=new Date(ds+'T00:00'), tdy=todayStr();
+    var nm=(ds===tdy)?'Today':(isNaN(d)?ds:d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'}));
     return nm+(t.dueTime?(' '+t.dueTime):'');
   }
   function bucket(t){
     if(String(t.status)==='done') return 'done';
-    var tdy=todayStr();
-    if(t.dueDate && t.dueDate<tdy) return 'overdue';
-    if(t.dueDate && t.dueDate>tdy) return 'upcoming';
+    var tdy=todayStr(), ds=dd10(t);
+    if(ds && ds<tdy) return 'overdue';
+    if(ds && ds>tdy) return 'upcoming';
     return 'today';
   }
 

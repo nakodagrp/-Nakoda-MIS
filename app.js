@@ -237,9 +237,14 @@ window.openMobileMore=openMobileMore; window.closeMobileMore=closeMobileMore;
 
 /* dashboard */
 function greetWord(){ var h=new Date().getHours(); return h<12?'Good morning':(h<17?'Good afternoon':'Good evening'); }
-var DASH={emps:[],cards:[],prices:{}};
+var DASH={emps:[],cards:[],prices:{},tasks:[],procs:[],cal:[],chaseT:0,chaseC:0};
 function priceMap(arr){ var m={}; (arr||[]).forEach(function(p){ m[p.typeId+'|'+p.branchId]=Number(p.price)||0; }); return m; }
 function fmtMoney(n){ return Math.round(n||0).toLocaleString('en-IN'); }
+function todayD(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function dd10(v){ return String(v||'').slice(0,10); }
+function toMinD(t){ if(!t) return 0; var p=String(t).split(':'); return (+p[0])*60+(+(p[1]||0)); }
+function e0(){ return {}; }
+function isMonitorRole(){ var u=S.user||{}; return (S.perms&&S.perms.level==='SUPER')||u.Role==='Operations Manager'||u.Role==='Process Coordinator'; }
 function loadDashboard(){
   var u=S.user||{};
   $('greetHello').textContent=greetWord()+', '+(u.FullName||'');
@@ -247,36 +252,66 @@ function loadDashboard(){
   var scope=(S.perms&&S.perms.canManageAll)?'org-wide':(lvl==='BRANCH_MGR'?('branch: '+branchName(u.Branch)):(lvl==='BRANCH_VIEW'?('branch: '+branchName(u.Branch)+' (view)'):(S.perms&&S.perms.canViewAll?'all branches (view)':'self-service')));
   $('greetMeta').textContent=[u.Role,(u.OfficeType==='Branch'?branchName(u.Branch):'Corporate Office'),scope].filter(Boolean).join(' · ');
   if(!DASH.emps.length && !DASH.cards.length) $('kpis').innerHTML='<div class="kpi"><div class="n"><span class="loader dark"></span></div><div class="l">Loading…</div></div>';
-  Promise.all([API.cachedEmployees(),API.cachedCards(),API.cachedPrices()]).then(function(a){
-    if(a[0]) DASH.emps=a[0]; if(a[1]) DASH.cards=a[1]; DASH.prices=priceMap(a[2]||[]);
-    if(DASH.emps.length||DASH.cards.length) renderDashboard();
+  Promise.all([API.cachedEmployees(),API.cachedCards(),API.cachedPrices(),API.cachedTasks(),API.cachedCalendar(u.EmpID),API.cachedProcesses()]).then(function(a){
+    if(a[0]) DASH.emps=a[0]; if(a[1]) DASH.cards=a[1]; DASH.prices=priceMap(a[2]||[]); if(a[3]) DASH.tasks=a[3]; if(a[4]) DASH.cal=a[4]; if(a[5]) DASH.procs=a[5];
+    renderDashboard();
   });
-  Promise.all([API.listEmployees().catch(function(){return{};}),API.listCards({}).catch(function(){return{};}),API.listCardPrices().catch(function(){return{};})]).then(function(a){
+  Promise.all([API.listEmployees().catch(e0),API.listCards({}).catch(e0),API.listCardPrices().catch(e0),API.listMyTasks().catch(e0),API.listProcesses().catch(e0),API.listCalendar(u.EmpID).catch(e0)]).then(function(a){
     if(a[0]&&a[0].ok){ DASH.emps=a[0].employees; S.employees=a[0].employees; S.perms=a[0].perms||S.perms; }
     if(a[1]&&a[1].ok){ DASH.cards=a[1].cards; }
     if(a[2]&&a[2].ok){ DASH.prices=priceMap(a[2].prices); }
+    if(a[3]&&a[3].ok){ DASH.tasks=a[3].tasks||[]; }
+    if(a[4]&&a[4].ok){ DASH.procs=a[4].processes||[]; }
+    if(a[5]&&a[5].ok){ DASH.cal=a[5].entries||[]; }
     renderDashboard();
   });
+  if(isMonitorRole()){
+    Promise.all([API.listAllTasks().catch(e0),API.listAllCalendar().catch(e0)]).then(function(a){
+      var tdy=todayD(), nowMin=new Date().getHours()*60+new Date().getMinutes();
+      DASH.chaseT=((a[0]&&a[0].ok)?a[0].tasks:[]||[]).filter(function(t){ var d=dd10(t.dueDate); return t.status!=='done' && d && d<tdy; }).length;
+      DASH.chaseC=((a[1]&&a[1].ok)?a[1].entries:[]||[]).filter(function(c){ var s=String(c.status); if(s==='done'||s==='deleted') return false; var d=dd10(c.date); return d && (d<tdy || (d===tdy && c.endTime && toMinD(c.endTime)<nowMin)); }).length;
+      renderDashboard();
+    });
+  }
 }
 function renderDashboard(){
+  var u=S.user||{}, lvl=S.perms&&S.perms.level, isManager=S.perms&&S.perms.canViewAll, isBranchMgr=lvl==='BRANCH_MGR', isMon=isMonitorRole();
+  var tdy=todayD();
+  var myT=(DASH.tasks||[]).filter(function(t){return t.status!=='deleted';});
+  var myToday=myT.filter(function(t){return t.status!=='done' && dd10(t.dueDate)===tdy;}).length;
+  var myOver=myT.filter(function(t){var d=dd10(t.dueDate); return t.status!=='done' && d && d<tdy;}).length;
+  var myProcDue=myT.filter(function(t){var d=dd10(t.dueDate); return t.source==='process' && t.status!=='done' && d && d<=tdy;}).length;
+  var calToday=(DASH.cal||[]).filter(function(c){return String(c.status)!=='deleted' && dd10(c.date)===tdy;}).sort(function(a,b){return (a.startTime||'')<(b.startTime||'')?-1:1;});
+  var openLeads=(DASH.procs||[]).reduce(function(s,p){return s+(Number(p.open)||0);},0);
   var branch=$('dashBranch').value;
   var emp=(DASH.emps||[]).filter(function(e){ return !branch || String(e.Branch)===String(branch); });
   var cards=(DASH.cards||[]).filter(function(c){ return !branch || String(c.branchId)===String(branch); });
   var now=new Date(), m0=new Date(now.getFullYear(),now.getMonth(),1), soon=new Date(now.getTime()+7*864e5);
   var activeCards=cards.filter(function(c){return c.status==='active';});
   var cardsMTD=cards.filter(function(c){return new Date(c.issuedDate)>=m0;}).length;
-  var expiring=activeCards.filter(function(c){var x=new Date(c.expiryDate);return x>=now&&x<=soon;}).length;
   var revenue=activeCards.reduce(function(s,c){return s+(Number(c.amount)||0);},0);
   var brs={}; emp.forEach(function(e){if(e.Branch)brs[e.Branch]=1;}); cards.forEach(function(c){if(c.branchId)brs[c.branchId]=1;});
-  $('kpis').innerHTML=
-    kpi(emp.filter(function(e){return e.Status==='Active';}).length,'Active staff')+
-    kpi(activeCards.length,'Active cards')+
-    kpi(cardsMTD,'Cards this month')+
-    kpi('₹'+fmtMoney(revenue),'Card business')+
-    kpi(expiring,'Expiring (7d)')+
-    kpi(Object.keys(brs).length,'Branches');
-  var html='';
-  if((S.perms&&S.perms.canViewAll) && !branch && Object.keys(brs).length>1){
+  var staffN=emp.filter(function(e){return e.Status==='Active';}).length;
+  var K=kpiC(myToday,'Tasks today','amber')+kpiC(myOver,'My overdue','red');
+  if(isManager){ K+=kpiC(openLeads,'Open CRM leads','violet')+kpiC('₹'+fmtMoney(revenue),'Card revenue','green')+kpiC(staffN,'Active staff','blue')+kpiC(Object.keys(brs).length,'Branches','blue'); }
+  else if(isBranchMgr){ K+=kpiC(openLeads,'Branch CRM leads','violet')+kpiC(staffN,'Branch staff','blue')+kpiC('₹'+fmtMoney(revenue),'Cards business','green'); }
+  else { K+=kpiC(myProcDue,'My CRM leads due','violet')+kpiC(calToday.length,'Today’s events','blue'); }
+  if(isMon){ K+=kpiC((DASH.chaseT||0)+(DASH.chaseC||0),'To chase','red'); }
+  $('kpis').innerHTML=K;
+  var att='', items='';
+  function arow(color,txt,page){ return '<div class="dash-att" onclick="go(\''+page+'\')"><span class="dot" style="background:'+color+'"></span><span class="t">'+txt+'</span><span class="r">open ›</span></div>'; }
+  if(myOver>0) items+=arow('#DA1017', myOver+' of your tasks are overdue','tasks');
+  if(myToday>0) items+=arow('#c47f00', myToday+' task'+(myToday>1?'s':'')+' due today','tasks');
+  if(myProcDue>0) items+=arow('#7F77DD', myProcDue+' CRM lead'+(myProcDue>1?'s':'')+' due/overdue','crm');
+  if(isMon && (DASH.chaseT||DASH.chaseC)) items+=arow('#c47f00', (DASH.chaseT+DASH.chaseC)+' overdue across the team','taskmon');
+  calToday.slice(0,5).forEach(function(c){ items+='<div class="dash-att" onclick="go(\'calendar\')"><span class="dot" style="background:'+(String(c.status)==='done'?'#1a7f37':'#7F77DD')+'"></span><span class="t">'+(c.startTime?esc(c.startTime)+' · ':'')+esc(c.title)+'</span><span class="r">calendar ›</span></div>'; });
+  if(!items) items='<div class="dash-att muted"><span class="t">Nothing pending today. 🎉</span></div>';
+  att+='<div class="section-label">Needs attention today</div>'+items;
+  if((isManager||isBranchMgr) && (DASH.procs||[]).length){
+    att+='<div class="section-label">CRM pipelines</div>'+(DASH.procs||[]).map(function(p){ return '<div class="dash-att" onclick="go(\'crm\')"><b style="min-width:150px">'+esc(p.name)+'</b><span class="t" style="color:#777">open '+p.open+' · due '+p.dueToday+' · <span style="color:#DA1017">overdue '+p.overdue+'</span></span><span class="r">CRM ›</span></div>'; }).join('');
+  }
+  var html=att;
+  if(isManager && !branch && Object.keys(brs).length>1){
     var rows=Object.keys(brs).map(function(bid){
       var be=emp.filter(function(e){return String(e.Branch)===bid;}).length;
       var bc=activeCards.filter(function(c){return String(c.branchId)===bid;});
@@ -300,6 +335,7 @@ function renderDashboard(){
   tb.innerHTML=rhtml;
 }
 function kpi(n,l){ return '<div class="kpi"><div class="n">'+n+'</div><div class="l">'+esc(l)+'</div></div>'; }
+function kpiC(n,l,cls){ return '<div class="kpi k-'+(cls||'')+'"><div class="n">'+n+'</div><div class="l">'+esc(l)+'</div></div>'; }
 
 /* employees */
 function loadEmployees(){

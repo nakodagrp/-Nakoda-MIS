@@ -45,6 +45,11 @@
       '<div class="field full"><label>Address</label><textarea id="b_address" rows="2">'+esc(b.Address||'')+'</textarea></div>'+
       '<div class="section-title full">Letterhead (used for invoices &amp; documents)</div>'+
       '<div class="field full"><input type="file" id="b_lhFile" accept="image/*,application/pdf"><div id="b_lhStatus" style="font-size:12px;color:#666;margin-top:5px">'+lhLine+'</div></div>'+
+      '<div class="section-title full">Location (for attendance geo-fencing)</div>'+
+      '<div class="field"><label>Latitude</label><input id="b_lat" value="'+esc(b.Latitude||'')+'" placeholder="e.g. 21.1702"></div>'+
+      '<div class="field"><label>Longitude</label><input id="b_lng" value="'+esc(b.Longitude||'')+'" placeholder="e.g. 72.8311"></div>'+
+      '<div class="field"><label>Allowed radius (metres)</label><input id="b_radius" type="number" value="'+esc(b.GeoRadius||'100')+'"></div>'+
+      '<div class="field"><label>&nbsp;</label><button type="button" class="btn ghost" id="b_useLoc">📍 Use my current location</button></div>'+
       '<div class="section-title full">Banking (used later for payroll / payouts)</div>'+
       '<div class="field"><label>Bank name</label><input id="b_bank" value="'+esc(b.BankName||'')+'"></div>'+
       '<div class="field"><label>IFSC</label><input id="b_ifsc" value="'+esc(b.IFSC||'')+'"></div>'+
@@ -69,11 +74,17 @@
       fr.readAsDataURL(f);
     };
 
+    var ul=document.getElementById('b_useLoc');
+    if(ul) ul.onclick=function(){ if(!navigator.geolocation){ toast('Location not supported on this device.',true); return; } ul.textContent='Locating…';
+      navigator.geolocation.getCurrentPosition(function(pos){ document.getElementById('b_lat').value=pos.coords.latitude.toFixed(6); document.getElementById('b_lng').value=pos.coords.longitude.toFixed(6); ul.textContent='📍 Captured ✓'; },
+        function(){ ul.textContent='📍 Use my current location'; toast('Could not get location — allow location access.',true); }, {enableHighAccuracy:true,timeout:10000}); };
+
     document.getElementById('saveBranchBtn').addEventListener('click', function(){
       var partnerSel=document.getElementById('b_partner');
       var data={ BranchName:val('b_name'), City:val('b_city'), Phone:val('b_phone'), Mobile:val('b_mobile'),
         Address:val('b_address'), PartnerEmpID:partnerSel.value, PartnerName:partnerSel.value?(partnerSel.options[partnerSel.selectedIndex].text.replace(/\s*\(.*\)$/,'')):'',
-        BankName:val('b_bank'), IFSC:val('b_ifsc'), AccountNumber:val('b_acct'), LetterheadUrl:lhUrl, LetterheadFileId:lhFileId };
+        BankName:val('b_bank'), IFSC:val('b_ifsc'), AccountNumber:val('b_acct'), LetterheadUrl:lhUrl, LetterheadFileId:lhFileId,
+        Latitude:val('b_lat'), Longitude:val('b_lng'), GeoRadius:val('b_radius') };
       if(editing) data.Status=val('b_status');
       if(!data.BranchName){ toast('Branch name is required.',true); return; }
       if(!editing){ data.BranchID=val('b_code'); if(!data.BranchID){ toast('Branch code is required.',true); return; } }

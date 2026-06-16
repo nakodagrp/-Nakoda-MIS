@@ -86,37 +86,49 @@
 
   /* ---------- work / advance a lead ---------- */
   function openInstance(iid, after){
-    API.getInstance(iid).then(function(r){ if(!r||!r.ok){ toast((r&&r.error)||'Could not open',true); return; }
-      API.cachedEmployees().then(function(emps){ emps=emps||[];
-        var st=r.stage||{}, acts=String(st.activityOptions||'').split(',').filter(Boolean);
-        var moveOpts=(r.edges||[]).map(function(e){ return '<option value="'+esc(e.toStageId)+'">→ '+esc(e.toName)+(e.label?(' ('+esc(e.label)+')'):'')+'</option>'; }).join('');
-        moveOpts+='<option value="STAY">Stay — '+esc(st.name||'')+' (revisit)</option>';
-        if(st.allowClose){ moveOpts+='<option value="CLOSE_WON">✓ Close — Won</option><option value="CLOSE_LOST">✕ Close — Lost</option>'; }
-        var mouBtn=(String(r.instance.processId)==='P_DOCTOR')?'<button class="btn ghost sm" id="avMou" style="margin-bottom:8px">⤓ Download MOU</button>':'';
-        var body='<div style="font-size:12.5px;color:#666;margin-bottom:8px"><b>'+esc(r.instance.leadName)+'</b>'+(r.instance.leadMobile?(' · '+esc(r.instance.leadMobile)):'')+' · stage: '+esc(st.name||'')+'</div>'+mouBtn+
-          '<div class="grid2">'+
-          (acts.length?'<div class="field full"><label>Activity</label><select id="avAct" class="in">'+acts.map(function(a){return '<option>'+esc(a)+'</option>';}).join('')+'</select></div>':'')+
-          fieldsHtml(r.fields,'av_')+
-          '<div class="field full"><label>Move to *</label><select id="avMove" class="in">'+moveOpts+'</select></div>'+
-          '<div class="field" id="avAssWrap"><label>Assign next to</label><select id="avAssignee" class="in">'+empOpts(emps,r.instance.assigneeEmpId)+'</select></div>'+
-          '<div class="field" id="avDateWrap"><label>Next date</label><input id="avDate" class="in" type="date"></div>'+
-          '<div class="field full" id="avCloseWrap" style="display:none"><label>Close reason</label><input id="avReason" class="in"></div>'+
-          '</div>'+timelineHtml(r.steps)+'<div id="avMsg"></div>';
-        openModal(st.name||'Work lead', body, '<button class="btn" id="avSave">Submit & advance</button>');
-        function onMove(){ var v=document.getElementById('avMove').value, close=(v==='CLOSE_WON'||v==='CLOSE_LOST');
-          document.getElementById('avCloseWrap').style.display=close?'':'none';
-          document.getElementById('avAssWrap').style.display=close?'none':'';
-          document.getElementById('avDateWrap').style.display=close?'none':''; }
-        document.getElementById('avMove').onchange=onMove; onMove();
-        var mb=document.getElementById('avMou'); if(mb) mb.onclick=function(){ buildMou(r); };
-        document.getElementById('avSave').onclick=function(){
-          var data={ activityType:(document.getElementById('avAct')||{}).value||'', formData:collectFields(r.fields,'av_'),
-            nextStageId:document.getElementById('avMove').value, nextAssigneeEmpId:(document.getElementById('avAssignee')||{}).value||'',
-            nextDate:(document.getElementById('avDate')||{}).value||'', closeReason:(document.getElementById('avReason')||{}).value||'' };
-          this.disabled=true; this.textContent='Saving…';
-          API.advanceStage(iid,data).then(function(res){ if(res&&(res.ok||res.offline)){ closeModal(); toast(res.offline?'Saved offline — will sync':'Updated'); if(after) after(); } else { document.getElementById('avMsg').innerHTML='<div class="msg error">'+esc((res&&res.error)||'Failed')+'</div>'; } });
-        };
-      });
+    API.cachedInstance(iid).then(function(cached){
+      var shown=false;
+      if(cached && cached.ok){ renderInstance(cached, iid, after); shown=true; }
+      else openModal('Lead','<div class="center-load"><span class="loader dark"></span> Loading…</div>','');
+      API.getInstance(iid).then(function(r){ if(r&&r.ok){ if(!shown) renderInstance(r, iid, after); } else if(!shown){ closeModal(); toast((r&&r.error)||'Could not open',true); } });
+    });
+  }
+  function actsFor(st, steps){
+    var advN=(steps||[]).filter(function(s){ return s.activityType && s.activityType!=='Created'; }).length;
+    var base = advN===0 ? ['New call','New meeting'] : ['Recurring call','Recurring meeting','Follow-up call','Follow-up visit'];
+    var extras = String(st.activityOptions||'').split(',').filter(Boolean).filter(function(a){ return !/call|meeting|visit/i.test(a); });
+    return base.concat(extras);
+  }
+  function renderInstance(r, iid, after){
+    API.cachedEmployees().then(function(emps){ emps=emps||[];
+      var st=r.stage||{}, acts=actsFor(st, r.steps);
+      var moveOpts=(r.edges||[]).map(function(e){ return '<option value="'+esc(e.toStageId)+'">→ '+esc(e.toName)+(e.label?(' ('+esc(e.label)+')'):'')+'</option>'; }).join('');
+      moveOpts+='<option value="STAY">Stay — '+esc(st.name||'')+' (revisit)</option>';
+      if(st.allowClose){ moveOpts+='<option value="CLOSE_WON">✓ Close — Won</option><option value="CLOSE_LOST">✕ Close — Lost</option>'; }
+      var mouBtn=(String(r.instance.processId)==='P_DOCTOR')?'<button class="btn ghost sm" id="avMou" style="margin-bottom:8px">⤓ Download MOU</button>':'';
+      var body='<div style="font-size:12.5px;color:#666;margin-bottom:8px"><b>'+esc(r.instance.leadName)+'</b>'+(r.instance.leadMobile?(' · '+esc(r.instance.leadMobile)):'')+' · stage: '+esc(st.name||'')+'</div>'+mouBtn+
+        '<div class="grid2">'+
+        '<div class="field full"><label>Activity</label><select id="avAct" class="in">'+acts.map(function(a){return '<option>'+esc(a)+'</option>';}).join('')+'</select></div>'+
+        fieldsHtml(r.fields,'av_')+
+        '<div class="field full"><label>Move to *</label><select id="avMove" class="in">'+moveOpts+'</select></div>'+
+        '<div class="field" id="avAssWrap"><label>Assign next to</label><select id="avAssignee" class="in">'+empOpts(emps,r.instance.assigneeEmpId)+'</select></div>'+
+        '<div class="field" id="avDateWrap"><label>Next date</label><input id="avDate" class="in" type="date"></div>'+
+        '<div class="field full" id="avCloseWrap" style="display:none"><label>Close reason</label><input id="avReason" class="in"></div>'+
+        '</div>'+timelineHtml(r.steps)+'<div id="avMsg"></div>';
+      openModal(st.name||'Work lead', body, '<button class="btn" id="avSave">Submit & advance</button>');
+      function onMove(){ var v=document.getElementById('avMove').value, close=(v==='CLOSE_WON'||v==='CLOSE_LOST');
+        document.getElementById('avCloseWrap').style.display=close?'':'none';
+        document.getElementById('avAssWrap').style.display=close?'none':'';
+        document.getElementById('avDateWrap').style.display=close?'none':''; }
+      document.getElementById('avMove').onchange=onMove; onMove();
+      var mb=document.getElementById('avMou'); if(mb) mb.onclick=function(){ buildMou(r); };
+      document.getElementById('avSave').onclick=function(){
+        var data={ activityType:(document.getElementById('avAct')||{}).value||'', formData:collectFields(r.fields,'av_'),
+          nextStageId:document.getElementById('avMove').value, nextAssigneeEmpId:(document.getElementById('avAssignee')||{}).value||'',
+          nextDate:(document.getElementById('avDate')||{}).value||'', closeReason:(document.getElementById('avReason')||{}).value||'' };
+        this.disabled=true; this.textContent='Saving…';
+        API.advanceStage(iid,data).then(function(res){ if(res&&(res.ok||res.offline)){ closeModal(); toast(res.offline?'Saved offline — will sync':'Updated'); if(after) after(); } else { document.getElementById('avMsg').innerHTML='<div class="msg error">'+esc((res&&res.error)||'Failed')+'</div>'; } });
+      };
     });
   }
   function timelineHtml(steps){ if(!steps||!steps.length) return ''; return '<div class="proc-tl"><div class="tl-h">History</div>'+steps.slice().reverse().map(function(s){ return '<div class="tl-i"><b>'+esc(s.stageName)+'</b>'+(s.activityType?(' · '+esc(s.activityType)):'')+'<span>'+esc(String(s.actualAt||s.createdAt||'').slice(0,10))+' · '+esc(s.byName||'')+'</span></div>'; }).join('')+'</div>'; }
@@ -143,42 +155,35 @@
   /* ---------- Doctor MOU (A4 PNG) ---------- */
   function stepVal_(steps,label){ for(var i=(steps||[]).length-1;i>=0;i--){ try{ var fd=JSON.parse(steps[i].formDataJson||'{}'); if(fd[label]) return fd[label]; }catch(e){} } return ''; }
   function wrap_(x,text,maxW){ var words=String(text||'').split(' '),lines=[],line=''; words.forEach(function(w){ var t=line?line+' '+w:w; if(x.measureText(t).width>maxW && line){ lines.push(line); line=w; } else line=t; }); if(line) lines.push(line); return lines; }
+  function branchName_(id){ var b=((S.meta&&S.meta.branches)||[]).filter(function(x){return String(x.BranchID)===String(id);})[0]; return b?b.BranchName:String(id||''); }
   function buildMou(r){
-    var logo=new Image(); logo.onload=function(){ draw(logo); }; logo.onerror=function(){ draw(null); }; logo.src='icons/login-logo.png';
-    function draw(logo){
+    API.getProcess(r.instance.processId).then(function(d){ var proc=(d&&d.ok)?d.process:{};
+      var logo=new Image(); logo.onload=function(){ draw(logo,proc); }; logo.onerror=function(){ draw(null,proc); }; logo.src='icons/login-logo.png';
+    });
+    function draw(logo,proc){
       var inst=r.instance, dj={}; try{ dj=JSON.parse(inst.dataJson||'{}'); }catch(e){}
-      var spec=dj['Specialty']||'', clinic=dj['Clinic / Hospital']||'', area=dj['Area / Locality']||'';
-      var terms=stepVal_(r.steps,'Commission / terms')||'As mutually agreed between the parties.';
-      var code=stepVal_(r.steps,'Referral code')||'—';
       var today=new Date(), ds=today.getDate()+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][today.getMonth()]+' '+today.getFullYear();
+      var map={ doctor_name:inst.leadName, specialty:dj['Specialty']||'', clinic:dj['Clinic / Hospital']||'', area:dj['Area / Locality']||'',
+        mobile:inst.leadMobile||'', referral_code:stepVal_(r.steps,'Referral code')||'—', terms:stepVal_(r.steps,'Commission / terms')||'As mutually agreed.', branch:branchName_(inst.branchId), date:ds };
+      function fill(t){ return String(t||'').replace(/\{\{(\w+)\}\}/g,function(_,k){ return map[k]!=null?map[k]:''; }); }
+      var defBody='This Memorandum of Understanding is between Nakoda Diagnostics And Research Center and Dr. {{doctor_name}} ({{specialty}}, {{clinic}}, {{area}}), referral code {{referral_code}}.\n\nCommercial terms: {{terms}}\n\n1. The Doctor may refer patients to the Center for diagnostic services.\n2. The Center shall provide timely, quality reports and home collection where applicable.\n3. Referral benefits are settled monthly against valid records.\n4. Both parties shall maintain patient confidentiality per applicable law.\n5. No arrangement shall compromise clinical judgement or patient interest.\n6. Either party may terminate with 30 days written notice.';
+      var title=(proc&&proc.docTitle)||'MEMORANDUM OF UNDERSTANDING';
+      var body=fill((proc&&proc.docBody)||defBody);
+      var letterhead=String(proc&&proc.docLetterhead)==='yes';
       var W=1240,H=1754,M=70; var c=document.createElement('canvas'); c.width=W; c.height=H; var x=c.getContext('2d');
       x.fillStyle='#fff'; x.fillRect(0,0,W,H);
-      x.fillStyle='#DA1017'; x.fillRect(0,0,W,10);
-      if(logo){ var lh=70, lw=Math.min(360, logo.width*(lh/logo.height)); x.drawImage(logo,M,40,lw,lh); }
-      else { x.fillStyle='#DA1017'; x.font='bold 32px Arial'; x.fillText('NAKODA',M,86); }
-      x.textAlign='right'; x.fillStyle='#888'; x.font='13px Arial'; x.fillText('Date: '+ds, W-M, 60); x.textAlign='left';
-      x.fillStyle='#1f1f1f'; x.font='bold 30px Arial'; x.textAlign='center'; x.fillText('MEMORANDUM OF UNDERSTANDING', W/2, 165); x.textAlign='left';
-      x.strokeStyle='#e2e5ea'; x.beginPath(); x.moveTo(M,185); x.lineTo(W-M,185); x.stroke();
-      var y=230; x.font='15px Arial'; x.fillStyle='#222';
-      function para(t,gap){ wrap_(x,t,W-2*M).forEach(function(l){ x.fillText(l,M,y); y+=24; }); y+=(gap||10); }
-      function head(t){ x.font='bold 16px Arial'; x.fillStyle='#DA1017'; x.fillText(t,M,y); y+=26; x.font='15px Arial'; x.fillStyle='#222'; }
-      para('This Memorandum of Understanding ("MOU") is entered into between Nakoda Diagnostics And Research Center ("the Center") and the referring doctor named below ("the Doctor"), to set out the understanding for patient referrals for diagnostic services.');
-      head('1. Doctor details');
-      para('Name: Dr. '+inst.leadName+(spec?('  ·  Specialty: '+spec):''));
-      para((clinic?('Clinic / Hospital: '+clinic+'    '):'')+(area?('Area: '+area):'')+(inst.leadMobile?('    Mobile: '+inst.leadMobile):''));
-      para('Referral code: '+code);
-      head('2. Commercial arrangement'); para(terms);
-      head('3. Terms & conditions');
-      ['The Doctor may refer patients to the Center for diagnostic and pathology services.',
-       'The Center shall provide accurate and timely reports, and home sample collection where applicable.',
-       'Any referral benefit/commercial arrangement shall be as stated in clause 2 and settled monthly against valid records.',
-       'Both parties shall maintain patient confidentiality and comply with all applicable laws and regulations.',
-       'No arrangement under this MOU shall compromise clinical judgement or the best interest of the patient.',
-       'This MOU is non-exclusive and may be terminated by either party with 30 days written notice.'
-      ].forEach(function(t,i){ wrap_(x,(i+1)+'. '+t,W-2*M-10).forEach(function(l){ x.fillText(l,M+10,y); y+=24; }); y+=4; });
-      y=H-170; x.strokeStyle='#bbb'; x.beginPath(); x.moveTo(M,y); x.lineTo(M+340,y); x.moveTo(W-M-340,y); x.lineTo(W-M,y); x.stroke();
+      var topY;
+      if(letterhead){ topY=250; x.fillStyle='#bbb'; x.font='italic 13px Arial'; x.textAlign='center'; x.fillText('(printed on your branch letterhead)', W/2, 130); x.textAlign='left'; }
+      else { x.fillStyle='#DA1017'; x.fillRect(0,0,W,10);
+        if(logo){ var lh=70, lw=Math.min(360, logo.width*(lh/logo.height)); x.drawImage(logo,M,40,lw,lh); } else { x.fillStyle='#DA1017'; x.font='bold 32px Arial'; x.fillText('NAKODA',M,86); }
+        x.textAlign='right'; x.fillStyle='#888'; x.font='13px Arial'; x.fillText('Date: '+ds, W-M, 60); x.textAlign='left'; topY=150; }
+      x.fillStyle='#1f1f1f'; x.font='bold 28px Arial'; x.textAlign='center'; x.fillText(title, W/2, topY); x.textAlign='left';
+      x.strokeStyle='#e2e5ea'; x.beginPath(); x.moveTo(M,topY+20); x.lineTo(W-M,topY+20); x.stroke();
+      var y=topY+58; x.font='15px Arial'; x.fillStyle='#222';
+      body.split('\n').forEach(function(para){ if(!para.trim()){ y+=14; return; } wrap_(x,para,W-2*M).forEach(function(l){ x.fillText(l,M,y); y+=25; }); y+=6; });
+      y=Math.max(y+30,H-170); x.strokeStyle='#bbb'; x.beginPath(); x.moveTo(M,y); x.lineTo(M+340,y); x.moveTo(W-M-340,y); x.lineTo(W-M,y); x.stroke();
       x.fillStyle='#333'; x.font='14px Arial'; x.fillText('For Nakoda Diagnostics And Research Center', M, y+26); x.fillText('Dr. '+inst.leadName+' (Doctor)', W-M-340, y+26);
-      x.fillStyle='#888'; x.font='italic 14px Arial'; x.textAlign='center'; x.fillText('Computer-generated MOU draft — sign physically to execute.', W/2, H-50); x.textAlign='left';
+      x.fillStyle='#888'; x.font='italic 14px Arial'; x.textAlign='center'; x.fillText('Computer-generated draft — sign physically to execute.', W/2, H-40); x.textAlign='left';
       c.toBlob(function(b){ var u=URL.createObjectURL(b); var a=document.createElement('a'); a.href=u; a.download='MOU-'+String(inst.leadName).replace(/\s+/g,'_')+'.png'; a.click(); setTimeout(function(){URL.revokeObjectURL(u);},2000); toast('MOU saved'); });
     }
   }
