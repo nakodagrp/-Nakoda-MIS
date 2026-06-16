@@ -458,5 +458,6 @@ function openModal(title, bodyHtml, footHtml){
   var m=el('<div class="overlay" id="ov"><div class="modal"><div class="modal-head"><h3>'+esc(title)+'</h3><button class="x" onclick="closeModal()">&times;</button></div><div class="modal-body">'+bodyHtml+'</div><div class="modal-foot">'+(footHtml||'')+'</div></div></div>');
   m.addEventListener('mousedown', function(ev){ if(ev.target.id==='ov') closeModal(); });
   $('modalRoot').appendChild(m);
+  document.body.classList.add('modal-open');
 }
-function closeModal(){ $('modalRoot').innerHTML=''; }
+function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remove('modal-open'); }
