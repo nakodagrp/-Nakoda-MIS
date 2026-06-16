@@ -131,7 +131,7 @@ function populateSelectors(){
 }
 function applyPerms(){
   if(!S.perms) return;
-  var canList=S.perms.canViewAll||S.perms.level==='BRANCH_MGR';
+  var canList=S.perms.canViewAll||S.perms.level==='BRANCH_MGR'||S.perms.level==='BRANCH_VIEW';
   document.querySelectorAll('[data-page="employees"]').forEach(function(n){ n.classList.toggle('hidden',!canList); });
   $('addEmpBtn').classList.toggle('hidden', !S.perms.canCreate);
 }
@@ -161,7 +161,8 @@ function greetWord(){ var h=new Date().getHours(); return h<12?'Good morning':(h
 function loadDashboard(){
   var u=S.user||{};
   $('greetHello').textContent=greetWord()+', '+(u.FullName||'');
-  var scope=(S.perms&&S.perms.canManageAll)?'org-wide':((S.perms&&S.perms.level==='BRANCH_MGR')?('branch: '+branchName(u.Branch)):(S.perms&&S.perms.canViewAll?'all staff (view)':'self-service'));
+  var lvl=S.perms&&S.perms.level;
+  var scope=(S.perms&&S.perms.canManageAll)?'org-wide':(lvl==='BRANCH_MGR'?('branch: '+branchName(u.Branch)):(lvl==='BRANCH_VIEW'?('branch: '+branchName(u.Branch)+' (view)'):(S.perms&&S.perms.canViewAll?'all branches (view)':'self-service')));
   $('greetMeta').textContent=[u.Role,(u.OfficeType==='Branch'?branchName(u.Branch):'Corporate Office'),scope].filter(Boolean).join(' · ');
   $('kpis').innerHTML='<div class="kpi"><div class="n"><span class="loader dark"></span></div><div class="l">Loading…</div></div>';
   API.listEmployees().then(function(r){ if(r.ok){ S.employees=r.employees; S.perms=r.perms||S.perms; renderDashboard(); } });
@@ -235,7 +236,7 @@ function openEmpModal(empId){
   function build(e){
     e=e||{Status:'Active'};
     var roleOpts=S.meta.roles.map(function(r){
-      var allow=true; if(S.perms.level==='BRANCH_MGR'){ allow=(r.OfficeType==='Branch' && ['SUPER','HR_ADMIN','BRANCH_MGR'].indexOf(r.AccessLevel)<0); }
+      var allow=true; if(S.perms.level==='BRANCH_MGR'){ allow=(r.OfficeType==='Branch' && ['SUPER','HR_ADMIN','BRANCH_MGR','BRANCH_VIEW'].indexOf(r.AccessLevel)<0); }
       return allow?'<option value="'+esc(r.Role)+'"'+(r.Role===e.Role?' selected':'')+'>'+esc(r.Role)+' ('+esc(r.OfficeType)+')</option>':'';
     }).join('');
     var brOpts=S.meta.branches.filter(function(b){return b.Type==='Branch';}).map(function(b){ return '<option value="'+esc(b.BranchID)+'"'+(b.BranchID===e.Branch?' selected':'')+'>'+esc(b.BranchName)+'</option>'; }).join('');
