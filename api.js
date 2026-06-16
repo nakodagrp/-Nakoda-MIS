@@ -170,6 +170,10 @@
       return call('resetPassword',{token:getToken(),empId:empId});
     },
 
+    listBranchesFull:function(){ return call('listBranches',{token:getToken()}); },
+    createBranch:function(data){ return call('createBranch',{token:getToken(),data:data}); },
+    updateBranch:function(id,data){ return call('updateBranch',{token:getToken(),branchId:id,data:data}); },
+
     /* fire-and-forget cache refresh */
     refreshEmployees:function(){ return API.listEmployees().catch(function(){}); },
 
