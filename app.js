@@ -171,6 +171,8 @@ function applyPerms(){
   document.querySelectorAll('[data-page="taskmon"]').forEach(function(n){ n.classList.toggle('hidden',!canMon); });
   var canRec=S.perms.canManageRecurring||(S.perms.level==='SUPER')||(S.user && S.user.Role==='Executive Assistant');
   document.querySelectorAll('[data-page="recurring"]').forEach(function(n){ n.classList.toggle('hidden',!canRec); });
+  var canBuild=(S.perms.level==='SUPER')||(S.user && S.user.Role==='Executive Assistant');
+  document.querySelectorAll('[data-page="builder"]').forEach(function(n){ n.classList.toggle('hidden',!canBuild); });
   buildMobileBottomNav();
 }
 
@@ -180,6 +182,7 @@ function bindApp(){
   $('menuBtn').addEventListener('click', function(){ $('sidebar').classList.toggle('open'); });
   document.querySelectorAll('.nav-item').forEach(function(n){ n.addEventListener('click', function(){ go(n.getAttribute('data-page')); $('sidebar').classList.remove('open'); }); });
   $('addEmpBtn').addEventListener('click', function(){ openEmpModal(null); });
+  var efp=$('empFormPdfBtn'); if(efp) efp.addEventListener('click', downloadEmpFormPdf);
   $('dashRefresh').addEventListener('click', loadDashboard);
   $('dashBranch').addEventListener('change', renderDashboard);
   var deb; $('empSearch').addEventListener('input', function(){ clearTimeout(deb); deb=setTimeout(renderEmpTable,200); });
@@ -190,12 +193,13 @@ var currentPage='dashboard';
 function go(page){
   currentPage=page;
   document.querySelectorAll('.nav-item').forEach(function(n){ n.classList.toggle('active', n.getAttribute('data-page')===page); });
-  ['dashboard','tasks','calendar','recurring','crm','taskmon','employees','profile','branches','cards','cardstatus'].forEach(function(p){ $('page-'+p).classList.toggle('hidden',p!==page); });
+  ['dashboard','tasks','calendar','recurring','crm','builder','taskmon','employees','profile','branches','cards','cardstatus'].forEach(function(p){ $('page-'+p).classList.toggle('hidden',p!==page); });
   if(page==='dashboard') loadDashboard();
   if(page==='tasks' && window.renderMyTasks) window.renderMyTasks();
   if(page==='calendar' && window.renderCalendar) window.renderCalendar();
   if(page==='recurring' && window.renderRecurring) window.renderRecurring();
   if(page==='crm' && window.renderCRM) window.renderCRM();
+  if(page==='builder' && window.renderBuilder) window.renderBuilder();
   if(page==='taskmon' && window.renderTaskMonitor) window.renderTaskMonitor();
   if(page==='employees') loadEmployees();
   if(page==='profile') loadProfile();
@@ -206,7 +210,7 @@ function go(page){
 }
 
 /* ---------- mobile bottom navigation + "More" sheet ---------- */
-var NAVDEF=[['dashboard','▦','Home'],['tasks','✓','Tasks'],['calendar','📅','Calendar'],['crm','📁','CRM'],['recurring','🔁','Recurring'],['taskmon','📋','Monitor'],['employees','👥','Staff'],['cards','🏷','Cards'],['cardstatus','✅','Status'],['branches','🏢','Branches'],['profile','⚙','Profile']];
+var NAVDEF=[['dashboard','▦','Home'],['tasks','✓','Tasks'],['calendar','📅','Calendar'],['crm','📁','CRM'],['builder','🔧','Builder'],['recurring','🔁','Recurring'],['taskmon','📋','Monitor'],['employees','👥','Staff'],['cards','🏷','Cards'],['cardstatus','✅','Status'],['branches','🏢','Branches'],['profile','⚙','Profile']];
 function visibleNav(){ return NAVDEF.filter(function(d){ var el=document.querySelector('.nav-item[data-page="'+d[0]+'"]'); return el && !el.classList.contains('hidden'); }); }
 function navBtn(d){ return '<button data-page="'+d[0]+'"><span class="ic">'+d[1]+'</span><span>'+d[2]+'</span></button>'; }
 function buildMobileBottomNav(){
@@ -367,6 +371,31 @@ function openEmpModal(empId){
     ):'';
     var nameField=manage?'<div class="field"><label>Full name *</label><input id="f_FullName" value="'+esc(e.FullName||'')+'"></div>':'<div class="field"><label>Full name</label><div>'+esc(e.FullName||'')+'</div></div>';
     var joinField=manage?'<div class="field"><label>Joining date</label><input id="f_JoiningDate" type="date" value="'+esc(e.JoiningDate||'')+'"></div>':'';
+    function fld(lbl,id,v,t){ return '<div class="field"><label>'+lbl+'</label><input id="'+id+'"'+(t?(' type="'+t+'"'):'')+' value="'+esc(v||'')+'"></div>'; }
+    function sel(lbl,id,arr,v){ return '<div class="field"><label>'+lbl+'</label><select id="'+id+'"><option value=""></option>'+arr.map(function(o){return '<option'+(String(o)===String(v)?' selected':'')+'>'+esc(o)+'</option>';}).join('')+'</select></div>'; }
+    function docRow(lbl,key,url){ return '<div class="field full"><label>'+lbl+'</label><input type="file" id="up_'+key+'" accept="image/*,application/pdf"><div id="st_'+key+'" class="upst" style="font-size:12px;color:#666;margin-top:4px">'+(url?('Uploaded ✓ <a href="'+esc(url)+'" target="_blank">view</a>'):'')+'</div></div>'; }
+    var eduArr=e.EduDocsUrl?String(e.EduDocsUrl).split(',').filter(Boolean):[];
+    window._empDocs={Aadhaar:e.AadhaarUrl||'',Pan:e.PanUrl||'',DL:e.DLUrl||'',LightBill:e.LightBillUrl||'',Edu:eduArr.slice()};
+    var extBlock=manage?(
+      '<div class="section-title full">Family</div>'+
+      fld('Father name','f_FatherName',e.FatherName)+fld('Father phone','f_FatherPhone',e.FatherPhone)+
+      fld('Mother name','f_MotherName',e.MotherName)+fld('Mother phone','f_MotherPhone',e.MotherPhone)+
+      fld('Spouse name','f_SpouseName',e.SpouseName)+fld('Spouse phone','f_SpousePhone',e.SpousePhone)+
+      '<div class="field"><label>Anniversary</label><input id="f_Anniversary" type="date" value="'+esc(e.Anniversary||'')+'"></div>'+
+      '<div class="section-title full">Bank</div>'+
+      fld('Bank name / prefix','f_BankPrefix',e.BankPrefix)+fld('IFSC','f_IFSC',e.IFSC)+fld('Account number','f_AccountNo',e.AccountNo)+
+      '<div class="section-title full">Work &amp; pay</div>'+
+      fld('Duty start','f_DutyStart',e.DutyStart,'time')+fld('Duty end','f_DutyEnd',e.DutyEnd,'time')+
+      fld('Basic salary (₹)','f_BasicSalary',e.BasicSalary,'number')+
+      sel('Attendance mode','f_AttendanceMode',['Selfie + Geo','Selfie + Geo (double check)','Geo only (office)'],e.AttendanceMode)+
+      sel('Sunday type','f_SundayType',['Type 1 — no Sundays','Type 2 — alternate Sundays'],e.SundayType)+
+      sel('Pay / visit type','f_PayType',['Fixed salary','Per km','Per visit'],e.PayType)+
+      fld('Per-km rate (₹)','f_PerKmRate',e.PerKmRate,'number')+fld('Per-visit rate (₹)','f_PerVisitRate',e.PerVisitRate,'number')+
+      '<div class="field full"><label>KRA (key responsibilities)</label><textarea id="f_KRA" rows="2">'+esc(e.KRA||'')+'</textarea></div>'+
+      '<div class="section-title full">Documents (upload)</div>'+
+      docRow('Aadhaar card','Aadhaar',e.AadhaarUrl)+docRow('PAN card','Pan',e.PanUrl)+docRow('Driving licence','DL',e.DLUrl)+docRow('Light bill','LightBill',e.LightBillUrl)+
+      '<div class="field full"><label>Education documents (multiple)</label><input type="file" id="up_Edu" multiple accept="image/*,application/pdf"><div id="st_Edu" class="upst" style="font-size:12px;color:#666;margin-top:4px">'+(eduArr.length?('Uploaded ✓ ('+eduArr.length+')'):'')+'</div></div>'
+    ):'';
     var body='<div class="grid2">'+
       '<div class="section-title full">Basic details</div>'+nameField+joinField+
       '<div class="field"><label>Phone</label><input id="f_Phone" value="'+esc(e.Phone||'')+'"></div>'+
@@ -378,6 +407,7 @@ function openEmpModal(empId){
       '<div class="field full"><label>Address</label><textarea id="f_Address" rows="2">'+esc(e.Address||'')+'</textarea></div>'+
       '<div class="field"><label>Emergency contact name</label><input id="f_EmergencyName" value="'+esc(e.EmergencyName||'')+'"></div>'+
       '<div class="field"><label>Emergency contact phone</label><input id="f_EmergencyPhone" value="'+esc(e.EmergencyPhone||'')+'"></div>'+
+      extBlock+
     '</div>'+
     (editing&&manage&&navigator.onLine?'<div style="margin-top:14px"><button class="btn ghost sm" onclick="resetPw(\''+e.EmpID+'\')">Reset login password</button></div>':'');
     var foot='<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="saveEmpBtn">'+(editing?'Save changes':'Create staff')+'</button>';
@@ -386,15 +416,46 @@ function openEmpModal(empId){
     function syncBranch(){ if(!roleSel) return; var sel=S.meta.roles.filter(function(r){return r.Role===roleSel.value;})[0]; var bf=$('branchField'); if(bf) bf.style.display=(sel&&sel.OfficeType==='Branch')?'':'none'; }
     if(roleSel){ roleSel.addEventListener('change',syncBranch); syncBranch(); }
     if(S.perms.level==='BRANCH_MGR'){ var bs=$('f_Branch'); if(bs){ bs.value=S.perms.branch; bs.disabled=true; } }
+    function bindUp(key,multi){ var inp=$('up_'+key); if(!inp) return; inp.onchange=function(){ var files=inp.files; if(!files||!files.length) return; var st=$('st_'+key); st.textContent='Uploading…';
+      [].forEach.call(files,function(f){ if(f.size>4*1024*1024){ toast(f.name+' too large (max 4MB)',true); return; } var fr=new FileReader(); fr.onload=function(){ var s=fr.result,i=s.indexOf(',');
+        API.uploadFile({base64:s.slice(i+1),mimeType:f.type,fileName:f.name,subPath:'EmployeeDocs'}).then(function(r){ if(r.ok){ if(multi){ window._empDocs.Edu.push(r.url); st.innerHTML='Uploaded ✓ ('+window._empDocs.Edu.length+')'; } else { window._empDocs[key]=r.url; st.innerHTML='Uploaded ✓ <a href="'+esc(r.url)+'" target="_blank">view</a>'; } } else st.textContent=r.error||'Upload failed'; }).catch(function(){ st.textContent='Uploading a document needs internet.'; }); }; fr.readAsDataURL(f); }); }; }
+    ['Aadhaar','Pan','DL','LightBill'].forEach(function(k){ bindUp(k,false); }); bindUp('Edu',true);
     $('saveEmpBtn').addEventListener('click', function(){ saveEmp(editing?e.EmpID:null, manage); });
   }
   if(editing){ API.getEmployee(empId).then(function(r){ if(r.ok) build(r.employee); else toast(r.error,true); }); } else { build(null); }
 }
 function genderOpts(v){ return ['','Male','Female','Other'].map(function(g){return '<option'+(g===v?' selected':'')+'>'+g+'</option>';}).join(''); }
+function downloadEmpFormPdf(){
+  var logo=new Image(); logo.onload=function(){ draw(logo); }; logo.onerror=function(){ draw(null); }; logo.src='icons/login-logo.png';
+  function draw(logo){
+    var W=1240,H=1754,M=70; var c=document.createElement('canvas'); c.width=W; c.height=H; var x=c.getContext('2d');
+    x.fillStyle='#fff'; x.fillRect(0,0,W,H); x.fillStyle='#DA1017'; x.fillRect(0,0,W,10);
+    if(logo){ var lh=70, lw=Math.min(360, logo.width*(lh/logo.height)); x.drawImage(logo,M,38,lw,lh); } else { x.fillStyle='#DA1017'; x.font='bold 32px Arial'; x.fillText('NAKODA',M,86); }
+    x.textAlign='right'; x.fillStyle='#888'; x.font='13px Arial'; x.fillText('Employee Details Form', W-M, 60); x.textAlign='left';
+    x.fillStyle='#1f1f1f'; x.font='bold 26px Arial'; x.fillText('EMPLOYEE DETAILS FORM', M, 150);
+    x.strokeStyle='#e2e5ea'; x.beginPath(); x.moveTo(M,168); x.lineTo(W-M,168); x.stroke();
+    var y=200;
+    function head(t){ x.fillStyle='#DA1017'; x.font='bold 15px Arial'; x.fillText(t,M,y); y+=24; }
+    function line(lbl){ x.fillStyle='#444'; x.font='13px Arial'; x.fillText(lbl+':',M,y); x.strokeStyle='#cfd3da'; x.beginPath(); x.moveTo(M+230,y+3); x.lineTo(W-M,y+3); x.stroke(); y+=34; }
+    function two(a,b){ x.fillStyle='#444'; x.font='13px Arial'; var midX=M+(W-2*M)/2; x.fillText(a+':',M,y); x.strokeStyle='#cfd3da'; x.beginPath(); x.moveTo(M+130,y+3); x.lineTo(midX-20,y+3); x.stroke(); x.fillText(b+':',midX,y); x.beginPath(); x.moveTo(midX+130,y+3); x.lineTo(W-M,y+3); x.stroke(); y+=34; }
+    head('Personal'); two('Name','Date of birth'); two('Phone','Email'); two('Anniversary','Gender'); line('Address');
+    head('Family'); two('Father name','Father phone'); two('Mother name','Mother phone'); two('Spouse name','Spouse phone');
+    head('Bank'); two('Bank name','IFSC'); line('Account number');
+    head('Work'); two('Role','Reports to'); two('Duty time','Basic salary'); line('KRA');
+    head('Documents attached (tick)'); x.font='14px Arial';
+    [['Aadhaar card','PAN card'],['Driving licence','Light bill'],['Education documents','Photo']].forEach(function(p){ x.strokeStyle='#888'; x.strokeRect(M,y-13,16,16); x.fillStyle='#333'; x.fillText(p[0],M+26,y); var mid=M+(W-2*M)/2; x.strokeRect(mid,y-13,16,16); x.fillText(p[1],mid+26,y); y+=30; });
+    y+=20; x.strokeStyle='#bbb'; x.beginPath(); x.moveTo(M,y); x.lineTo(M+300,y); x.moveTo(W-M-300,y); x.lineTo(W-M,y); x.stroke();
+    x.fillStyle='#333'; x.font='13px Arial'; x.fillText('Employee signature', M, y+24); x.fillText('HR verified by', W-M-300, y+24);
+    x.fillStyle='#888'; x.font='italic 13px Arial'; x.textAlign='center'; x.fillText('Fill & attach documents · submit to HR · Nakoda Diagnostics And Research Center', W/2, H-40); x.textAlign='left';
+    c.toBlob(function(b){ var u=URL.createObjectURL(b); var a=document.createElement('a'); a.href=u; a.download='Employee-Form.png'; a.click(); setTimeout(function(){URL.revokeObjectURL(u);},2000); toast('Employee form saved'); });
+  }
+}
 function val(id){ var e=$(id); return e?e.value.trim():undefined; }
 function saveEmp(empId, manage){
   var data={ Phone:val('f_Phone'),Email:val('f_Email'),Gender:val('f_Gender'),DOB:val('f_DOB'),Address:val('f_Address'),EmergencyName:val('f_EmergencyName'),EmergencyPhone:val('f_EmergencyPhone') };
-  if(manage){ data.FullName=val('f_FullName'); data.Role=val('f_Role'); data.JoiningDate=val('f_JoiningDate'); data.ReportsTo=val('f_ReportsTo'); var bs=$('f_Branch'); if(bs) data.Branch=bs.value; }
+  if(manage){ data.FullName=val('f_FullName'); data.Role=val('f_Role'); data.JoiningDate=val('f_JoiningDate'); data.ReportsTo=val('f_ReportsTo'); var bs=$('f_Branch'); if(bs) data.Branch=bs.value;
+    ['FatherName','FatherPhone','MotherName','MotherPhone','SpouseName','SpousePhone','Anniversary','BankPrefix','IFSC','AccountNo','DutyStart','DutyEnd','BasicSalary','AttendanceMode','SundayType','PayType','PerKmRate','PerVisitRate','KRA'].forEach(function(f){ var v=val('f_'+f); if(v!==undefined) data[f]=v; });
+    var dc=window._empDocs||{}; data.AadhaarUrl=dc.Aadhaar||''; data.PanUrl=dc.Pan||''; data.DLUrl=dc.DL||''; data.LightBillUrl=dc.LightBill||''; data.EduDocsUrl=(dc.Edu||[]).join(','); }
   if(manage && !data.FullName){ toast('Full name is required.',true); return; }
   if(manage && !data.Role){ toast('Role is required.',true); return; }
   var b=$('saveEmpBtn'); b.disabled=true; b.innerHTML='<span class="loader"></span> Saving…';
