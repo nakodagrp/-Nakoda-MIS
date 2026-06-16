@@ -118,26 +118,29 @@
   }
 
   /* ---------- add / edit ---------- */
-  function timeOpts(sel){ var o=''; for(var m=START_MIN;m<=END_MIN;m+=STEP){ var v=p2(Math.floor(m/60))+':'+p2(m%60); o+='<option value="'+v+'"'+(v===sel?' selected':'')+'>'+fmtHour(m)+'</option>'; } return o; }
+  function p2h(m){ return p2(Math.floor(m/60))+':'+p2(m%60); }
+  function bookedRanges(date,excludeId){ return liveEntries().filter(function(x){ return x.date===date && String(x.entryId)!==String(excludeId||''); }).map(function(b){ var s=b.startTime?toMin(b.startTime):START_MIN; var en=b.endTime?toMin(b.endTime):s+STEP; return [s,en]; }); }
+  function slotFree(m,ranges){ for(var i=0;i<ranges.length;i++) if(m>=ranges[i][0]&&m<ranges[i][1]) return false; return true; }
+  function startOpts(date,excludeId,sel){ var r=bookedRanges(date,excludeId),o=''; for(var m=START_MIN;m<END_MIN;m+=STEP){ if(!slotFree(m,r)) continue; var v=p2h(m); o+='<option value="'+v+'"'+(v===sel?' selected':'')+'>'+fmtHour(m)+'</option>'; } return o; }
+  function endOpts(date,excludeId,startVal){ var r=bookedRanges(date,excludeId),o='',s=toMin(startVal),nb=END_MIN; r.forEach(function(rg){ if(rg[0]>=s&&rg[0]<nb) nb=rg[0]; }); for(var m=s+STEP;m<=nb;m+=STEP){ var v=p2h(m); o+='<option value="'+v+'">'+fmtHour(m)+'</option>'; } return o; }
   var ceCl=[];
   function parseCl(v){ try{ var a=Array.isArray(v)?v:JSON.parse(v||'[]'); return Array.isArray(a)?a:[]; }catch(_){ return []; } }
-  function ceClRows(){ return ceCl.length? ceCl.map(function(it,i){ return '<div class="ce-cl-row" data-cr="'+i+'"><input type="checkbox" data-cd="'+i+'"'+(it.done?' checked':'')+'><input class="ce-cl-text" data-ct="'+i+'" value="'+esc(it.text||'')+'" placeholder="Sub-step"><button type="button" class="ce-cl-rm" data-rm="'+i+'">✕</button></div>'; }).join('') : '<div class="muted" style="font-size:12px">No sub-steps yet.</div>'; }
+  function ceClRows(){ return ceCl.length? ceCl.map(function(it,i){ return '<div class="ce-cl-row" data-cr="'+i+'"><input type="checkbox" class="ce-cl-box" data-cd="'+i+'"'+(it.done?' checked':'')+'><input class="ce-cl-text" data-ct="'+i+'" value="'+esc(it.text||'')+'" placeholder="Sub-step"><button type="button" class="ce-cl-rm" data-rm="'+i+'">✕</button></div>'; }).join('') : '<div class="muted" style="font-size:12px">No sub-steps yet — tap “Add sub-step”.</div>'; }
   function syncCe(){ var box=document.getElementById('ceClist'); if(!box) return; ceCl=[].slice.call(box.querySelectorAll('.ce-cl-row')).map(function(row){ return { text:((row.querySelector('.ce-cl-text')||{}).value||'').trim(), done:!!(row.querySelector('[data-cd]')||{}).checked }; }); }
   function rerenderCe(){ var box=document.getElementById('ceClist'); if(box){ box.innerHTML=ceClRows(); wireCe(); } }
   function wireCe(){ var box=document.getElementById('ceClist'); if(!box) return; box.querySelectorAll('[data-rm]').forEach(function(b){ b.onclick=function(){ syncCe(); ceCl.splice(+b.getAttribute('data-rm'),1); rerenderCe(); }; }); }
-  function openEntry(e, dflt){
-    dflt=dflt||{}; var ed=!!e; e=e||{};
+  function openEntry(e, dflt, onDone){
+    dflt=dflt||{}; var ed=!!e; e=e||{}; var after=onDone||reload;
     var date=e.date||dflt.date||dstr(new Date());
     var st=e.startTime||dflt.start||'09:00';
-    var et=e.endTime||(function(){ var m=toMin(st)+30; return p2(Math.floor(m/60))+':'+p2(m%60); })();
     var done=String(e.status)==='done';
     ceCl=parseCl(e.checklist);
     var body=
       '<div class="grid2">'+
         '<div class="field full"><label>Title *</label><input id="ceTitle" value="'+esc(e.title||'')+'" placeholder="What is scheduled?"></div>'+
         '<div class="field full"><label>Date</label><input id="ceDate" type="date" value="'+esc(date)+'"></div>'+
-        '<div class="field"><label>Start time</label><select id="ceStart">'+timeOpts(st)+'</select></div>'+
-        '<div class="field"><label>End time</label><select id="ceEnd">'+timeOpts(et)+'</select></div>'+
+        '<div class="field"><label>Start time</label><select id="ceStart">'+startOpts(date,e.entryId,st)+'</select></div>'+
+        '<div class="field"><label>End time</label><select id="ceEnd">'+endOpts(date,e.entryId,st)+'</select></div>'+
         '<div class="field full"><label>Notes</label><textarea id="ceNotes" rows="2" placeholder="Optional">'+esc(e.notes||'')+'</textarea></div>'+
         '<div class="field full"><label>Checklist (sub-steps)</label><div id="ceClist">'+ceClRows()+'</div><button type="button" class="btn ghost sm" id="ceAddCl" style="margin-top:6px">+ Add sub-step</button></div>'+
         '<div class="field full" id="ceBusy"></div>'+
@@ -152,41 +155,112 @@
     foot+=(CAL.canManage?'<button class="btn" id="ceSave">'+(ed?'Save':'Add')+'</button>':'<span class="muted">View only</span>');
     openModal(ed?'Edit entry':'New entry', body, foot);
     if(!CAL.canManage){ ['ceTitle','ceDate','ceStart','ceEnd','ceNotes'].forEach(function(id){ var n=document.getElementById(id); if(n) n.disabled=true; }); return; }
+    function rebuildEnd(){ var d=document.getElementById('ceDate').value; document.getElementById('ceEnd').innerHTML=endOpts(d,e.entryId,document.getElementById('ceStart').value); }
+    function rebuildStart(){ var d=document.getElementById('ceDate').value, cur=document.getElementById('ceStart').value; var sEl=document.getElementById('ceStart'); sEl.innerHTML=startOpts(d,e.entryId,cur); if(!sEl.value && sEl.options.length) sEl.selectedIndex=0; rebuildEnd(); }
     function renderBusy(){
       var d=document.getElementById('ceDate').value;
       var busy=liveEntries().filter(function(x){ return x.date===d && String(x.entryId)!==String(e.entryId||''); }).sort(byStart);
       var box=document.getElementById('ceBusy'); if(!box) return;
       box.innerHTML = busy.length
-        ? '<label>Already booked this day</label><div class="ce-busy">'+busy.map(function(b){ return '<span>'+(b.startTime?fmtHour(toMin(b.startTime)):'')+(b.endTime?'–'+fmtHour(toMin(b.endTime)):'')+' · '+esc(b.title)+'</span>'; }).join('')+'</div>'
+        ? '<label>Already booked this day (these times are blocked)</label><div class="ce-busy">'+busy.map(function(b){ return '<span>'+(b.startTime?fmtHour(toMin(b.startTime)):'')+(b.endTime?'–'+fmtHour(toMin(b.endTime)):'')+' · '+esc(b.title)+'</span>'; }).join('')+'</div>'
         : '';
     }
     renderBusy(); wireCe();
     document.getElementById('ceAddCl').onclick=function(){ syncCe(); ceCl.push({text:'',done:false}); rerenderCe(); };
-    document.getElementById('ceDate').onchange=renderBusy;
-    document.getElementById('ceStart').onchange=function(){ var es=document.getElementById('ceEnd'); if(toMin(es.value)<=toMin(this.value)){ var m=toMin(this.value)+30; es.value=p2(Math.floor(m/60))+':'+p2(m%60); } };
+    document.getElementById('ceDate').onchange=function(){ renderBusy(); rebuildStart(); };
+    document.getElementById('ceStart').onchange=rebuildEnd;
     document.getElementById('ceSave').onclick=function(){
       var t=document.getElementById('ceTitle').value.trim(); if(!t){ document.getElementById('ceMsg').innerHTML='<div class="msg error">Title is required.</div>'; return; }
       syncCe(); var cl=ceCl.filter(function(x){return x.text;});
       var data={ ownerEmpId:CAL.owner, date:document.getElementById('ceDate').value, startTime:document.getElementById('ceStart').value, endTime:document.getElementById('ceEnd').value, title:t, notes:document.getElementById('ceNotes').value.trim(), checklist:JSON.stringify(cl) };
       this.disabled=true; this.textContent='Saving…';
       var p = ed ? API.updateCalEntry(e.entryId,data,CAL.owner) : API.createCalEntry(data);
-      p.then(function(r){ if(r&&(r.ok||r.offline)){ closeModal(); toast(r.offline?'Saved offline — will sync':'Saved'); reload(); } else { document.getElementById('ceMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; } });
+      p.then(function(r){ if(r&&(r.ok||r.offline)){ closeModal(); toast(r.offline?'Saved offline — will sync':'Saved'); after(); } else { document.getElementById('ceMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; } });
     };
     if(ed && CAL.canManage){
-      document.getElementById('ceToggle').onclick=function(){ API.updateCalEntry(e.entryId,{status:done?'pending':'done'},CAL.owner).then(function(r){ if(r&&(r.ok||r.offline)){ closeModal(); reload(); } }); };
-      document.getElementById('ceDel').onclick=function(){ if(!confirm('Delete this entry?')) return; API.updateCalEntry(e.entryId,{status:'deleted'},CAL.owner).then(function(r){ if(r&&(r.ok||r.offline)){ closeModal(); toast('Deleted'); reload(); } }); };
+      document.getElementById('ceToggle').onclick=function(){ syncCe(); API.updateCalEntry(e.entryId,{status:done?'pending':'done',checklist:JSON.stringify(ceCl.filter(function(x){return x.text;}))},CAL.owner).then(function(r){ if(r&&(r.ok||r.offline)){ closeModal(); toast(done?'Reopened':'Completed'); after(); } }); };
+      document.getElementById('ceDel').onclick=function(){ if(!confirm('Delete this entry?')) return; API.updateCalEntry(e.entryId,{status:'deleted'},CAL.owner).then(function(r){ if(r&&(r.ok||r.offline)){ closeModal(); toast('Deleted'); after(); } }); };
     }
   }
+  window.openCalendarEntryById=function(id, onDone){
+    if(!CAL.owner){ CAL.owner=S.user.EmpID; CAL.ownerName=(S.user.FullName||'Me'); CAL.ownerRole=(S.user.Role||''); CAL.canManage=true; }
+    function find(list){ return (list||[]).filter(function(x){return String(x.entryId)===String(id) && String(x.status)!=='deleted';})[0]; }
+    API.cachedCalendar(CAL.owner).then(function(list){ CAL.entries=list||CAL.entries||[]; var e=find(list);
+      if(e){ openEntry(e,null,onDone); }
+      else API.listCalendar(CAL.owner).then(function(r){ if(r&&r.ok){ CAL.entries=r.entries||[]; var e2=find(r.entries); if(e2) openEntry(e2,null,onDone); else toast('Entry not found',true); } });
+    });
+  };
 
-  /* ---------- export PNG — A4 portrait Daily Scheduler ---------- */
-  function exportPng(){
-    var logo=new Image();
-    logo.onload=function(){ renderSheet(logo); };
-    logo.onerror=function(){ renderSheet(null); };
-    logo.src='icons/login-logo.png';
+  /* ---------- export PNG — choose Day or Week + date ---------- */
+  function exportPng(){ openExportModal(); }
+  function openExportModal(){
+    openModal('Download scheduler',
+      '<div class="grid2">'+
+        '<div class="field full"><label>What to download</label><div class="seg" id="exType"><div data-x="day" class="on">Day schedule</div><div data-x="week">Week review</div></div></div>'+
+        '<div class="field full"><label>Date</label><input id="exDate" class="in" type="date" value="'+dstr(CAL.anchor)+'"></div>'+
+        '<div class="field full" style="font-size:11.5px;color:#888">Day = that date’s Daily Scheduler. Week = Mon–Sun review with every entry marked done ✓ or pending ○, plus completed &amp; pending lists for the week.</div>'+
+      '</div>',
+      '<button class="btn" id="exGo">⤓ Download PNG</button>');
+    document.querySelectorAll('#exType div').forEach(function(z){ z.onclick=function(){ document.querySelectorAll('#exType div').forEach(function(y){y.classList.remove('on');}); z.classList.add('on'); }; });
+    document.getElementById('exGo').onclick=function(){
+      var type=document.querySelector('#exType .on').getAttribute('data-x');
+      var dv=document.getElementById('exDate').value, dObj=dv?parseD(dv):CAL.anchor;
+      closeModal();
+      var logo=new Image(); logo.onload=function(){ run(logo); }; logo.onerror=function(){ run(null); }; logo.src='icons/login-logo.png';
+      function run(lg){ if(type==='week') renderWeekSheet(lg,dObj); else renderSheet(lg,dObj); }
+    };
   }
-  function renderSheet(logo){
-    var ds=dstr(CAL.anchor);
+  function pngHeader(x,logo,W,M,title,sub){
+    x.fillStyle='#ffffff'; x.fillRect(0,0,W,x.canvas.height);
+    x.fillStyle='#DA1017'; x.fillRect(0,0,W,9);
+    if(logo){ var lh=64, lw=Math.min(330, logo.width*(lh/logo.height)); x.drawImage(logo, M, 34, lw, lh); }
+    else { x.fillStyle='#DA1017'; x.font='bold 30px Arial'; x.fillText('NAKODA', M, 76); }
+    x.textAlign='right'; x.fillStyle='#1f1f1f'; x.font='bold 20px Arial'; x.fillText(sub, W-M, 56);
+    x.fillStyle='#777'; x.font='15px Arial'; x.fillText(CAL.ownerName+(CAL.ownerRole?(' · '+CAL.ownerRole):''), W-M, 82); x.textAlign='left';
+    x.fillStyle='#1f1f1f'; x.font='bold 34px Arial'; x.fillText(title, M, 150);
+    x.strokeStyle='#e2e5ea'; x.lineWidth=1; x.beginPath(); x.moveTo(M,176); x.lineTo(W-M,176); x.stroke();
+  }
+  function renderWeekSheet(logo, dObj){
+    var ws=startOfWeek(dObj), wend=addDays(ws,6), wsS=dstr(ws), weS=dstr(wend);
+    var inWk=function(d){ return d && d>=wsS && d<=weS; };
+    var entries=liveEntries(), tasks=(CAL.tasks||[]).filter(function(t){return String(t.status)!=='deleted';});
+    var days=[]; for(var i=0;i<7;i++) days.push(addDays(ws,i));
+    var dayEv=days.map(function(dd){ var ds=dstr(dd); return entries.filter(function(e){return e.date===ds;}).sort(byStart); });
+    var completed=[], pending=[];
+    entries.forEach(function(e){ if(inWk(e.date)) (String(e.status)==='done'?completed:pending).push((e.startTime?fmtHour(toMin(e.startTime))+' ':'')+e.title); });
+    tasks.forEach(function(t){ if(inWk(t.dueDate)) (String(t.status)==='done'?completed:pending).push(t.title+(t.dueTime?(' ('+t.dueTime+')'):'')); });
+    var W=1240,M=44,lineH=30,dayHdrH=36, top=200;
+    var bodyH=0; dayEv.forEach(function(de){ bodyH += dayHdrH + Math.max(de.length,1)*lineH; });
+    var sumTop=top+bodyH+34, sumRows=Math.max(completed.length,pending.length,1);
+    var H=Math.max(1500, sumTop+50+sumRows*26+70);
+    var c=document.createElement('canvas'); c.width=W; c.height=H; var x=c.getContext('2d');
+    pngHeader(x,logo,W,M,'WEEKLY REVIEW', DOW[ws.getDay()]+' '+ws.getDate()+' '+MON[ws.getMonth()]+' – '+DOW[wend.getDay()]+' '+wend.getDate()+' '+MON[wend.getMonth()]+' '+wend.getFullYear());
+    var y=top;
+    days.forEach(function(dd,di){
+      x.fillStyle='#f3f4f7'; x.fillRect(M,y,W-2*M,dayHdrH);
+      x.fillStyle='#444'; x.font='bold 15px Arial'; x.fillText(DOW[dd.getDay()]+' · '+dd.getDate()+' '+MON[dd.getMonth()], M+10, y+24);
+      y+=dayHdrH;
+      var de=dayEv[di];
+      if(!de.length){ x.fillStyle='#bbb'; x.font='14px Arial'; x.fillText('—', M+16, y+20); y+=lineH; }
+      de.forEach(function(e){ var dn=String(e.status)==='done';
+        x.fillStyle=dn?'#1a7f37':'#c47f00'; x.font='bold 15px Arial'; x.fillText(dn?'✓':'○', M+14, y+21);
+        x.fillStyle='#333'; x.font='14px Arial';
+        x.fillText(clip(x,(e.startTime?fmtHour(toMin(e.startTime))+(e.endTime?'–'+fmtHour(toMin(e.endTime)):'')+'  ':'')+e.title, W-2*M-50), M+40, y+21);
+        x.strokeStyle='#f0f1f4'; x.beginPath(); x.moveTo(M+10,y+lineH-2); x.lineTo(W-M-10,y+lineH-2); x.stroke(); y+=lineH; });
+    });
+    // summaries (two columns)
+    var colW=(W-2*M-20)/2, lx=M, rx=M+colW+20;
+    x.fillStyle='#EAF6EE'; x.fillRect(lx,sumTop,colW,40); x.fillStyle='#1a7f37'; x.font='bold 15px Arial'; x.fillText('Completed this week ('+completed.length+')', lx+12, sumTop+26);
+    x.fillStyle='#ECEAFB'; x.fillRect(rx,sumTop,colW,40); x.fillStyle='#5046b8'; x.font='bold 15px Arial'; x.fillText('Pending this week ('+pending.length+')', rx+12, sumTop+26);
+    x.font='14px Arial';
+    completed.forEach(function(s,k){ x.fillStyle='#333'; x.fillText('✓ '+clip(x,s,colW-30), lx+10, sumTop+40+24+k*26); });
+    pending.forEach(function(s,k){ x.fillStyle='#333'; x.fillText('○ '+clip(x,s,colW-30), rx+10, sumTop+40+24+k*26); });
+    x.fillStyle='#888'; x.font='italic 15px Arial'; x.textAlign='center'; x.fillText(footerLine(), W/2, H-26); x.textAlign='left';
+    c.toBlob(function(b){ var u=URL.createObjectURL(b); var a=document.createElement('a'); a.href=u; a.download='Weekly-Review-'+wsS+'.png'; a.click(); setTimeout(function(){URL.revokeObjectURL(u);},2000); toast('Weekly Review (A4) saved'); });
+  }
+  function renderSheet(logo, dObj){
+    dObj=dObj||CAL.anchor;
+    var ds=dstr(dObj);
     var evs=liveEntries().filter(function(e){return e.date===ds;}).sort(byStart);
     var pend=pendingTasks();
     // A4 portrait @ ~150dpi
@@ -197,20 +271,8 @@
     var needed=taskTop+taskHeadH+Math.max(pend.length,4)*40+40;
     var H=Math.max(1754, needed);
     var c=document.createElement('canvas'); c.width=W; c.height=H; var x=c.getContext('2d');
-    x.fillStyle='#ffffff'; x.fillRect(0,0,W,H);
-    // top red bar + logo
-    x.fillStyle='#DA1017'; x.fillRect(0,0,W,9);
-    if(logo){ var lh=64, lw=Math.min(330, logo.width*(lh/logo.height)); x.drawImage(logo, M, 34, lw, lh); }
-    else { x.fillStyle='#DA1017'; x.font='bold 30px Arial'; x.fillText('NAKODA', M, 76); }
-    // right: date + owner
-    x.textAlign='right';
-    x.fillStyle='#1f1f1f'; x.font='bold 20px Arial';
-    x.fillText(DOW[CAL.anchor.getDay()]+', '+CAL.anchor.getDate()+' '+MON[CAL.anchor.getMonth()]+' '+CAL.anchor.getFullYear(), W-M, 56);
-    x.fillStyle='#777'; x.font='15px Arial'; x.fillText(CAL.ownerName+(CAL.ownerRole?(' · '+CAL.ownerRole):''), W-M, 82); x.textAlign='left';
-    // title
-    x.fillStyle='#1f1f1f'; x.font='bold 34px Arial'; x.fillText('DAILY SCHEDULER', M, 150);
-    x.fillStyle='#555'; x.font='16px Arial'; x.fillText('Prepared for: '+CAL.ownerName+(CAL.ownerRole?('  ·  '+CAL.ownerRole):''), M, 176);
-    x.strokeStyle='#e2e5ea'; x.lineWidth=1; x.beginPath(); x.moveTo(M,headH-6); x.lineTo(W-M,headH-6); x.stroke();
+    pngHeader(x,logo,W,M,'DAILY SCHEDULER', DOW[dObj.getDay()]+', '+dObj.getDate()+' '+MON[dObj.getMonth()]+' '+dObj.getFullYear());
+    x.fillStyle='#555'; x.font='16px Arial'; x.fillText('Prepared for: '+CAL.ownerName+(CAL.ownerRole?('  ·  '+CAL.ownerRole):''), M+360, 150);
     // schedule table columns
     var xTime=M, wTime=150, wDone=130, xDone=W-M-wDone, xSch=xTime+wTime, wSch=xDone-xSch;
     var top=headH;

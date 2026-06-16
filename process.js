@@ -1,0 +1,188 @@
+/* Nakoda MIS — Process Engine (CRM). Pipelines run on Processes/Stages/Edges/Instances/Steps. */
+(function(){
+  function optList(opts){ return String(opts||'').split(',').filter(Boolean).map(function(o){ return '<option>'+esc(o.trim())+'</option>'; }).join(''); }
+  function empOpts(emps,sel){ return (emps||[]).filter(function(e){ return String(e.Status)==='Active'; }).map(function(e){ return '<option value="'+esc(e.EmpID)+'"'+(String(e.EmpID)===String(sel||'')?' selected':'')+'>'+esc(e.FullName)+' ('+esc(e.Role)+')</option>'; }).join(''); }
+  function inputFor(f,pfx){ var id=pfx+f.fieldId;
+    if(f.fieldType==='dropdown') return '<select id="'+id+'" class="in"><option value=""></option>'+optList(f.options)+'</select>';
+    if(f.fieldType==='number') return '<input id="'+id+'" class="in" type="number">';
+    if(f.fieldType==='date') return '<input id="'+id+'" class="in" type="date">';
+    if(f.fieldType==='checklist') return '<div id="'+id+'" class="proc-ck">'+String(f.options||'').split(',').filter(Boolean).map(function(o){ return '<label><input type="checkbox" value="'+esc(o.trim())+'"> '+esc(o.trim())+'</label>'; }).join('')+'</div>';
+    return '<input id="'+id+'" class="in">';
+  }
+  function fieldsHtml(fields,pfx){ return (fields||[]).map(function(f){ return '<div class="field full"><label>'+esc(f.label)+(f.required?' *':'')+'</label>'+inputFor(f,pfx)+'</div>'; }).join(''); }
+  function collectFields(fields,pfx){ var o={}; (fields||[]).forEach(function(f){ var el=document.getElementById(pfx+f.fieldId); if(!el) return; if(f.fieldType==='checklist'){ o[f.label]=[].slice.call(el.querySelectorAll('input:checked')).map(function(c){return c.value;}); } else { o[f.label]=el.value; } }); return o; }
+
+  /* ---------- CRM home ---------- */
+  function renderCRM(){
+    var v=document.getElementById('page-crm');
+    v.innerHTML='<div class="page-head"><h1>CRM</h1></div>'+
+      '<div style="color:#888;font-size:13px;margin-bottom:12px">Every relationship is a process. Tap a pipeline to work it. The PC monitors every stage.</div>'+
+      '<div id="crmList"></div>';
+    API.listEmployees();
+    API.cachedProcesses().then(function(p){ if(p&&p.length) paintProcs(p); else document.getElementById('crmList').innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>'; });
+    API.listProcesses().then(function(r){ if(r.ok) paintProcs(r.processes); else document.getElementById('crmList').innerHTML='<div class="empty">'+esc(r.error||'')+'</div>'; });
+  }
+  function paintProcs(list){
+    var box=document.getElementById('crmList'); if(!box) return;
+    if(!list.length){ box.innerHTML='<div class="empty">No pipelines available.</div>'; return; }
+    box.innerHTML=list.map(function(p){ return '<div class="crm-tile" data-pid="'+esc(p.processId)+'"><div class="crm-ic">📁</div>'+
+      '<div class="crm-mid"><b>'+esc(p.name)+'</b><div class="crm-sub">Owner: '+esc(p.ownerRole)+'</div>'+
+      '<div class="crm-kpi">Open <b>'+p.open+'</b> · Due today <b>'+p.dueToday+'</b> · Overdue <b style="color:#DA1017">'+p.overdue+'</b></div></div>'+
+      '<span class="crm-go">›</span></div>'; }).join('');
+    box.querySelectorAll('.crm-tile').forEach(function(el){ el.onclick=function(){ openPipeline(el.getAttribute('data-pid')); }; });
+  }
+
+  /* ---------- pipeline board ---------- */
+  function openPipeline(pid){
+    var v=document.getElementById('page-crm'); var DEF=null;
+    v.innerHTML='<div class="page-head"><button class="btn ghost sm" id="crmBack">‹ CRM</button> <h1 style="font-size:18px;margin:0 0 0 8px" id="crmTtl">Pipeline</h1><div class="spacer"></div>'+
+      '<button class="btn ghost sm" id="crmMon">📋 Monitor</button> <button class="btn" id="crmAdd" style="display:none">+ Add</button></div>'+
+      '<div id="crmBoard"></div>';
+    document.getElementById('crmBack').onclick=renderCRM;
+    document.getElementById('crmMon').onclick=function(){ openMonitor(pid); };
+    document.getElementById('crmAdd').onclick=function(){ if(DEF) openStartForm(pid,DEF,load); };
+    function paintBoard(r){
+      var stages=(r.stages||[]).filter(function(s){ return s.nodeType!=='start'; });
+      var byStage={}; (r.instances||[]).forEach(function(i){ (byStage[i.currentStageId]=byStage[i.currentStageId]||[]).push(i); });
+      document.getElementById('crmBoard').innerHTML='<div class="crm-cols">'+stages.map(function(s){
+        var leads=byStage[s.stageId]||[];
+        return '<div class="crm-col"><h4>'+esc(s.name)+' <i>'+leads.length+'</i></h4>'+
+          leads.map(function(i){ return '<div class="crm-lead'+(i.late?' late':(i.dueToday?' due':''))+'" data-iid="'+esc(i.instanceId)+'"><b>'+esc(i.leadName)+'</b><div class="cl-m">'+esc(i.assigneeName||'')+(i.dueDate?(' · '+(i.late?'overdue':i.dueDate)):'')+'</div></div>'; }).join('')+
+          '</div>';
+      }).join('')+'</div>';
+      document.querySelectorAll('.crm-lead').forEach(function(el){ el.onclick=function(){ openInstance(el.getAttribute('data-iid'), load); }; });
+    }
+    function load(){
+      API.cachedInstances(pid).then(function(a){ if(a) paintBoard(a); });
+      API.getProcess(pid).then(function(d){ if(d&&d.ok){ DEF=d; document.getElementById('crmTtl').textContent=d.process.name; document.getElementById('crmAdd').style.display=d.canStart?'':'none'; } });
+      API.listInstances(pid).then(function(r){ if(r&&r.ok) paintBoard(r); });
+    }
+    load();
+  }
+
+  /* ---------- start a lead ---------- */
+  function openStartForm(pid,DEF,after){
+    var start=(DEF.stages||[]).filter(function(s){return s.nodeType==='start';})[0]||DEF.stages[0];
+    API.cachedEmployees().then(function(emps){ emps=emps||[];
+      var brs=(S.meta&&S.meta.branches)||[];
+      var body='<div class="grid2">'+
+        '<div class="field"><label>Name *</label><input id="psName" class="in" placeholder="e.g. Dr. Shah"></div>'+
+        '<div class="field"><label>Mobile</label><input id="psMobile" class="in"></div>'+
+        '<div class="field"><label>Serving branch</label><select id="psBranch" class="in">'+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'"'+(String(b.BranchID)===String(S.user&&S.user.Branch)?' selected':'')+'>'+esc(b.BranchName)+'</option>';}).join('')+'</select></div>'+
+        '<div class="field"><label>Assign first task to</label><select id="psAssignee" class="in">'+empOpts(emps,S.user&&S.user.EmpID)+'</select></div>'+
+        fieldsHtml(start.fields,'ps_')+
+        '<div class="field"><label>First task date</label><input id="psDate" class="in" type="date"></div>'+
+        '</div><div id="psMsg"></div>';
+      openModal('Add to '+DEF.process.name, body, '<button class="btn" id="psSave">Save & start</button>');
+      document.getElementById('psSave').onclick=function(){
+        var name=document.getElementById('psName').value.trim(); if(!name){ document.getElementById('psMsg').innerHTML='<div class="msg error">Name is required.</div>'; return; }
+        var data={ leadName:name, leadMobile:document.getElementById('psMobile').value.trim(), branchId:document.getElementById('psBranch').value,
+          assigneeEmpId:document.getElementById('psAssignee').value, dataJson:collectFields(start.fields,'ps_'), nextDate:document.getElementById('psDate').value };
+        this.disabled=true; this.textContent='Saving…';
+        API.startInstance(pid,data).then(function(r){ if(r&&(r.ok||r.offline)){ closeModal(); toast(r.offline?'Saved offline — will sync':'Added to pipeline'); if(after) after(); } else { document.getElementById('psMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; } });
+      };
+    });
+  }
+
+  /* ---------- work / advance a lead ---------- */
+  function openInstance(iid, after){
+    API.getInstance(iid).then(function(r){ if(!r||!r.ok){ toast((r&&r.error)||'Could not open',true); return; }
+      API.cachedEmployees().then(function(emps){ emps=emps||[];
+        var st=r.stage||{}, acts=String(st.activityOptions||'').split(',').filter(Boolean);
+        var moveOpts=(r.edges||[]).map(function(e){ return '<option value="'+esc(e.toStageId)+'">→ '+esc(e.toName)+(e.label?(' ('+esc(e.label)+')'):'')+'</option>'; }).join('');
+        moveOpts+='<option value="STAY">Stay — '+esc(st.name||'')+' (revisit)</option>';
+        if(st.allowClose){ moveOpts+='<option value="CLOSE_WON">✓ Close — Won</option><option value="CLOSE_LOST">✕ Close — Lost</option>'; }
+        var mouBtn=(String(r.instance.processId)==='P_DOCTOR')?'<button class="btn ghost sm" id="avMou" style="margin-bottom:8px">⤓ Download MOU</button>':'';
+        var body='<div style="font-size:12.5px;color:#666;margin-bottom:8px"><b>'+esc(r.instance.leadName)+'</b>'+(r.instance.leadMobile?(' · '+esc(r.instance.leadMobile)):'')+' · stage: '+esc(st.name||'')+'</div>'+mouBtn+
+          '<div class="grid2">'+
+          (acts.length?'<div class="field full"><label>Activity</label><select id="avAct" class="in">'+acts.map(function(a){return '<option>'+esc(a)+'</option>';}).join('')+'</select></div>':'')+
+          fieldsHtml(r.fields,'av_')+
+          '<div class="field full"><label>Move to *</label><select id="avMove" class="in">'+moveOpts+'</select></div>'+
+          '<div class="field" id="avAssWrap"><label>Assign next to</label><select id="avAssignee" class="in">'+empOpts(emps,r.instance.assigneeEmpId)+'</select></div>'+
+          '<div class="field" id="avDateWrap"><label>Next date</label><input id="avDate" class="in" type="date"></div>'+
+          '<div class="field full" id="avCloseWrap" style="display:none"><label>Close reason</label><input id="avReason" class="in"></div>'+
+          '</div>'+timelineHtml(r.steps)+'<div id="avMsg"></div>';
+        openModal(st.name||'Work lead', body, '<button class="btn" id="avSave">Submit & advance</button>');
+        function onMove(){ var v=document.getElementById('avMove').value, close=(v==='CLOSE_WON'||v==='CLOSE_LOST');
+          document.getElementById('avCloseWrap').style.display=close?'':'none';
+          document.getElementById('avAssWrap').style.display=close?'none':'';
+          document.getElementById('avDateWrap').style.display=close?'none':''; }
+        document.getElementById('avMove').onchange=onMove; onMove();
+        var mb=document.getElementById('avMou'); if(mb) mb.onclick=function(){ buildMou(r); };
+        document.getElementById('avSave').onclick=function(){
+          var data={ activityType:(document.getElementById('avAct')||{}).value||'', formData:collectFields(r.fields,'av_'),
+            nextStageId:document.getElementById('avMove').value, nextAssigneeEmpId:(document.getElementById('avAssignee')||{}).value||'',
+            nextDate:(document.getElementById('avDate')||{}).value||'', closeReason:(document.getElementById('avReason')||{}).value||'' };
+          this.disabled=true; this.textContent='Saving…';
+          API.advanceStage(iid,data).then(function(res){ if(res&&(res.ok||res.offline)){ closeModal(); toast(res.offline?'Saved offline — will sync':'Updated'); if(after) after(); } else { document.getElementById('avMsg').innerHTML='<div class="msg error">'+esc((res&&res.error)||'Failed')+'</div>'; } });
+        };
+      });
+    });
+  }
+  function timelineHtml(steps){ if(!steps||!steps.length) return ''; return '<div class="proc-tl"><div class="tl-h">History</div>'+steps.slice().reverse().map(function(s){ return '<div class="tl-i"><b>'+esc(s.stageName)+'</b>'+(s.activityType?(' · '+esc(s.activityType)):'')+'<span>'+esc(String(s.actualAt||s.createdAt||'').slice(0,10))+' · '+esc(s.byName||'')+'</span></div>'; }).join('')+'</div>'; }
+
+  /* ---------- PC monitor grid ---------- */
+  function openMonitor(pid){
+    openModal('Process Flow Monitor','<div id="pmBody"><div class="center-load"><span class="loader dark"></span> Loading…</div></div>','');
+    API.processMonitor(pid).then(function(r){ var box=document.getElementById('pmBody'); if(!box) return;
+      if(!r||!r.ok){ box.innerHTML='<div class="empty">'+esc((r&&r.error)||'Could not load')+'</div>'; return; }
+      var stages=r.stages||[], rows=r.rows||[];
+      if(!rows.length){ box.innerHTML='<div class="pm-banner">Owner: '+esc(r.ownerRole)+' — '+esc(r.processName)+'</div><div class="empty">No live leads.</div>'; return; }
+      var head='<tr><th class="pm-lead">Lead</th>'+stages.map(function(s){return '<th colspan="2" class="pm-grp">'+esc(s.name)+'</th>';}).join('')+'</tr>'+
+        '<tr><th class="pm-lead"></th>'+stages.map(function(){return '<th>Plan</th><th>Actual</th>';}).join('')+'</tr>';
+      var body=rows.map(function(row){
+        var late=row.cells.some(function(c){return c.state==='late';});
+        return '<tr'+(late?' class="pm-late"':'')+'><td class="pm-lead">'+esc(row.leadName)+'<div class="pm-as">'+esc(row.assigneeName||'')+'</div></td>'+
+          row.cells.map(function(c){ var a = c.state==='done'?('<span class="ok">✓ '+esc(c.actual||'')+'</span>') : c.state==='late'?'<span class="red">late</span>' : c.state==='due'?'<span class="amber">due</span>' : (c.state==='pending'?'<span style="color:#bbb">…</span>':'—');
+            return '<td>'+esc(c.planned||'')+'</td><td>'+a+'</td>'; }).join('')+'</tr>';
+      }).join('');
+      box.innerHTML='<div class="pm-banner">Owner: '+esc(r.ownerRole)+' — '+esc(r.processName)+'</div><div class="pm-wrap"><table class="pm-grid">'+head+body+'</table></div>';
+    });
+  }
+
+  /* ---------- Doctor MOU (A4 PNG) ---------- */
+  function stepVal_(steps,label){ for(var i=(steps||[]).length-1;i>=0;i--){ try{ var fd=JSON.parse(steps[i].formDataJson||'{}'); if(fd[label]) return fd[label]; }catch(e){} } return ''; }
+  function wrap_(x,text,maxW){ var words=String(text||'').split(' '),lines=[],line=''; words.forEach(function(w){ var t=line?line+' '+w:w; if(x.measureText(t).width>maxW && line){ lines.push(line); line=w; } else line=t; }); if(line) lines.push(line); return lines; }
+  function buildMou(r){
+    var logo=new Image(); logo.onload=function(){ draw(logo); }; logo.onerror=function(){ draw(null); }; logo.src='icons/login-logo.png';
+    function draw(logo){
+      var inst=r.instance, dj={}; try{ dj=JSON.parse(inst.dataJson||'{}'); }catch(e){}
+      var spec=dj['Specialty']||'', clinic=dj['Clinic / Hospital']||'', area=dj['Area / Locality']||'';
+      var terms=stepVal_(r.steps,'Commission / terms')||'As mutually agreed between the parties.';
+      var code=stepVal_(r.steps,'Referral code')||'—';
+      var today=new Date(), ds=today.getDate()+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][today.getMonth()]+' '+today.getFullYear();
+      var W=1240,H=1754,M=70; var c=document.createElement('canvas'); c.width=W; c.height=H; var x=c.getContext('2d');
+      x.fillStyle='#fff'; x.fillRect(0,0,W,H);
+      x.fillStyle='#DA1017'; x.fillRect(0,0,W,10);
+      if(logo){ var lh=70, lw=Math.min(360, logo.width*(lh/logo.height)); x.drawImage(logo,M,40,lw,lh); }
+      else { x.fillStyle='#DA1017'; x.font='bold 32px Arial'; x.fillText('NAKODA',M,86); }
+      x.textAlign='right'; x.fillStyle='#888'; x.font='13px Arial'; x.fillText('Date: '+ds, W-M, 60); x.textAlign='left';
+      x.fillStyle='#1f1f1f'; x.font='bold 30px Arial'; x.textAlign='center'; x.fillText('MEMORANDUM OF UNDERSTANDING', W/2, 165); x.textAlign='left';
+      x.strokeStyle='#e2e5ea'; x.beginPath(); x.moveTo(M,185); x.lineTo(W-M,185); x.stroke();
+      var y=230; x.font='15px Arial'; x.fillStyle='#222';
+      function para(t,gap){ wrap_(x,t,W-2*M).forEach(function(l){ x.fillText(l,M,y); y+=24; }); y+=(gap||10); }
+      function head(t){ x.font='bold 16px Arial'; x.fillStyle='#DA1017'; x.fillText(t,M,y); y+=26; x.font='15px Arial'; x.fillStyle='#222'; }
+      para('This Memorandum of Understanding ("MOU") is entered into between Nakoda Diagnostics And Research Center ("the Center") and the referring doctor named below ("the Doctor"), to set out the understanding for patient referrals for diagnostic services.');
+      head('1. Doctor details');
+      para('Name: Dr. '+inst.leadName+(spec?('  ·  Specialty: '+spec):''));
+      para((clinic?('Clinic / Hospital: '+clinic+'    '):'')+(area?('Area: '+area):'')+(inst.leadMobile?('    Mobile: '+inst.leadMobile):''));
+      para('Referral code: '+code);
+      head('2. Commercial arrangement'); para(terms);
+      head('3. Terms & conditions');
+      ['The Doctor may refer patients to the Center for diagnostic and pathology services.',
+       'The Center shall provide accurate and timely reports, and home sample collection where applicable.',
+       'Any referral benefit/commercial arrangement shall be as stated in clause 2 and settled monthly against valid records.',
+       'Both parties shall maintain patient confidentiality and comply with all applicable laws and regulations.',
+       'No arrangement under this MOU shall compromise clinical judgement or the best interest of the patient.',
+       'This MOU is non-exclusive and may be terminated by either party with 30 days written notice.'
+      ].forEach(function(t,i){ wrap_(x,(i+1)+'. '+t,W-2*M-10).forEach(function(l){ x.fillText(l,M+10,y); y+=24; }); y+=4; });
+      y=H-170; x.strokeStyle='#bbb'; x.beginPath(); x.moveTo(M,y); x.lineTo(M+340,y); x.moveTo(W-M-340,y); x.lineTo(W-M,y); x.stroke();
+      x.fillStyle='#333'; x.font='14px Arial'; x.fillText('For Nakoda Diagnostics And Research Center', M, y+26); x.fillText('Dr. '+inst.leadName+' (Doctor)', W-M-340, y+26);
+      x.fillStyle='#888'; x.font='italic 14px Arial'; x.textAlign='center'; x.fillText('Computer-generated MOU draft — sign physically to execute.', W/2, H-50); x.textAlign='left';
+      c.toBlob(function(b){ var u=URL.createObjectURL(b); var a=document.createElement('a'); a.href=u; a.download='MOU-'+String(inst.leadName).replace(/\s+/g,'_')+'.png'; a.click(); setTimeout(function(){URL.revokeObjectURL(u);},2000); toast('MOU saved'); });
+    }
+  }
+
+  window.renderCRM=renderCRM;
+  window.openProcessInstance=openInstance;
+})();

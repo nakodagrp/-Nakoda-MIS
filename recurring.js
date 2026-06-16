@@ -46,7 +46,7 @@
 
   /* ---------- form ---------- */
   var rcl=[];
-  function clRows(){ return rcl.length?rcl.map(function(it,i){ return '<div class="ce-cl-row" data-cr="'+i+'"><input type="checkbox" data-cd="'+i+'"'+(it.done?' checked':'')+' style="visibility:hidden"><input class="ce-cl-text in" data-ct="'+i+'" value="'+esc(it.text||'')+'" placeholder="Sub-step"><button type="button" class="ce-cl-rm" data-rm="'+i+'">✕</button></div>'; }).join(''):'<div class="muted" style="font-size:12px">No sub-steps.</div>'; }
+  function clRows(){ return rcl.length?rcl.map(function(it,i){ return '<div class="ce-cl-row" data-cr="'+i+'"><input type="checkbox" class="ce-cl-box" data-cd="'+i+'"'+(it.done?' checked':'')+' style="display:none"><input class="ce-cl-text in" data-ct="'+i+'" value="'+esc(it.text||'')+'" placeholder="Sub-step"><button type="button" class="ce-cl-rm" data-rm="'+i+'">✕</button></div>'; }).join(''):'<div class="muted" style="font-size:12px">No sub-steps.</div>'; }
   function syncCl(){ var b=document.getElementById('rcClist'); if(!b) return; rcl=[].slice.call(b.querySelectorAll('.ce-cl-row')).map(function(row){ return {text:((row.querySelector('.ce-cl-text')||{}).value||'').trim(),done:false}; }); }
   function reCl(){ var b=document.getElementById('rcClist'); if(b){ b.innerHTML=clRows(); wireCl(); } }
   function wireCl(){ var b=document.getElementById('rcClist'); if(!b) return; b.querySelectorAll('[data-rm]').forEach(function(x){ x.onclick=function(){ syncCl(); rcl.splice(+x.getAttribute('data-rm'),1); reCl(); }; }); }

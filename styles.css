@@ -198,9 +198,9 @@ body.modal-open #mobileBottomNav{display:none!important}
 .ce-busy{display:flex;flex-direction:column;gap:4px}
 .ce-busy span{font-size:12px;color:#5046b8;background:#f3f1fc;border-radius:7px;padding:5px 9px}
 .ce-cl-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
-.ce-cl-row input[type=checkbox]{transform:scale(1.25);flex:none}
-.ce-cl-text{flex:1}
-.ce-cl-rm{border:1px solid var(--line);background:#fff;border-radius:8px;width:34px;height:34px;color:#999;flex:none}
+.ce-cl-box{width:22px!important;height:22px;flex:none;margin:0!important;padding:0!important}
+.ce-cl-text{flex:1 1 auto;min-width:0;width:auto!important}
+.ce-cl-rm{border:1px solid var(--line);background:#fff;border-radius:8px;width:36px;height:36px;color:#999;flex:none;font-size:13px}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .btn-ghost.danger{color:var(--red)}
 
@@ -250,6 +250,37 @@ body.modal-open #mobileBottomNav{display:none!important}
 .chiprow{display:flex;gap:6px;flex-wrap:wrap}
 .dchip{border:1px solid var(--line);border-radius:18px;padding:6px 12px;font-size:12.5px;color:#666;cursor:pointer}
 .dchip.on{background:var(--red-soft);border-color:var(--red);color:var(--red);font-weight:600}
+
+/* ===================== CRM / PROCESS ENGINE ===================== */
+.crm-tile{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:13px 14px;margin-bottom:9px;cursor:pointer}
+.crm-ic{width:40px;height:40px;border-radius:10px;background:#eef6ff;color:#2f8fd0;display:flex;align-items:center;justify-content:center;font-size:18px;flex:none}
+.crm-mid{flex:1;min-width:0}.crm-mid b{font-size:15px}
+.crm-sub{font-size:11.5px;color:#888;margin-top:1px}
+.crm-kpi{font-size:11.5px;color:#555;margin-top:5px}
+.crm-go{color:#c4c8ce;font-size:20px;flex:none}
+.crm-cols{display:flex;gap:10px;overflow-x:auto;padding-bottom:8px}
+.crm-col{min-width:160px;flex:none;background:#fafbfc;border:1px solid var(--line);border-radius:10px;padding:8px}
+.crm-col h4{margin:0 0 8px;font-size:11.5px;font-weight:700;color:#555;display:flex;justify-content:space-between}
+.crm-col h4 i{font-style:normal;color:#aaa}
+.crm-lead{background:#fff;border:1px solid #edeff3;border-radius:8px;padding:8px 9px;margin-bottom:7px;border-left:3px solid #cfd3da;cursor:pointer}
+.crm-lead.due{border-left-color:#e0a91f}.crm-lead.late{border-left-color:var(--red);background:#fff7f7}
+.crm-lead b{font-size:12.5px}.cl-m{font-size:10.5px;color:#888;margin-top:2px}
+.proc-ck{display:flex;flex-direction:column;gap:5px;font-size:13px}
+.proc-ck label{display:flex;align-items:center;gap:8px}
+.proc-tl{margin-top:14px;border-top:1px solid var(--line);padding-top:10px}
+.proc-tl .tl-h{font-size:11px;font-weight:700;color:#888;text-transform:uppercase;margin-bottom:6px}
+.proc-tl .tl-i{font-size:12px;padding:5px 0;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;gap:10px}
+.proc-tl .tl-i span{color:#9aa0a6;font-size:11px;white-space:nowrap}
+.pm-banner{background:var(--red-soft);color:var(--red);font-weight:700;font-size:12.5px;padding:9px 12px;border-radius:8px;margin-bottom:10px}
+.pm-wrap{overflow-x:auto}
+table.pm-grid{border-collapse:collapse;font-size:11px;min-width:560px}
+.pm-grid th,.pm-grid td{border:1px solid #eef1f5;padding:6px 9px;text-align:left;white-space:nowrap}
+.pm-grid .pm-grp{background:#f3f4f7;text-align:center;font-weight:700}
+.pm-grid .pm-lead{position:sticky;left:0;background:#fff;font-weight:600}
+.pm-grid .pm-as{font-size:10px;color:#9aa0a6;font-weight:400}
+.pm-grid .ok{color:var(--ok)} .pm-grid .amber{color:#c47f00;font-weight:700} .pm-grid .red{color:var(--red);font-weight:700}
+.pm-grid .pm-late{background:#fffaf0}
+.in{border:1px solid var(--line);border-radius:9px;padding:10px;font-size:15px;width:100%;box-sizing:border-box;background:#fff}
 .hamburger{display:none}
 
 /* ===== Mobile bottom navigation + More sheet (app-like) ===== */

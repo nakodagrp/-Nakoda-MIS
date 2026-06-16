@@ -210,6 +210,15 @@
     refreshCal:function(owner){ return API.listCalendar(owner).catch(function(){}); },
     createCalEntry:function(data){ var id='CAL-'+uuid(); var d=Object.assign({status:'pending'},data,{entryId:id}); var owner=d.ownerEmpId||''; var f=function(){ return queueCal('createCalEntry',{data:d},function(){ return addCalCache(owner,Object.assign({},d,{_pending:true})); }).then(function(r){ r.entryId=id; return r; }); }; if(navigator.onLine) return call('createCalEntry',{token:getToken(),data:d}).then(function(r){ if(r.ok) API.refreshCal(owner); return r; }).catch(f); return f(); },
     updateCalEntry:function(entryId,data,owner){ var f=function(){ return queueCal('updateCalEntry',{entryId:entryId,data:data},function(){ return patchCal(owner,entryId,data); }); }; if(navigator.onLine) return call('updateCalEntry',{token:getToken(),entryId:entryId,data:data}).then(function(r){ if(r.ok) API.refreshCal(owner); return r; }).catch(f); return f(); },
+    cachedProcesses:function(){ return kvGet('processes'); },
+    listProcesses:function(){ return call('listProcesses',{token:getToken()}).then(function(r){ if(r.ok) kvSet('processes',r.processes); return r; }).catch(function(){ return kvGet('processes').then(function(x){ return {ok:true,processes:x||[],offline:true}; }); }); },
+    getProcess:function(pid){ return call('getProcess',{token:getToken(),processId:pid}).then(function(r){ if(r.ok) kvSet('procdef_'+pid,r); return r; }).catch(function(){ return kvGet('procdef_'+pid).then(function(x){ return x||{ok:false,offline:true}; }); }); },
+    cachedInstances:function(pid){ return kvGet('inst_'+pid); },
+    listInstances:function(pid){ return call('listInstances',{token:getToken(),processId:pid}).then(function(r){ if(r.ok) kvSet('inst_'+pid,r); return r; }).catch(function(){ return kvGet('inst_'+pid).then(function(x){ return x||{ok:true,instances:[],stages:[],offline:true}; }); }); },
+    getInstance:function(iid){ return call('getInstance',{token:getToken(),instanceId:iid}); },
+    startInstance:function(pid,data){ var f=function(){ return queueGeneric('startInstance',{processId:pid,data:data}); }; if(navigator.onLine) return call('startInstance',{token:getToken(),processId:pid,data:data}).catch(f); return f(); },
+    advanceStage:function(iid,data){ var f=function(){ return queueGeneric('advanceStage',{instanceId:iid,data:data}); }; if(navigator.onLine) return call('advanceStage',{token:getToken(),instanceId:iid,data:data}).catch(f); return f(); },
+    processMonitor:function(pid){ return call('processMonitor',{token:getToken(),processId:pid}).then(function(r){ if(r.ok) kvSet('procmon_'+pid,r); return r; }).catch(function(){ return kvGet('procmon_'+pid).then(function(x){ return x||{ok:true,rows:[],stages:[],offline:true}; }); }); },
     cachedRecurring:function(){ return kvGet('recurring'); },
     listRecurring:function(){ return call('listRecurring',{token:getToken()}).then(function(r){ if(r.ok) kvSet('recurring',r.recurring); return r; }).catch(function(){ return kvGet('recurring').then(function(x){ return {ok:true,recurring:x||[],offline:true}; }); }); },
     saveRecurring:function(data){ return call('saveRecurring',{token:getToken(),data:data}).then(function(r){ if(r.ok) API.listRecurring(); return r; }); },
@@ -254,6 +263,7 @@
   function addCalCache(owner,entry){ return calCache(owner).then(function(l){ l.push(entry); return kvSet('cal_'+owner,l); }); }
   function patchCal(owner,id,patch){ return calCache(owner).then(function(l){ for(var i=0;i<l.length;i++){ if(String(l[i].entryId)===String(id)) Object.assign(l[i],patch,{_pending:true}); } return kvSet('cal_'+owner,l); }); }
   function queueCal(action,payload,optimistic){ return obAdd({action:action,payload:payload,ts:Date.now()}).then(function(){ return optimistic?optimistic():null; }).then(function(){ emit(); return {ok:true,offline:true}; }); }
+  function queueGeneric(action,payload){ return obAdd({action:action,payload:payload,ts:Date.now()}).then(function(){ emit(); return {ok:true,offline:true}; }); }
   function queueIssue(data){
     var tempNo='PENDING-'+uuid();
     return kvGet('cardtypes').then(function(types){
