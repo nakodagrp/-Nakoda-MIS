@@ -174,6 +174,15 @@
     createBranch:function(data){ return call('createBranch',{token:getToken(),data:data}); },
     updateBranch:function(id,data){ return call('updateBranch',{token:getToken(),branchId:id,data:data}); },
 
+    listCardTypes:function(){ return call('listCardTypes',{token:getToken()}).then(function(r){ if(r.ok) kvSet('cardtypes',r.types); return r; }).catch(function(){ return kvGet('cardtypes').then(function(t){ return {ok:true,types:t||[]}; }); }); },
+    upsertCardType:function(data){ return call('upsertCardType',{token:getToken(),data:data}); },
+    listCards:function(filter){ return call('listCards',{token:getToken(),filter:filter||{}}).then(function(r){ if(r.ok) kvSet('cards',r.cards); return r; }).catch(function(){ return kvGet('cards').then(function(c){ return {ok:true,cards:c||[],perms:{},offline:true}; }); }); },
+    getCard:function(n){ return call('getCard',{token:getToken(),cardNumber:n}); },
+    issueCard:function(data){ return call('issueCard',{token:getToken(),data:data}); },
+    renewCard:function(n,img){ return call('renewCard',{token:getToken(),cardNumber:n,imageDataUri:img||''}); },
+    cancelCard:function(n,reason){ return call('cancelCard',{token:getToken(),cardNumber:n,reason:reason||''}); },
+    cardSummary:function(){ return call('cardSummary',{token:getToken()}).catch(function(){ return {ok:false}; }); },
+
     /* fire-and-forget cache refresh */
     refreshEmployees:function(){ return API.listEmployees().catch(function(){}); },
 

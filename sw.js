@@ -4,7 +4,7 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v5';
+var CACHE_VERSION = 'nakoda-mis-v6';
 var SHELL = [
   './',
   './index.html',
@@ -13,6 +13,7 @@ var SHELL = [
   './api.js',
   './app.js',
   './branches.js',
+  './membership.js',
   './manifest.webmanifest',
   './icons/login-logo.png',
   './icons/logo-white.png',

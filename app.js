@@ -134,6 +134,8 @@ function applyPerms(){
   var canList=S.perms.canViewAll||S.perms.level==='BRANCH_MGR'||S.perms.level==='BRANCH_VIEW';
   document.querySelectorAll('[data-page="employees"]').forEach(function(n){ n.classList.toggle('hidden',!canList); });
   document.querySelectorAll('[data-page="branches"]').forEach(function(n){ n.classList.toggle('hidden',!S.perms.canManageAll); });
+  var canCards=S.perms.canViewAll||S.perms.level==='BRANCH_MGR'||S.perms.level==='BRANCH_VIEW';
+  document.querySelectorAll('[data-page="cards"]').forEach(function(n){ n.classList.toggle('hidden',!canCards); });
   $('addEmpBtn').classList.toggle('hidden', !S.perms.canCreate);
 }
 
@@ -151,11 +153,12 @@ function bindApp(){
 }
 function go(page){
   document.querySelectorAll('.nav-item').forEach(function(n){ n.classList.toggle('active', n.getAttribute('data-page')===page); });
-  ['dashboard','employees','profile','branches'].forEach(function(p){ $('page-'+p).classList.toggle('hidden',p!==page); });
+  ['dashboard','employees','profile','branches','cards'].forEach(function(p){ $('page-'+p).classList.toggle('hidden',p!==page); });
   if(page==='dashboard') loadDashboard();
   if(page==='employees') loadEmployees();
   if(page==='profile') loadProfile();
   if(page==='branches' && window.renderBranches) window.renderBranches();
+  if(page==='cards' && window.renderMembershipCards) window.renderMembershipCards();
 }
 
 /* dashboard */
