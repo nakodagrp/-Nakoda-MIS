@@ -37,6 +37,7 @@ a{color:var(--red);text-decoration:none}
 .auth-card img.logo{width:236px;max-width:82%;margin:2px auto 14px;display:block}
 .auth-title{font-size:16.5px;font-weight:700;margin-bottom:3px}
 .auth-sub{color:var(--grey);font-size:12.5px;margin-bottom:22px}
+.auth-tagline{font-size:15.5px;font-weight:400;color:var(--grey);letter-spacing:.01em;margin:2px 0 22px}
 .field{text-align:left;margin-bottom:15px}
 .field label{display:block;font-size:12.5px;font-weight:600;color:var(--grey);margin-bottom:6px}
 .field input,.field select,.field textarea{width:100%;padding:12px;border:1px solid var(--line);border-radius:11px;background:#fff;outline:none;transition:.15s}
