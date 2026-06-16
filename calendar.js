@@ -8,7 +8,7 @@
   var DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   var MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-  var CAL={ owner:null, ownerName:'Me', view:'week', anchor:new Date(), entries:[], tasks:[], canManage:true, targets:[] };
+  var CAL={ owner:null, ownerName:'Me', ownerRole:'', view:'week', anchor:new Date(), entries:[], tasks:[], canManage:true, targets:[] };
 
   function p2(n){ return (n<10?'0':'')+n; }
   function dstr(d){ return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate()); }
@@ -39,7 +39,8 @@
       '<div class="cal-range" id="calRange"></div>'+
       '<div id="calBody"></div>'+
       '<div class="cal-legend"><span class="lg pend"></span> Pending &nbsp; <span class="lg done"></span> Done '+
-        '<span id="calOffline" class="cal-off hidden">&middot; offline (will sync)</span></div>';
+        '<span id="calOffline" class="cal-off hidden">&middot; offline (will sync)</span>'+
+        '<a href="javascript:void(0)" id="calFootEdit" class="cal-footedit">✎ Edit PNG footer line</a></div>';
     // bind
     pg.querySelectorAll('#calView button').forEach(function(b){ b.onclick=function(){ CAL.view=b.getAttribute('data-v'); buildShell(); draw(); }; });
     document.getElementById('calPrev').onclick=function(){ CAL.anchor=addDays(CAL.anchor, CAL.view==='week'?-7:-1); draw(); };
@@ -47,7 +48,17 @@
     document.getElementById('calToday').onclick=function(){ CAL.anchor=new Date(); draw(); };
     document.getElementById('calAdd').onclick=function(){ openEntry(null,{date:dstr(CAL.view==='week'?new Date():CAL.anchor)}); };
     document.getElementById('calPng').onclick=exportPng;
-    var os=document.getElementById('calOwner'); if(os) os.onchange=function(){ var t=CAL.targets.filter(function(x){return String(x.EmpID)===os.value;})[0]; CAL.owner=os.value; CAL.ownerName=(t?t.FullName:'').replace(/\s*\(.*\)$/,''); reload(); };
+    var os=document.getElementById('calOwner'); if(os) os.onchange=function(){ var t=CAL.targets.filter(function(x){return String(x.EmpID)===os.value;})[0]; CAL.owner=os.value; CAL.ownerName=(t?t.FullName:'').replace(/\s*\(.*\)$/,''); CAL.ownerRole=(t&&t.Role)||''; reload(); };
+    var fe=document.getElementById('calFootEdit'); if(fe) fe.onclick=openFooterEditor;
+  }
+  function footerLine(){ try{ return localStorage.getItem('nk_sched_footer') || 'For You, At Your Doorstep · Nakoda Diagnostics & Research Center'; }catch(e){ return 'Nakoda Diagnostics & Research Center'; } }
+  function openFooterEditor(){
+    var cur=footerLine();
+    openModal('PNG footer line',
+      '<div class="grid2"><div class="field full"><label>Line printed at the bottom of every Daily Scheduler PNG</label><input id="ffText" value="'+esc(cur)+'" placeholder="e.g. For You, At Your Doorstep"></div></div><div style="font-size:11px;color:#9aa0a6">Saved on this device.</div>',
+      '<button class="btn ghost sm" id="ffReset">Reset to default</button><button class="btn" id="ffSave">Save</button>');
+    document.getElementById('ffSave').onclick=function(){ try{ localStorage.setItem('nk_sched_footer', document.getElementById('ffText').value.trim()); }catch(e){} closeModal(); toast('Footer line saved'); };
+    document.getElementById('ffReset').onclick=function(){ try{ localStorage.removeItem('nk_sched_footer'); }catch(e){} closeModal(); toast('Reset to default'); };
   }
 
   /* ---------- draw ---------- */
@@ -108,12 +119,19 @@
 
   /* ---------- add / edit ---------- */
   function timeOpts(sel){ var o=''; for(var m=START_MIN;m<=END_MIN;m+=STEP){ var v=p2(Math.floor(m/60))+':'+p2(m%60); o+='<option value="'+v+'"'+(v===sel?' selected':'')+'>'+fmtHour(m)+'</option>'; } return o; }
+  var ceCl=[];
+  function parseCl(v){ try{ var a=Array.isArray(v)?v:JSON.parse(v||'[]'); return Array.isArray(a)?a:[]; }catch(_){ return []; } }
+  function ceClRows(){ return ceCl.length? ceCl.map(function(it,i){ return '<div class="ce-cl-row" data-cr="'+i+'"><input type="checkbox" data-cd="'+i+'"'+(it.done?' checked':'')+'><input class="ce-cl-text" data-ct="'+i+'" value="'+esc(it.text||'')+'" placeholder="Sub-step"><button type="button" class="ce-cl-rm" data-rm="'+i+'">✕</button></div>'; }).join('') : '<div class="muted" style="font-size:12px">No sub-steps yet.</div>'; }
+  function syncCe(){ var box=document.getElementById('ceClist'); if(!box) return; ceCl=[].slice.call(box.querySelectorAll('.ce-cl-row')).map(function(row){ return { text:((row.querySelector('.ce-cl-text')||{}).value||'').trim(), done:!!(row.querySelector('[data-cd]')||{}).checked }; }); }
+  function rerenderCe(){ var box=document.getElementById('ceClist'); if(box){ box.innerHTML=ceClRows(); wireCe(); } }
+  function wireCe(){ var box=document.getElementById('ceClist'); if(!box) return; box.querySelectorAll('[data-rm]').forEach(function(b){ b.onclick=function(){ syncCe(); ceCl.splice(+b.getAttribute('data-rm'),1); rerenderCe(); }; }); }
   function openEntry(e, dflt){
     dflt=dflt||{}; var ed=!!e; e=e||{};
     var date=e.date||dflt.date||dstr(new Date());
     var st=e.startTime||dflt.start||'09:00';
     var et=e.endTime||(function(){ var m=toMin(st)+30; return p2(Math.floor(m/60))+':'+p2(m%60); })();
     var done=String(e.status)==='done';
+    ceCl=parseCl(e.checklist);
     var body=
       '<div class="grid2">'+
         '<div class="field full"><label>Title *</label><input id="ceTitle" value="'+esc(e.title||'')+'" placeholder="What is scheduled?"></div>'+
@@ -121,6 +139,7 @@
         '<div class="field"><label>Start time</label><select id="ceStart">'+timeOpts(st)+'</select></div>'+
         '<div class="field"><label>End time</label><select id="ceEnd">'+timeOpts(et)+'</select></div>'+
         '<div class="field full"><label>Notes</label><textarea id="ceNotes" rows="2" placeholder="Optional">'+esc(e.notes||'')+'</textarea></div>'+
+        '<div class="field full"><label>Checklist (sub-steps)</label><div id="ceClist">'+ceClRows()+'</div><button type="button" class="btn ghost sm" id="ceAddCl" style="margin-top:6px">+ Add sub-step</button></div>'+
         '<div class="field full" id="ceBusy"></div>'+
         (ed?'<div class="field full"><div class="ce-stat">Status: <b class="'+(done?'st-done':'st-pend')+'">'+(done?'Completed':'Pending')+'</b></div></div>':'')+
       '</div>'+
@@ -141,12 +160,14 @@
         ? '<label>Already booked this day</label><div class="ce-busy">'+busy.map(function(b){ return '<span>'+(b.startTime?fmtHour(toMin(b.startTime)):'')+(b.endTime?'–'+fmtHour(toMin(b.endTime)):'')+' · '+esc(b.title)+'</span>'; }).join('')+'</div>'
         : '';
     }
-    renderBusy();
+    renderBusy(); wireCe();
+    document.getElementById('ceAddCl').onclick=function(){ syncCe(); ceCl.push({text:'',done:false}); rerenderCe(); };
     document.getElementById('ceDate').onchange=renderBusy;
     document.getElementById('ceStart').onchange=function(){ var es=document.getElementById('ceEnd'); if(toMin(es.value)<=toMin(this.value)){ var m=toMin(this.value)+30; es.value=p2(Math.floor(m/60))+':'+p2(m%60); } };
     document.getElementById('ceSave').onclick=function(){
       var t=document.getElementById('ceTitle').value.trim(); if(!t){ document.getElementById('ceMsg').innerHTML='<div class="msg error">Title is required.</div>'; return; }
-      var data={ ownerEmpId:CAL.owner, date:document.getElementById('ceDate').value, startTime:document.getElementById('ceStart').value, endTime:document.getElementById('ceEnd').value, title:t, notes:document.getElementById('ceNotes').value.trim() };
+      syncCe(); var cl=ceCl.filter(function(x){return x.text;});
+      var data={ ownerEmpId:CAL.owner, date:document.getElementById('ceDate').value, startTime:document.getElementById('ceStart').value, endTime:document.getElementById('ceEnd').value, title:t, notes:document.getElementById('ceNotes').value.trim(), checklist:JSON.stringify(cl) };
       this.disabled=true; this.textContent='Saving…';
       var p = ed ? API.updateCalEntry(e.entryId,data,CAL.owner) : API.createCalEntry(data);
       p.then(function(r){ if(r&&(r.ok||r.offline)){ closeModal(); toast(r.offline?'Saved offline — will sync':'Saved'); reload(); } else { document.getElementById('ceMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; } });
@@ -185,10 +206,11 @@
     x.textAlign='right';
     x.fillStyle='#1f1f1f'; x.font='bold 20px Arial';
     x.fillText(DOW[CAL.anchor.getDay()]+', '+CAL.anchor.getDate()+' '+MON[CAL.anchor.getMonth()]+' '+CAL.anchor.getFullYear(), W-M, 56);
-    x.fillStyle='#777'; x.font='15px Arial'; x.fillText(CAL.ownerName, W-M, 82); x.textAlign='left';
+    x.fillStyle='#777'; x.font='15px Arial'; x.fillText(CAL.ownerName+(CAL.ownerRole?(' · '+CAL.ownerRole):''), W-M, 82); x.textAlign='left';
     // title
     x.fillStyle='#1f1f1f'; x.font='bold 34px Arial'; x.fillText('DAILY SCHEDULER', M, 150);
-    x.strokeStyle='#e2e5ea'; x.lineWidth=1; x.beginPath(); x.moveTo(M,headH-14); x.lineTo(W-M,headH-14); x.stroke();
+    x.fillStyle='#555'; x.font='16px Arial'; x.fillText('Prepared for: '+CAL.ownerName+(CAL.ownerRole?('  ·  '+CAL.ownerRole):''), M, 176);
+    x.strokeStyle='#e2e5ea'; x.lineWidth=1; x.beginPath(); x.moveTo(M,headH-6); x.lineTo(W-M,headH-6); x.stroke();
     // schedule table columns
     var xTime=M, wTime=150, wDone=130, xDone=W-M-wDone, xSch=xTime+wTime, wSch=xDone-xSch;
     var top=headH;
@@ -221,7 +243,7 @@
     if(!pend.length){ x.fillStyle='#999'; x.font='15px Arial'; x.fillText('No pending tasks.', M+14, ty+22); }
     pend.forEach(function(t,k){ var yy=ty+k*40; x.fillStyle='#DA1017'; x.font='bold 16px Arial'; x.fillText('•', M+14, yy+22); x.fillStyle='#333'; x.font='15px Arial'; x.fillText(clip(x,t.title+(t.dueTime?'   ('+t.dueTime+')':''), W-2*M-40), M+36, yy+22); x.strokeStyle='#f0f1f4'; x.beginPath(); x.moveTo(M+12,yy+32); x.lineTo(W-M-12,yy+32); x.stroke(); });
     // footer
-    x.fillStyle='#aab'; x.font='12px Arial'; x.textAlign='right'; x.fillText('Nakoda Diagnostics & Research Center', W-M, H-22); x.textAlign='left';
+    x.fillStyle='#888'; x.font='italic 15px Arial'; x.textAlign='center'; x.fillText(footerLine(), W/2, H-30); x.textAlign='left';
     c.toBlob(function(b){ var u=URL.createObjectURL(b); var a=document.createElement('a'); a.href=u; a.download='Daily-Scheduler-'+ds+'.png'; a.click(); setTimeout(function(){URL.revokeObjectURL(u);},2000); toast('Daily Scheduler (A4) saved'); });
   }
   function clip(x,s,max){ s=String(s||''); if(x.measureText(s).width<=max) return s; while(s.length>1 && x.measureText(s+'…').width>max) s=s.slice(0,-1); return s+'…'; }
@@ -238,7 +260,7 @@
   }
 
   window.renderCalendar=function(){
-    if(!CAL.owner){ CAL.owner=S.user.EmpID; CAL.ownerName=(S.user.FullName||'Me'); CAL.canManage=true; }
+    if(!CAL.owner){ CAL.owner=S.user.EmpID; CAL.ownerName=(S.user.FullName||'Me'); CAL.ownerRole=(S.user.Role||''); CAL.canManage=true; }
     buildShell(); loadTargets(); reload();
   };
 })();

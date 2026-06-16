@@ -1,7 +1,10 @@
 /* Nakoda MIS — My Tasks (self source for now). Loads after app.js; reuses globals. */
 (function(){
-  var TASKS=[], FILTER='today';
+  var TASKS=[], CALITEMS=[], FILTER='today';
   var PRI={High:'#C0392B',Normal:'#1A8AC2',Low:'#9aa0a6'};
+  function meId(){ return S.user&&S.user.EmpID; }
+  function calToItem(e){ return { taskId:'CAL::'+e.entryId, calId:e.entryId, isCal:true, source:'calendar', title:e.title, dueDate:e.date, dueTime:e.startTime, endTime:e.endTime, priority:'', status:(String(e.status)==='done'?'done':'open'), checklist:(e.checklist||'[]') }; }
+  function combined(){ return TASKS.concat(CALITEMS); }
 
   function pc(t){ try{ return Array.isArray(t.checklist)?t.checklist:JSON.parse(t.checklist||'[]'); }catch(e){ return []; } }
   function todayStr(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
@@ -28,12 +31,16 @@
     paintChips();
     API.cachedTasks().then(function(t){ if(t&&t.length){ TASKS=t; paintList(); } else { document.getElementById('taskList').innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>'; } });
     API.listMyTasks().then(function(r){ if(r.ok){ TASKS=r.tasks||[]; paintList(); } });
+    var mid=meId();
+    API.cachedCalendar(mid).then(function(e){ if(e){ CALITEMS=e.filter(function(x){return String(x.status)!=='deleted';}).map(calToItem); paintList(); } });
+    API.listCalendar(mid).then(function(r){ if(r&&r.ok){ CALITEMS=(r.entries||[]).map(calToItem); paintList(); } });
   }
   function paintChips(){
+    var ALL=combined();
     var defs=[['today','Today'],['upcoming','Upcoming'],['overdue','Overdue'],['done','Done'],['all','All']];
     document.getElementById('taskChips').innerHTML=defs.map(function(d){
       var on=FILTER===d[0];
-      var n=d[0]==='all'?TASKS.filter(function(t){return t.status!=='deleted';}).length:TASKS.filter(function(t){return bucket(t)===d[0];}).length;
+      var n=d[0]==='all'?ALL.filter(function(t){return t.status!=='deleted';}).length:ALL.filter(function(t){return bucket(t)===d[0];}).length;
       return '<button class="tchip'+(on?' on':'')+'" data-f="'+d[0]+'">'+d[1]+' <span style="opacity:.7">'+n+'</span></button>';
     }).join('');
     document.querySelectorAll('#taskChips .tchip').forEach(function(b){ b.onclick=function(){ FILTER=b.getAttribute('data-f'); paintChips(); paintList(); }; });
@@ -41,29 +48,35 @@
   function paintList(){
     paintChips();
     var box=document.getElementById('taskList');
-    var list=TASKS.filter(function(t){ if(t.status==='deleted') return false; return FILTER==='all'?true:bucket(t)===FILTER; });
+    var list=combined().filter(function(t){ if(t.status==='deleted') return false; return FILTER==='all'?true:bucket(t)===FILTER; });
     list.sort(function(a,b){ return (a.dueDate||'9999')+(a.dueTime||'')>(b.dueDate||'9999')+(b.dueTime||'')?1:-1; });
     if(!list.length){ box.innerHTML='<div class="empty">No tasks here. Tap “+ Add task”.</div>'; return; }
     box.innerHTML=list.map(function(t){
       var done=t.status==='done', cl=pc(t), cldone=cl.filter(function(x){return x.done;}).length;
       var over=bucket(t)==='overdue';
+      var tag=t.isCal?'<span style="background:#ECEAFB;color:#5046b8;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">📅 Meeting / Calendar</span>'
+              :(t.source==='recurring'?'<span style="background:#ECEAFB;color:#5046b8;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">🔁 Recurring</span>'
+              :(t.source==='assigned'?'<span style="background:#eef2ff;color:#4253c5;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">Assigned by '+esc(t.assignedByName||'manager')+'</span>':''));
       return '<div class="tcard'+(done?' tdone':'')+'" data-id="'+esc(t.taskId)+'">'+
         '<span class="tbox'+(done?' on':'')+'" data-tog="'+esc(t.taskId)+'"></span>'+
         '<div class="tbody">'+
           '<div class="ttitle">'+esc(t.title)+pend(t)+'</div>'+
-          (t.source==='assigned'?'<div style="margin-top:3px"><span style="background:#eef2ff;color:#4253c5;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">Assigned by '+esc(t.assignedByName||'manager')+'</span></div>':'')+
-          '<div class="tmeta"><span class="pdot" style="background:'+(PRI[t.priority]||'#999')+'"></span>'+
-            '<span'+(over?' style="color:#C0392B;font-weight:600"':'')+'>'+esc(dueLabel(t))+'</span> · '+esc(t.priority||'Normal')+
+          (tag?'<div style="margin-top:3px">'+tag+'</div>':'')+
+          '<div class="tmeta"><span class="pdot" style="background:'+(t.isCal?'#7F77DD':(PRI[t.priority]||'#999'))+'"></span>'+
+            '<span'+(over?' style="color:#C0392B;font-weight:600"':'')+'>'+esc(dueLabel(t))+'</span>'+(t.isCal?'':' · '+esc(t.priority||'Normal'))+
             (cl.length?(' · ☑ '+cldone+'/'+cl.length):'')+'</div>'+
         '</div></div>';
     }).join('');
-    box.querySelectorAll('.tcard').forEach(function(el){ el.onclick=function(ev){ if(ev.target.getAttribute('data-tog')) return; openTaskDetail(el.getAttribute('data-id')); }; });
+    box.querySelectorAll('.tcard').forEach(function(el){ el.onclick=function(ev){ if(ev.target.getAttribute('data-tog')) return; var id=el.getAttribute('data-id'); if(id.indexOf('CAL::')===0){ if(window.go) go('calendar'); return; } openTaskDetail(id); }; });
     box.querySelectorAll('[data-tog]').forEach(function(b){ b.onclick=function(ev){ ev.stopPropagation(); toggleDone(b.getAttribute('data-tog')); }; });
   }
   function pend(t){ return t._pending?' <span class="badge pending">syncing</span>':''; }
-  function byId(id){ return TASKS.filter(function(t){return String(t.taskId)===String(id);})[0]; }
+  function byId(id){ return combined().filter(function(t){return String(t.taskId)===String(id);})[0]; }
 
-  function toggleDone(id){ var t=byId(id); if(!t) return; var ns=t.status==='done'?'open':'done'; t.status=ns; t._pending=true; paintList(); API.setTaskStatus(id,ns).then(function(){ API.cachedTasks().then(function(c){ if(c){TASKS=c; paintList();} }); }); }
+  function toggleDone(id){ var t=byId(id); if(!t) return;
+    if(t.isCal){ var nc=t.status==='done'?'pending':'done'; t.status=(nc==='done'?'done':'open'); t._pending=true; paintList();
+      API.updateCalEntry(t.calId,{status:nc},meId()).then(function(){ API.cachedCalendar(meId()).then(function(e){ if(e){ CALITEMS=e.filter(function(x){return String(x.status)!=='deleted';}).map(calToItem); paintList(); } }); }); return; }
+    var ns=t.status==='done'?'open':'done'; t.status=ns; t._pending=true; paintList(); API.setTaskStatus(id,ns).then(function(){ API.cachedTasks().then(function(c){ if(c){TASKS=c; paintList();} }); }); }
 
   function openTaskDetail(id){
     var t=byId(id); if(!t) return; var cl=pc(t);
