@@ -193,13 +193,23 @@
     markCardActivated:function(n){ var now=new Date().toISOString(); var f=function(){ return queueCardOp('markCardActivated',{cardNumber:n},function(){ return patchCard(n,{activatedAt:now,sentAt:now,_pending:true}); }); }; if(navigator.onLine) return call('markCardActivated',{token:getToken(),cardNumber:n}).then(function(r){ if(r.ok) API.refreshCards(); return r; }).catch(f); return f(); },
     cardStatusSummary:function(branchId){ return call('cardStatusSummary',{token:getToken(),branchId:branchId||''}); },
 
+    cachedTasks:function(){ return kvGet('tasks'); },
+    listMyTasks:function(){ return call('listMyTasks',{token:getToken()}).then(function(r){ if(r.ok) kvSet('tasks',r.tasks); return r; }).catch(function(){ return kvGet('tasks').then(function(t){ return {ok:true,tasks:t||[],offline:true}; }); }); },
+    refreshTasks:function(){ return API.listMyTasks().catch(function(){}); },
+    createTask:function(data){ var id='TSK-'+uuid(); var d=Object.assign({source:'self'},data,{taskId:id}); var f=function(){ return queueTask('createTask',{data:d},function(){ return addTaskCache(Object.assign({},d,{status:'open',_pending:true})); }).then(function(r){ r.taskId=id; return r; }); }; if(navigator.onLine) return call('createTask',{token:getToken(),data:d}).then(function(r){ if(r.ok) API.refreshTasks(); return r; }).catch(f); return f(); },
+    updateTask:function(taskId,data){ var f=function(){ return queueTask('updateTask',{taskId:taskId,data:data},function(){ return patchTask(taskId,data); }); }; if(navigator.onLine) return call('updateTask',{token:getToken(),taskId:taskId,data:data}).then(function(r){ if(r.ok) API.refreshTasks(); return r; }).catch(f); return f(); },
+    setTaskStatus:function(taskId,status,note){ return API.updateTask(taskId,{status:status,completionNote:note||''}); },
+    deleteTask:function(taskId){ return API.updateTask(taskId,{status:'deleted'}); },
+    cachedAllTasks:function(){ return kvGet('alltasks'); },
+    listAllTasks:function(filter){ return call('listAllTasks',{token:getToken(),filter:filter||{}}).then(function(r){ if(r.ok) kvSet('alltasks',r.tasks); return r; }).catch(function(){ return kvGet('alltasks').then(function(t){ return {ok:true,tasks:t||[],offline:true}; }); }); },
+
     /* fire-and-forget cache refresh */
     refreshEmployees:function(){ return API.listEmployees().catch(function(){}); },
     refreshCards:function(){ return API.listCards({}).catch(function(){}); },
 
     syncOutbox:syncOutbox,
     pending:function(){ return obAll().then(function(i){return i.length;}); },
-    clearLocal:function(){ setToken(''); return Promise.all([kvSet('employees',null),kvSet('meta',null),kvSet('me',null),kvSet('perms',null)]); }
+    clearLocal:function(){ setToken(''); return Promise.all([kvSet('employees',null),kvSet('meta',null),kvSet('me',null),kvSet('perms',null),kvSet('tasks',null),kvSet('cards',null),kvSet('cardtypes',null),kvSet('cardprices',null)]); }
   };
 
   function queueCreate(data,tempPw){
@@ -220,6 +230,10 @@
   function cardsCache(){ return kvGet('cards').then(function(c){ return c||[]; }); }
   function patchCard(n,patch){ return cardsCache().then(function(list){ for(var i=0;i<list.length;i++){ if(String(list[i].cardNumber)===String(n)) Object.assign(list[i],patch); } return kvSet('cards',list); }); }
   function queueCardOp(action,payload,optimistic){ return obAdd({action:action,payload:payload,ts:Date.now()}).then(function(){ return optimistic?optimistic():null; }).then(function(){ emit(); return {ok:true,offline:true}; }); }
+  function tasksCache(){ return kvGet('tasks').then(function(t){ return t||[]; }); }
+  function addTaskCache(task){ return tasksCache().then(function(l){ l.unshift(task); return kvSet('tasks',l); }); }
+  function patchTask(id,patch){ return tasksCache().then(function(l){ for(var i=0;i<l.length;i++){ if(String(l[i].taskId)===String(id)) Object.assign(l[i],patch,{_pending:true}); } return kvSet('tasks',l); }); }
+  function queueTask(action,payload,optimistic){ return obAdd({action:action,payload:payload,ts:Date.now()}).then(function(){ return optimistic?optimistic():null; }).then(function(){ emit(); return {ok:true,offline:true}; }); }
   function queueIssue(data){
     var tempNo='PENDING-'+uuid();
     return kvGet('cardtypes').then(function(types){
@@ -256,7 +270,7 @@
         });
       }
       return next(0);
-    }).then(function(){ _syncing=false; emit(); API.refreshCards(); return API.refreshEmployees(); })
+    }).then(function(){ _syncing=false; emit(); API.refreshCards(); API.refreshTasks(); return API.refreshEmployees(); })
       .catch(function(){ _syncing=false; emit(); });
   }
 

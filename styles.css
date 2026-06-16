@@ -179,6 +179,23 @@ body.modal-open #mobileBottomNav{display:none!important}
   .toolbar select,.toolbar input{width:100%}
 }
 .cs-sel{accent-color:var(--red)}
+
+/* Tasks */
+.tchip{border:1px solid var(--line);background:#fff;border-radius:20px;padding:6px 12px;font-size:12.5px;color:var(--grey);cursor:pointer;font-weight:600}
+.tchip.on{background:var(--red-soft);border-color:var(--red);color:var(--red)}
+.tcard{display:flex;gap:11px;align-items:flex-start;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 13px;margin-bottom:9px;box-shadow:var(--shadow);cursor:pointer}
+.tcard.tdone{opacity:.6}
+.tbox{width:20px;height:20px;border:2px solid #c7ccd3;border-radius:6px;flex-shrink:0;margin-top:1px;cursor:pointer}
+.tbox.on{background:var(--ok);border-color:var(--ok);position:relative}
+.tbox.on:after{content:"✓";color:#fff;font-size:13px;position:absolute;top:-2px;left:3px}
+.tbody{flex:1;min-width:0}
+.ttitle{font-size:14px;font-weight:500;line-height:1.3}
+.tcard.tdone .ttitle{text-decoration:line-through}
+.tmeta{font-size:11.5px;color:var(--muted);margin-top:3px}
+.pdot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:0px}
+.pseggrp{display:flex;gap:8px}
+.pseg{flex:1;text-align:center;border:1px solid var(--line);border-radius:9px;padding:9px 0;font-size:13px;color:var(--grey);cursor:pointer}
+.pseg.on{background:var(--red-soft);border-color:var(--red);color:var(--red);font-weight:600}
 .themegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px}
 .themetile{border-radius:8px;padding:16px 6px;text-align:center;font-weight:600;font-size:12px;line-height:1.2;cursor:pointer;border:2px solid transparent;transition:.12s}
 .themetile.on{border-color:#DA1017;box-shadow:0 0 0 2px #fde8e9}

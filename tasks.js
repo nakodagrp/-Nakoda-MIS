@@ -110,6 +110,52 @@
     };
   }
 
+  /* ---------- PC Task Monitor ---------- */
+  function tbn(id){ var b=((S.meta&&S.meta.branches)||[]).filter(function(x){return String(x.BranchID)===String(id);})[0]; return b?b.BranchName:(id||'—'); }
+  function daysAgo(ds){ if(!ds) return ''; var d=new Date(ds+'T00:00'), now=new Date(); now.setHours(0,0,0,0); var n=Math.round((now-d)/86400000); return n<=0?'today':(n+' day'+(n>1?'s':'')); }
+  function renderTaskMonitor(){
+    var v=document.getElementById('page-taskmon'), ALL=[];
+    var canPick=S.perms&&S.perms.canViewAll, branches=(S.meta&&S.meta.branches)||[];
+    var brOpts='<option value="">All branches</option>'+branches.map(function(b){return '<option value="'+esc(b.BranchID)+'">'+esc(b.BranchName)+'</option>';}).join('');
+    v.innerHTML='<div class="page-head"><h1>Task Monitor</h1></div>'+
+      '<div style="color:#888;font-size:13px;margin-bottom:12px">All employees’ tasks — chase the overdue ones.</div>'+
+      (canPick?'<div style="margin-bottom:12px"><select id="tmBranch" class="greet-select">'+brOpts+'</select></div>':'')+
+      '<div id="tmKpis" class="kpis"></div>'+
+      '<div class="section-label">Overdue — follow up</div><div id="tmList"></div>';
+    if(canPick){ var sel=document.getElementById('tmBranch'); if(sel) sel.addEventListener('change',paint); }
+    function paint(){
+      var br=canPick?((document.getElementById('tmBranch')||{}).value||''):'';
+      var tdy=todayStr();
+      var list=ALL.filter(function(t){ return !br||String(t.branchId)===String(br); });
+      var open=list.filter(function(t){return t.status!=='done';});
+      var overdue=open.filter(function(t){return t.dueDate && t.dueDate<tdy;});
+      var dueToday=open.filter(function(t){return t.dueDate===tdy;});
+      var staff={}; overdue.forEach(function(t){ staff[t.assignedToEmpId]=1; });
+      document.getElementById('tmKpis').innerHTML=
+        '<div class="kpi" style="background:#fdecec"><div class="n" style="color:#C0392B">'+overdue.length+'</div><div class="l">Overdue</div></div>'+
+        '<div class="kpi" style="background:#fff7e6"><div class="n" style="color:#b08900">'+dueToday.length+'</div><div class="l">Due today</div></div>'+
+        '<div class="kpi"><div class="n">'+open.length+'</div><div class="l">Open total</div></div>'+
+        '<div class="kpi"><div class="n">'+Object.keys(staff).length+'</div><div class="l">Staff behind</div></div>';
+      overdue.sort(function(a,b){ return (a.dueDate||'')<(b.dueDate||'')?-1:1; });
+      var box=document.getElementById('tmList');
+      if(!overdue.length){ box.innerHTML='<div class="empty">Nothing overdue right now. 🎉</div>'; return; }
+      box.innerHTML=overdue.map(function(t){
+        var ph=String(t.assigneePhone||'').replace(/\D/g,'');
+        var msg=encodeURIComponent('Reminder: please complete your task “'+t.title+'” (overdue). — Nakoda');
+        return '<div style="background:#fff;border:1px solid #ecedf0;border-left:4px solid #C0392B;border-radius:10px;padding:10px 12px;margin-bottom:8px">'+
+          '<div style="font-size:13px;font-weight:500">'+esc(t.assigneeName)+' <span style="font-size:10px;color:#9aa0a6;font-weight:400">· '+esc(tbn(t.branchId))+'</span></div>'+
+          '<div style="font-size:11.5px;color:#555;margin:2px 0">'+esc(t.title)+'</div>'+
+          '<div style="font-size:10px;color:#C0392B;font-weight:700">'+daysAgo(t.dueDate)+' overdue · was due '+esc(t.dueDate)+(t.dueTime?(' '+esc(t.dueTime)):'')+'</div>'+
+          '<div style="display:flex;gap:6px;margin-top:7px">'+
+            (ph?('<a href="tel:'+ph+'" class="btn sm" style="background:#1a7f37;text-decoration:none">📞 Call</a><a href="https://wa.me/91'+ph+'?text='+msg+'" target="_blank" class="btn sm" style="background:#1ba94c;text-decoration:none">WhatsApp</a>'):'<span style="font-size:10px;color:#aaa">No phone on record</span>')+
+          '</div></div>';
+      }).join('');
+    }
+    API.cachedAllTasks().then(function(t){ if(t&&t.length){ ALL=t; paint(); } else { document.getElementById('tmList').innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>'; } });
+    API.listAllTasks().then(function(r){ if(r.ok){ ALL=r.tasks||[]; paint(); } else if(!ALL.length){ document.getElementById('tmList').innerHTML='<div class="empty">'+esc(r.error)+'</div>'; } });
+  }
+
   window.renderMyTasks=renderMyTasks;
   window.openTaskDetail=openTaskDetail;
+  window.renderTaskMonitor=renderTaskMonitor;
 })();
