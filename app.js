@@ -154,6 +154,7 @@ function applyPerms(){
   document.querySelectorAll('[data-page="cards"]').forEach(function(n){ n.classList.toggle('hidden',!canCards); });
   document.querySelectorAll('[data-page="cardstatus"]').forEach(function(n){ n.classList.toggle('hidden',!canCards); });
   $('addEmpBtn').classList.toggle('hidden', !S.perms.canCreate);
+  buildMobileBottomNav();
 }
 
 /* nav */
@@ -168,7 +169,9 @@ function bindApp(){
   $('filterBranch').addEventListener('change', renderEmpTable);
   $('filterStatus').addEventListener('change', renderEmpTable);
 }
+var currentPage='dashboard';
 function go(page){
+  currentPage=page;
   document.querySelectorAll('.nav-item').forEach(function(n){ n.classList.toggle('active', n.getAttribute('data-page')===page); });
   ['dashboard','employees','profile','branches','cards','cardstatus'].forEach(function(p){ $('page-'+p).classList.toggle('hidden',p!==page); });
   if(page==='dashboard') loadDashboard();
@@ -177,7 +180,30 @@ function go(page){
   if(page==='branches' && window.renderBranches) window.renderBranches();
   if(page==='cards' && window.renderMembershipCards) window.renderMembershipCards();
   if(page==='cardstatus' && window.renderCardStatus) window.renderCardStatus();
+  highlightBottomNav();
 }
+
+/* ---------- mobile bottom navigation + "More" sheet ---------- */
+var NAVDEF=[['dashboard','▦','Home'],['employees','👥','Staff'],['cards','🏷','Cards'],['cardstatus','✅','Status'],['branches','🏢','Branches'],['profile','⚙','Profile']];
+function visibleNav(){ return NAVDEF.filter(function(d){ var el=document.querySelector('.nav-item[data-page="'+d[0]+'"]'); return el && !el.classList.contains('hidden'); }); }
+function navBtn(d){ return '<button data-page="'+d[0]+'"><span class="ic">'+d[1]+'</span><span>'+d[2]+'</span></button>'; }
+function buildMobileBottomNav(){
+  var bar=$('mobileBottomNav'); if(!bar) return;
+  var vis=visibleNav();
+  bar.innerHTML=vis.slice(0,4).map(navBtn).join('')+'<button id="moreBtn"><span class="ic">⋯</span><span>More</span></button>';
+  bar.querySelectorAll('button[data-page]').forEach(function(b){ b.onclick=function(){ go(b.getAttribute('data-page')); }; });
+  var mb=$('moreBtn'); if(mb) mb.onclick=openMobileMore;
+  highlightBottomNav();
+}
+function highlightBottomNav(){ document.querySelectorAll('#mobileBottomNav button[data-page]').forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-page')===currentPage); }); }
+function openMobileMore(){
+  var g=$('moreGrid'); if(!g) return;
+  g.innerHTML=visibleNav().map(navBtn).join('');
+  g.querySelectorAll('button[data-page]').forEach(function(b){ b.onclick=function(){ closeMobileMore(); go(b.getAttribute('data-page')); }; });
+  $('mobileMoreDrawer').classList.add('show');
+}
+function closeMobileMore(){ var d=$('mobileMoreDrawer'); if(d) d.classList.remove('show'); }
+window.openMobileMore=openMobileMore; window.closeMobileMore=closeMobileMore;
 
 /* dashboard */
 function greetWord(){ var h=new Date().getHours(); return h<12?'Good morning':(h<17?'Good afternoon':'Good evening'); }
