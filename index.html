@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Nakoda MIS</title>
+  <meta name="theme-color" content="#DA1017">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/favicon.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- banners -->
+<div id="updateBar" class="banner update hidden">
+  <span><span class="dot"></span> A new version of Nakoda MIS is available.</span>
+  <button class="btn sm" id="updateBtn">Install update</button>
+</div>
+<div id="offlineBar" class="banner offline hidden">
+  <span><span class="dot"></span> You are offline — changes are saved on this device and will sync automatically.</span>
+</div>
+<div id="installBar" class="banner install hidden">
+  <span><span class="dot"></span> <span id="installText">Install Nakoda MIS on this device for faster, offline access.</span></span>
+  <button class="btn sm" id="installBtn">Install app</button>
+  <button class="iconbtn" id="installDismiss">Not now</button>
+</div>
+
+<!-- LOGIN -->
+<div id="view-login" class="auth-wrap">
+  <div class="auth-card">
+    <img class="logo" src="icons/login-logo.png" alt="Nakoda Diagnostics">
+    <div class="auth-title">Management Information System</div>
+    <div class="auth-sub">For You, At Your Doorstep</div>
+    <div id="loginMsg"></div>
+    <form id="loginForm">
+      <div class="field"><label>User ID</label><input id="loginId" autocomplete="username" placeholder="e.g. admin" required></div>
+      <div class="field"><label>Password</label>
+        <div class="pw-row"><input id="loginPw" type="password" autocomplete="current-password" required><span class="toggle" data-for="loginPw">show</span></div>
+      </div>
+      <button class="btn block" id="loginBtn" type="submit">Sign in</button>
+    </form>
+    <div class="foot">Nakoda Diagnostics &amp; Research Center</div>
+  </div>
+</div>
+
+<!-- FORCE PASSWORD CHANGE -->
+<div id="view-changepw" class="auth-wrap hidden">
+  <div class="auth-card">
+    <img class="logo" src="icons/login-logo.png" alt="Nakoda Diagnostics">
+    <div class="auth-title">Set a new password</div>
+    <div class="auth-sub">For your security, please change the password you were given.</div>
+    <div id="cpwMsg"></div>
+    <form id="cpwForm">
+      <div class="field" id="oldPwField"><label>Current password</label>
+        <div class="pw-row"><input id="oldPw" type="password"><span class="toggle" data-for="oldPw">show</span></div></div>
+      <div class="field"><label>New password (min 6 chars)</label>
+        <div class="pw-row"><input id="newPw" type="password" required><span class="toggle" data-for="newPw">show</span></div></div>
+      <div class="field"><label>Confirm new password</label>
+        <div class="pw-row"><input id="newPw2" type="password" required><span class="toggle" data-for="newPw2">show</span></div></div>
+      <button class="btn block" id="cpwBtn" type="submit">Update password</button>
+    </form>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="view-app" class="app hidden">
+  <div class="topbar">
+    <button class="iconbtn hamburger" id="menuBtn">&#9776;</button>
+    <img class="logo" src="icons/login-logo.png" alt="Nakoda">
+    <div class="spacer"></div>
+    <div class="syncchip" id="syncChip" title="Sync status"><span class="s"></span><span id="syncText">Online</span></div>
+    <div class="userchip">
+      <div class="avatar" id="meAvatar">N</div>
+      <div class="who"><b id="meName">—</b><span id="meRole">—</span></div>
+      <button class="iconbtn" id="logoutBtn">Logout</button>
+    </div>
+  </div>
+  <div class="body">
+    <div class="sidebar" id="sidebar">
+      <div class="nav-group">Home</div>
+      <div class="nav-item active" data-page="dashboard"><span class="ic">&#9638;</span> Dashboard</div>
+      <div class="nav-group">HR</div>
+      <div class="nav-item" data-page="employees"><span class="ic">&#128100;</span> Employees</div>
+      <div class="nav-item" data-page="profile"><span class="ic">&#9881;</span> My Profile</div>
+    </div>
+    <div class="content">
+      <div id="page-dashboard">
+        <div class="greet">
+          <div class="greet-text">
+            <div class="greet-eyebrow">Nakoda MIS</div>
+            <h1 id="greetHello">Welcome</h1>
+            <div class="greet-meta" id="greetMeta">—</div>
+          </div>
+          <div class="greet-actions">
+            <select id="dashBranch" class="greet-select"><option value="">All branches</option></select>
+            <button class="btn ghost sm" id="dashRefresh">&#8635; Refresh</button>
+          </div>
+        </div>
+        <div class="section-label">Overview</div>
+        <div class="kpis" id="kpis"></div>
+        <div class="section-label">Recently added staff</div>
+        <div class="card"><div class="table-wrap"><table id="recentTable"><tbody></tbody></table></div></div>
+      </div>
+
+      <div id="page-employees" class="hidden">
+        <div class="page-head"><h1>Employees</h1><div class="spacer"></div><button class="btn" id="addEmpBtn">+ Add Staff</button></div>
+        <div class="card">
+          <div class="toolbar">
+            <input class="search" id="empSearch" placeholder="Search name, login, phone…">
+            <select id="filterBranch"><option value="">All branches</option></select>
+            <select id="filterStatus"><option value="">All status</option><option value="Active">Active</option><option value="Inactive">Inactive</option></select>
+          </div>
+          <div class="table-wrap"><table id="empTable">
+            <thead><tr><th>Emp ID</th><th>Name</th><th>Login ID</th><th>Role</th><th>Office / Branch</th><th>Phone</th><th>Status</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table></div>
+          <div id="empEmpty" class="empty hidden">No employees match your filters.</div>
+          <div id="empLoad" class="center-load"><span class="loader dark"></span> Loading…</div>
+        </div>
+      </div>
+
+      <div id="page-profile" class="hidden">
+        <div class="page-head"><h1>My Profile</h1></div>
+        <div class="card" style="padding:20px;max-width:680px" id="profileCard"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<div id="modalRoot"></div>
+
+<script src="config.js"></script>
+<script src="api.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
