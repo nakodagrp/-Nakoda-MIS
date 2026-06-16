@@ -48,24 +48,35 @@
       '<div id="cs_lists"></div>';
     document.getElementById('cs_branch').addEventListener('change',load);
     load();
+    function compute(cards,b){
+      var ins=[],sna=[],act=[],exp=[];
+      (cards||[]).forEach(function(c){
+        if(b && String(c.branchId)!==String(b)) return;
+        if(c.status==='cancelled'||c.status==='renewed') return;
+        var lite={cardNumber:c.cardNumber,holderName:c.holderName,mobile:c.mobile,typeId:c.typeId,branchId:c.branchId,expiryDate:c.expiryDate};
+        if(c.status==='expired'){ exp.push(lite); return; }
+        if(c.activatedAt){ act.push(lite); } else if(c.sentAt){ sna.push(lite); } else { ins.push(lite); }
+      });
+      return {issuedNotSent:ins,sentNotActivated:sna,activated:act,expired:exp};
+    }
+    function paint(r){
+      var pill=function(n,label,color){ return '<div style="background:'+color+'14;border:1px solid '+color+'44;border-radius:10px;padding:10px 14px"><div style="font-size:22px;font-weight:800;color:'+color+'">'+n+'</div><div style="font-size:11.5px;color:#666">'+label+'</div></div>'; };
+      document.getElementById('cs_counts').innerHTML=
+        pill(r.issuedNotSent.length,'issued, not sent','#b08900')+
+        pill(r.sentNotActivated.length,'sent, not activated','#185fa5')+
+        pill(r.activated.length,'activated','#1a7f37')+
+        pill(r.expired.length,'expired','#C0392B');
+      document.getElementById('cs_lists').innerHTML=
+        section('Issued — not sent yet', r.issuedNotSent, 'sent')+
+        section('Sent — not activated yet', r.sentNotActivated, 'activated')+
+        section('Activated', r.activated, '')+
+        section('Expired', r.expired, '');
+      wire();
+    }
     function load(){
       var b=document.getElementById('cs_branch').value;
-      document.getElementById('cs_counts').innerHTML='<span class="loader dark"></span>';
-      API.cardStatusSummary(b).then(function(r){
-        if(!r.ok){ document.getElementById('cs_counts').innerHTML='<div class="empty">'+esc(r.error)+'</div>'; return; }
-        var pill=function(n,label,color){ return '<div style="background:'+color+'14;border:1px solid '+color+'44;border-radius:10px;padding:10px 14px"><div style="font-size:22px;font-weight:800;color:'+color+'">'+n+'</div><div style="font-size:11.5px;color:#666">'+label+'</div></div>'; };
-        document.getElementById('cs_counts').innerHTML=
-          pill(r.issuedNotSent.length,'issued, not sent','#b08900')+
-          pill(r.sentNotActivated.length,'sent, not activated','#185fa5')+
-          pill(r.activated.length,'activated','#1a7f37')+
-          pill(r.expired.length,'expired','#C0392B');
-        document.getElementById('cs_lists').innerHTML=
-          section('Issued — not sent yet', r.issuedNotSent, 'sent')+
-          section('Sent — not activated yet', r.sentNotActivated, 'activated')+
-          section('Activated', r.activated, '')+
-          section('Expired', r.expired, '');
-        wire();
-      });
+      API.cachedCards().then(function(c){ if(c&&c.length) paint(compute(c,b)); else document.getElementById('cs_counts').innerHTML='<span class="loader dark"></span>'; });
+      API.listCards({}).then(function(r){ if(r.ok) paint(compute(r.cards,b)); });
     }
     function section(title,list,action){
       if(!list.length) return '';

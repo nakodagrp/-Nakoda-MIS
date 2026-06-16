@@ -179,9 +179,9 @@
     upsertCardType:function(data){ return call('upsertCardType',{token:getToken(),data:data}); },
     listCards:function(filter){ filter=filter||{}; var full=!filter.search&&!filter.status&&!filter.branchId&&!filter.typeId; return call('listCards',{token:getToken(),filter:filter}).then(function(r){ if(r.ok&&full) kvSet('cards',r.cards); return r; }).catch(function(){ return kvGet('cards').then(function(c){ return {ok:true,cards:c||[],perms:{},offline:true}; }); }); },
     getCard:function(n){ return call('getCard',{token:getToken(),cardNumber:n}); },
-    issueCard:function(data){ return call('issueCard',{token:getToken(),data:data}); },
-    renewCard:function(n,img){ return call('renewCard',{token:getToken(),cardNumber:n,imageDataUri:img||''}); },
-    cancelCard:function(n,reason){ return call('cancelCard',{token:getToken(),cardNumber:n,reason:reason||''}); },
+    issueCard:function(data){ if(navigator.onLine) return call('issueCard',{token:getToken(),data:data}).then(function(r){ if(r.ok) API.refreshCards(); return r; }).catch(function(){ return queueIssue(data); }); return queueIssue(data); },
+    renewCard:function(n,img){ var f=function(){ return queueCardOp('renewCard',{cardNumber:n,imageDataUri:img||''},function(){ return patchCard(n,{status:'renewed',_pending:true}); }); }; if(navigator.onLine) return call('renewCard',{token:getToken(),cardNumber:n,imageDataUri:img||''}).then(function(r){ if(r.ok) API.refreshCards(); return r; }).catch(f); return f(); },
+    cancelCard:function(n,reason){ var f=function(){ return queueCardOp('cancelCard',{cardNumber:n,reason:reason||''},function(){ return patchCard(n,{status:'cancelled',_pending:true}); }); }; if(navigator.onLine) return call('cancelCard',{token:getToken(),cardNumber:n,reason:reason||''}).then(function(r){ if(r.ok) API.refreshCards(); return r; }).catch(f); return f(); },
     cardSummary:function(){ return call('cardSummary',{token:getToken()}).catch(function(){ return {ok:false}; }); },
     cachedEmployees:function(){ return kvGet('employees'); },
     cachedCards:function(){ return kvGet('cards'); },
@@ -189,12 +189,13 @@
     cachedCardTypes:function(){ return kvGet('cardtypes'); },
     listCardPrices:function(){ return call('listCardPrices',{token:getToken()}).then(function(r){ if(r.ok) kvSet('cardprices',r.prices); return r; }).catch(function(){ return kvGet('cardprices').then(function(p){ return {ok:true,prices:p||[],canSet:false}; }); }); },
     setCardPrice:function(typeId,branchId,price){ return call('setCardPrice',{token:getToken(),typeId:typeId,branchId:branchId,price:price}); },
-    markCardSent:function(n){ return call('markCardSent',{token:getToken(),cardNumber:n}); },
-    markCardActivated:function(n){ return call('markCardActivated',{token:getToken(),cardNumber:n}); },
+    markCardSent:function(n){ var now=new Date().toISOString(); var f=function(){ return queueCardOp('markCardSent',{cardNumber:n},function(){ return patchCard(n,{sentAt:now,_pending:true}); }); }; if(navigator.onLine) return call('markCardSent',{token:getToken(),cardNumber:n}).then(function(r){ if(r.ok) API.refreshCards(); return r; }).catch(f); return f(); },
+    markCardActivated:function(n){ var now=new Date().toISOString(); var f=function(){ return queueCardOp('markCardActivated',{cardNumber:n},function(){ return patchCard(n,{activatedAt:now,sentAt:now,_pending:true}); }); }; if(navigator.onLine) return call('markCardActivated',{token:getToken(),cardNumber:n}).then(function(r){ if(r.ok) API.refreshCards(); return r; }).catch(f); return f(); },
     cardStatusSummary:function(branchId){ return call('cardStatusSummary',{token:getToken(),branchId:branchId||''}); },
 
     /* fire-and-forget cache refresh */
     refreshEmployees:function(){ return API.listEmployees().catch(function(){}); },
+    refreshCards:function(){ return API.listCards({}).catch(function(){}); },
 
     syncOutbox:syncOutbox,
     pending:function(){ return obAll().then(function(i){return i.length;}); },
@@ -215,6 +216,24 @@
   function queueUpdate(empId,data){ return obAdd({action:'updateEmployee',empId:empId,data:data,ts:Date.now()}).then(function(){ emit(); return {ok:true,offline:true}; }); }
   function queueStatus(empId,status){ return obAdd({action:'setStatus',empId:empId,status:status,ts:Date.now()}).then(function(){ emit(); return {ok:true,offline:true}; }); }
 
+  /* ---------- card writes offline ---------- */
+  function cardsCache(){ return kvGet('cards').then(function(c){ return c||[]; }); }
+  function patchCard(n,patch){ return cardsCache().then(function(list){ for(var i=0;i<list.length;i++){ if(String(list[i].cardNumber)===String(n)) Object.assign(list[i],patch); } return kvSet('cards',list); }); }
+  function queueCardOp(action,payload,optimistic){ return obAdd({action:action,payload:payload,ts:Date.now()}).then(function(){ return optimistic?optimistic():null; }).then(function(){ emit(); return {ok:true,offline:true}; }); }
+  function queueIssue(data){
+    var tempNo='PENDING-'+uuid();
+    return kvGet('cardtypes').then(function(types){
+      var t=((types||[]).filter(function(x){return x.typeId===data.typeId;})[0])||null;
+      var months=t?(Number(t.validityMonths)||12):12, exp=new Date(); exp.setMonth(exp.getMonth()+months);
+      var card={cardNumber:tempNo,branchId:data.branchId,typeId:data.typeId,holderName:data.holderName,mobile:data.mobile,
+        referByName:data.referByName||'',issuedDate:new Date().toISOString(),expiryDate:exp.toISOString(),status:'active',
+        amount:Number(data.amount)||0,sentAt:'',activatedAt:'',_pending:true};
+      return cardsCache().then(function(list){ list.unshift(card); return kvSet('cards',list); }).then(function(){
+        return obAdd({action:'issueCard',payload:{data:data},ts:Date.now()}).then(function(){ emit(); return {ok:true,offline:true,card:card,type:t,branchName:data.branchId}; });
+      });
+    });
+  }
+
   var _syncing=false;
   function syncOutbox(){
     if(_syncing || !navigator.onLine || !configured()) return Promise.resolve();
@@ -224,10 +243,10 @@
       items.sort(function(a,b){return a.id-b.id;});
       function next(i){
         if(i>=items.length) return Promise.resolve();
-        var it=items[i], payload={token:token};
-        if(it.action==='createEmployee') payload.data=it.data;
-        if(it.action==='updateEmployee'){ payload.empId=it.empId; payload.data=it.data; }
-        if(it.action==='setStatus'){ payload.empId=it.empId; payload.status=it.status; }
+        var it=items[i], payload;
+        if(it.payload){ payload=Object.assign({}, it.payload); }
+        else { payload={}; if(it.action==='createEmployee') payload.data=it.data; if(it.action==='updateEmployee'){ payload.empId=it.empId; payload.data=it.data; } if(it.action==='setStatus'){ payload.empId=it.empId; payload.status=it.status; } }
+        payload.token=token;
         return call(it.action,payload).then(function(r){
           // remove on success OR on a logical (non-network) rejection so the queue never jams
           return obDel(it.id).then(function(){ return next(i+1); });
@@ -237,7 +256,7 @@
         });
       }
       return next(0);
-    }).then(function(){ _syncing=false; emit(); return API.refreshEmployees(); })
+    }).then(function(){ _syncing=false; emit(); API.refreshCards(); return API.refreshEmployees(); })
       .catch(function(){ _syncing=false; emit(); });
   }
 
