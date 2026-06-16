@@ -182,6 +182,11 @@
     renewCard:function(n,img){ return call('renewCard',{token:getToken(),cardNumber:n,imageDataUri:img||''}); },
     cancelCard:function(n,reason){ return call('cancelCard',{token:getToken(),cardNumber:n,reason:reason||''}); },
     cardSummary:function(){ return call('cardSummary',{token:getToken()}).catch(function(){ return {ok:false}; }); },
+    listCardPrices:function(){ return call('listCardPrices',{token:getToken()}).then(function(r){ if(r.ok) kvSet('cardprices',r.prices); return r; }).catch(function(){ return kvGet('cardprices').then(function(p){ return {ok:true,prices:p||[],canSet:false}; }); }); },
+    setCardPrice:function(typeId,branchId,price){ return call('setCardPrice',{token:getToken(),typeId:typeId,branchId:branchId,price:price}); },
+    markCardSent:function(n){ return call('markCardSent',{token:getToken(),cardNumber:n}); },
+    markCardActivated:function(n){ return call('markCardActivated',{token:getToken(),cardNumber:n}); },
+    cardStatusSummary:function(branchId){ return call('cardStatusSummary',{token:getToken(),branchId:branchId||''}); },
 
     /* fire-and-forget cache refresh */
     refreshEmployees:function(){ return API.listEmployees().catch(function(){}); },

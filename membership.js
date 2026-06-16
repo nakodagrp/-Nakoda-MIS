@@ -80,7 +80,7 @@
   function newCardCanvas(){ var c=document.createElement('canvas'); c.width=1012; c.height=638; c.style.width='100%'; c.style.borderRadius='12px'; c.style.display='block'; return c; }
 
   /* ── state ────────────────────────────────────────────────────────────── */
-  var TYPES=[], TYPEMAP={};
+  var TYPES=[], TYPEMAP={}, PRICEMAP={};
   function loadTypes(){ return API.listCardTypes().then(function(r){ if(r.ok){ TYPES=r.types||[]; TYPEMAP={}; TYPES.forEach(function(t){ TYPEMAP[t.typeId]=t; }); } return TYPES; }).catch(function(){ return TYPES; }); }
 
   /* ── list page ────────────────────────────────────────────────────────── */
@@ -89,6 +89,7 @@
     var v=document.getElementById('page-cards');
     v.innerHTML=
       '<div class="page-head"><h1>Membership Cards</h1><div class="spacer"></div>'+
+        '<button class="btn ghost" id="cardPriceBtn">Pricing</button>'+
         '<button class="btn ghost" id="cardTypesBtn">Card types</button>'+
         '<button class="btn" id="issueCardBtn">+ Issue card</button></div>'+
       '<div id="cardExpBanner"></div>'+
@@ -98,6 +99,8 @@
       '</div><div id="cardList" class="center-load"><span class="loader dark"></span> Loading…</div></div>';
     document.getElementById('issueCardBtn').onclick=function(){ openIssueCardModal(); };
     document.getElementById('cardTypesBtn').onclick=function(){ openCardTypes(); };
+    document.getElementById('cardPriceBtn').onclick=function(){ if(window.openPricingModal) window.openPricingModal(); };
+    API.listCardPrices().then(function(r){ if(r.ok){ PRICEMAP={}; (r.prices||[]).forEach(function(p){ PRICEMAP[p.typeId+'|'+p.branchId]=p.price; }); } });
     var deb; document.getElementById('cardSearch').addEventListener('input',function(){ clearTimeout(deb); deb=setTimeout(load,250); });
     document.getElementById('cardStatus').addEventListener('change',load);
     loadTypes().then(load);
@@ -124,44 +127,66 @@
   function cstatus(s){ var m={active:'#1a7f37',expired:'#9aa0a6',cancelled:'#C0392B',renewed:'#185fa5'}; return '<span class="badge" style="background:'+(m[s]||'#999')+'22;color:'+(m[s]||'#999')+'">'+esc(s||'active')+'</span>'; }
 
   /* ── card detail ──────────────────────────────────────────────────────── */
+  function branchPhone(branchId){ var b=((S.meta&&S.meta.branches)||[]).filter(function(x){return String(x.BranchID)===String(branchId);})[0]; return b&&b.Phone?String(b.Phone):''; }
+  function buildMessage(c,t,branchName,branchMobile){
+    var bm=String(branchMobile||'').replace(/\s+/g,''); if(/^\d{10}$/.test(bm)) bm='+91 '+bm;
+    var referByLine=c.referByName?('Refer by: *'+c.referByName+'*\n'):'';
+    return 'Greeting from NAKODA DIAGNOSTICS AND RESEARCH CENTER - '+(branchName||'')+'\n\n'+
+      'Membership Number: '+(c.cardNumber||'')+'\n'+
+      'Name: '+String(c.holderName||'').toUpperCase()+'\n'+
+      'Card Type: '+String(t&&t.name?t.name:'').toUpperCase()+'\n'+
+      'Valid up to: '+fmtDate(c.expiryDate)+'\n'+
+      referByLine+'\n'+
+      'Benefits\n'+(t&&t.benefitsText?t.benefitsText:'')+'\n\n'+
+      'Please save '+(bm||'our number')+' as *Nakoda Lab* for any emergency.';
+  }
   function openCardDetail(cardNumber){
     API.getCard(cardNumber).then(function(r){
       if(!r.ok){ toast(r.error,true); return; }
-      var c=r.card, t=r.type;
-      var body='<div id="cardCanvasBox"></div>'+
-        '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">'+
-          '<button class="btn" id="dlPng" style="flex:1;min-width:120px"><i></i>⬇ Download</button>'+
-          '<button class="btn" id="shWa" style="flex:1;min-width:120px;background:#1ba94c">⤴ WhatsApp</button>'+
-        '</div>'+
-        (r.canIssue?'<div style="display:flex;gap:8px;margin-top:8px"><button class="btn ghost" id="renewC" style="flex:1">↻ Renew</button>'+(c.status==='active'?'<button class="btn ghost" id="cancelC" style="flex:1;color:#C0392B">Cancel</button>':'')+'</div>':'')+
-        '<div style="margin-top:12px;font-size:13px;color:#555;line-height:1.7">'+
-          '<b>'+esc(t?t.name:c.typeId)+'</b> · '+esc(r.branchName)+'<br>'+
-          'Status: '+esc(c.status)+' · Issued '+fmtDate(c.issuedDate)+' · Valid thru '+fmtExpiry(c.expiryDate)+
-          (t&&t.benefitsText?'<div style="margin-top:8px;white-space:pre-line;background:#f6f7f9;border-radius:8px;padding:10px;font-size:12.5px">'+esc(t.benefitsText)+'</div>':'')+
-        '</div>';
-      openModal('Card · '+c.cardNumber, body, '<button class="btn ghost" onclick="closeModal()">Close</button>');
+      var c=r.card, t=r.type, msg=buildMessage(c,t,r.branchName,branchPhone(c.branchId));
+      var info='<div class="grid2" style="font-size:13px;margin-top:12px">'+
+        '<div><b>Holder:</b> '+esc(c.holderName)+'</div><div><b>Mobile:</b> '+esc(c.mobile)+'</div>'+
+        '<div><b>Type:</b> '+esc(t?t.name:c.typeId)+'</div><div><b>Branch:</b> '+esc(r.branchName)+'</div>'+
+        '<div><b>Issued:</b> '+fmtDate(c.issuedDate)+'</div><div><b>Valid till:</b> '+fmtDate(c.expiryDate)+'</div>'+
+        '<div class="full"><b>Status:</b> '+cstatus(c.status)+'</div></div>';
+      var sendBlock=r.canIssue?(
+        '<div style="font-size:12px;color:#888;margin:14px 0 4px">Message to send (you can edit before sending)</div>'+
+        '<textarea id="cdMsg" rows="6" style="width:100%;font-size:12.5px;border:1px solid #e3e5ea;border-radius:8px;padding:8px">'+esc(msg)+'</textarea>'+
+        '<div style="background:#f6f7f9;border-radius:10px;padding:12px;margin-top:10px">'+
+          '<div style="font-weight:600;font-size:13px;margin-bottom:6px">Send to customer</div>'+
+          '<div style="font-size:11.5px;color:#888;margin-bottom:4px">Option 1 · Auto-attach image + text (pick contact)</div>'+
+          '<button class="btn" id="cdShare" style="width:100%">📤 Share Card via System (Auto-attach)</button>'+
+          '<div style="font-size:11.5px;color:#888;margin:10px 0 4px">Option 2 · Direct chat with customer</div>'+
+          '<div style="display:flex;gap:8px"><input id="cdNum" value="'+esc(c.mobile||'')+'" style="flex:1;border:1px solid #e3e5ea;border-radius:8px;padding:9px" inputmode="numeric"><button class="btn ghost" id="cdChat" style="white-space:nowrap">💬 Open Chat</button></div>'+
+          '<div style="font-size:11px;color:#999;font-style:italic;margin-top:4px">Image goes into your clipboard — paste it inside WhatsApp.</div>'+
+        '</div>'):'';
+      var benefits=(t&&t.benefitsText)?('<div style="margin-top:10px;white-space:pre-line;background:#f6f7f9;border-radius:8px;padding:10px;font-size:12.5px">'+esc(t.benefitsText)+'</div>'):'';
+      var actions='<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn ghost" id="cdDl" style="flex:1;min-width:110px">⬇ Download Image</button>'+
+        (r.canIssue&&!c.activatedAt&&c.status==='active'?'<button class="btn ghost" id="cdActivate" style="flex:1;min-width:110px;color:#1a7f37">✓ Mark activated</button>':'')+
+        (r.canIssue&&c.status==='active'?'<button class="btn ghost" id="cdCancel" style="flex:1;min-width:110px;color:#C0392B">Cancel Card</button>':'')+
+        (r.canIssue?'<button class="btn ghost" id="cdRenew" style="flex:1;min-width:110px">↻ Renew</button>':'')+'</div>';
+      openModal('Card · '+c.cardNumber, '<div id="cardCanvasBox"></div>'+info+sendBlock+benefits+actions, '<button class="btn ghost" onclick="closeModal()">Close</button>');
       var cv=newCardCanvas(); document.getElementById('cardCanvasBox').appendChild(cv); drawCard(cv,c,t);
-      document.getElementById('dlPng').onclick=function(){ var a=document.createElement('a'); a.download='Nakoda-Card-'+c.cardNumber+'.png'; a.href=cv.toDataURL('image/png'); a.click(); };
-      document.getElementById('shWa').onclick=function(){ shareCard(cv,c,t,r.branchName); };
-      var rn=document.getElementById('renewC'); if(rn) rn.onclick=function(){ if(!confirm('Renew this card? A new card with a fresh '+(t?t.validityMonths:12)+'-month validity will be issued.')) return; API.renewCard(c.cardNumber).then(function(rr){ if(rr.ok){ closeModal(); toast('Card renewed: '+rr.card.cardNumber); renderMembershipCards(); } else toast(rr.error,true); }); };
-      var cn=document.getElementById('cancelC'); if(cn) cn.onclick=function(){ var why=prompt('Reason for cancelling?',''); if(why===null) return; API.cancelCard(c.cardNumber,why).then(function(rr){ if(rr.ok){ closeModal(); toast('Card cancelled'); renderMembershipCards(); } else toast(rr.error,true); }); };
+      document.getElementById('cdDl').onclick=function(){ var a=document.createElement('a'); a.download='Nakoda-Card-'+c.cardNumber+'.png'; a.href=cv.toDataURL('image/png'); a.click(); };
+      var markSent=function(){ if(r.canIssue) API.markCardSent(c.cardNumber).catch(function(){}); };
+      var sh=document.getElementById('cdShare'); if(sh) sh.onclick=function(){ shareSystem(cv,c,(document.getElementById('cdMsg')||{}).value||msg); markSent(); };
+      var ch=document.getElementById('cdChat'); if(ch) ch.onclick=function(){ openChatWA(cv,(document.getElementById('cdNum').value||'').replace(/\D/g,''),(document.getElementById('cdMsg')||{}).value||msg); markSent(); };
+      var ac=document.getElementById('cdActivate'); if(ac) ac.onclick=function(){ API.markCardActivated(c.cardNumber).then(function(rr){ if(rr.ok){ closeModal(); toast('Marked activated'); renderMembershipCards(); } else toast(rr.error,true); }); };
+      var rn=document.getElementById('cdRenew'); if(rn) rn.onclick=function(){ if(!confirm('Renew this card? A new card with a fresh '+(t?t.validityMonths:12)+'-month validity will be issued.')) return; API.renewCard(c.cardNumber).then(function(rr){ if(rr.ok){ closeModal(); toast('Renewed: '+rr.card.cardNumber); renderMembershipCards(); } else toast(rr.error,true); }); };
+      var cn=document.getElementById('cdCancel'); if(cn) cn.onclick=function(){ var why=prompt('Reason for cancelling?',''); if(why===null) return; API.cancelCard(c.cardNumber,why).then(function(rr){ if(rr.ok){ closeModal(); toast('Card cancelled'); renderMembershipCards(); } else toast(rr.error,true); }); };
     });
   }
-  function waMessage(c,t,branchName){
-    return 'Dear '+(c.holderName||'Member')+',\n\nWelcome to Nakoda Diagnostics! Your '+(t?t.name:'')+' membership card is active.\n'+
-      'Card No: '+c.cardNumber+'\nValid till: '+fmtExpiry(c.expiryDate)+'\nBranch: '+branchName+'\n'+
-      (t&&t.benefitsText?('\nYour benefits:\n'+t.benefitsText+'\n'):'')+
-      '\nFor You, At Your Doorstep.';
+  function shareSystem(cv,c,msg){
+    if(cv.toBlob && navigator.canShare){ cv.toBlob(function(blob){ var file=new File([blob],'Nakoda-Card-'+c.cardNumber+'.png',{type:'image/png'}); if(navigator.canShare({files:[file]})){ navigator.share({files:[file],text:msg,title:'Nakoda Membership Card'}).catch(function(){}); } else { toast('Sharing not supported here — use Open Chat or Download.',true); } },'image/png'); }
+    else { toast('Sharing not supported here — use Open Chat or Download.',true); }
   }
-  function shareCard(cv,c,t,branchName){
-    var msg=waMessage(c,t,branchName);
-    if(cv.toBlob && navigator.canShare){
-      cv.toBlob(function(blob){
-        var file=new File([blob],'Nakoda-Card-'+c.cardNumber+'.png',{type:'image/png'});
-        if(navigator.canShare({files:[file]})){ navigator.share({files:[file],text:msg,title:'Nakoda Membership Card'}).catch(function(){}); }
-        else { window.open('https://wa.me/'+(c.mobile?('91'+c.mobile):'')+'?text='+encodeURIComponent(msg),'_blank'); }
-      },'image/png');
-    } else { window.open('https://wa.me/'+(c.mobile?('91'+c.mobile):'')+'?text='+encodeURIComponent(msg),'_blank'); }
+  function makeClipItem(blob){ var o={}; o[blob.type]=blob; return o; }
+  function openChatWA(cv,mobile,msg){
+    var go=function(){ window.open('https://wa.me/'+(mobile?('91'+mobile):'')+'?text='+encodeURIComponent(msg),'_blank'); };
+    try{ if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(msg); }catch(e){}
+    if(cv.toBlob && navigator.clipboard && window.ClipboardItem){
+      cv.toBlob(function(blob){ try{ navigator.clipboard.write([new ClipboardItem(makeClipItem(blob))]).then(function(){ toast('Card image copied — paste it in WhatsApp'); }).catch(function(){}); }catch(e){} go(); },'image/png');
+    } else { go(); }
   }
 
   /* ── issue modal ──────────────────────────────────────────────────────── */
@@ -175,13 +200,21 @@
       '<div class="field"><label>Mobile (10 digits) *</label><input id="ic_mobile" inputmode="numeric" maxlength="10"></div>'+
       '<div class="field"><label>Branch</label><select id="ic_branch">'+brOpts+'</select></div>'+
       '<div class="field"><label>Card type *</label><select id="ic_type">'+typeOpts+'</select></div>'+
+      '<div class="field full" id="ic_priceWrap" style="display:none"><label>Price (this branch)</label><div id="ic_price" style="font-size:15px;font-weight:600;color:#DA1017"></div></div>'+
       '<div class="field full"><label>Referred by (optional)</label><input id="ic_refer"></div>'+
       '<div class="field full"><label>Preview</label><div id="ic_preview"></div></div>'+
     '</div>';
     openModal('Issue Membership Card', body, '<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="ic_save">Create card</button>');
     var pv=document.getElementById('ic_preview'), cv=newCardCanvas(); pv.appendChild(cv);
-    function redraw(){ var t=TYPEMAP[document.getElementById('ic_type').value]; drawCard(cv,{cardNumber:'NAK-XXXX-00000',holderName:val('ic_name')||'MEMBER NAME',expiryDate:addMonths(t?t.validityMonths:12)},t); }
+    function redraw(){
+      var t=TYPEMAP[document.getElementById('ic_type').value];
+      drawCard(cv,{cardNumber:'NAK-XXXX-00000',holderName:val('ic_name')||'MEMBER NAME',expiryDate:addMonths(t?t.validityMonths:12)},t);
+      var key=document.getElementById('ic_type').value+'|'+document.getElementById('ic_branch').value;
+      var pw=document.getElementById('ic_priceWrap');
+      if(PRICEMAP[key]!=null){ document.getElementById('ic_price').textContent='₹'+PRICEMAP[key]; pw.style.display=''; } else { pw.style.display='none'; }
+    }
     document.getElementById('ic_type').addEventListener('change',redraw);
+    document.getElementById('ic_branch').addEventListener('change',redraw);
     document.getElementById('ic_name').addEventListener('input',redraw);
     redraw();
     document.getElementById('ic_save').onclick=function(){
@@ -212,17 +245,21 @@
   function themeName(id){ var t=CARD_THEMES[String(id||'').toUpperCase()]; return t?t.name:(id||'Hunter Green'); }
   window._editCardType=function(typeId){
     var t=typeId?(TYPEMAP[typeId]||{}):{validityMonths:12,themeId:'HUNTER_GREEN'};
-    var themeOpts=Object.keys(CARD_THEMES).map(function(k){ return '<option value="'+k+'"'+(k===String(t.themeId||'').toUpperCase()?' selected':'')+'>'+CARD_THEMES[k].name+'</option>'; }).join('');
+    var sel=String(t.themeId||'HUNTER_GREEN').toUpperCase();
+    var grid=Object.keys(CARD_THEMES).map(function(k){ var th=CARD_THEMES[k];
+      return '<div class="themetile'+(k===sel?' on':'')+'" data-theme="'+k+'" style="background:'+th.bg[1]+';color:'+th.foil[1]+(th.light?';border-color:#e3d9b0':'')+'">'+th.name+'</div>'; }).join('');
     var body='<div class="grid2">'+
       '<div class="field"><label>Type ID</label><input id="ct_id" value="'+esc(t.typeId||'')+'"'+(typeId?' disabled':'')+' placeholder="e.g. GOLD"></div>'+
-      '<div class="field"><label>Name *</label><input id="ct_name" value="'+esc(t.name||'')+'"></div>'+
-      '<div class="field"><label>Validity (months)</label><input id="ct_val" type="number" value="'+esc(t.validityMonths||12)+'"></div>'+
-      '<div class="field"><label>Design (theme)</label><select id="ct_theme">'+themeOpts+'</select></div>'+
-      '<div class="field full"><label>Benefits (one per line)</label><textarea id="ct_ben" rows="5">'+esc(t.benefitsText||'')+'</textarea></div>'+
+      '<div class="field"><label>Display Name *</label><input id="ct_name" value="'+esc(t.name||'')+'"></div>'+
+      '<div class="field full"><label>Validity (months)</label><input id="ct_val" type="number" value="'+esc(t.validityMonths||12)+'"></div>'+
+      '<div class="field full"><label>Card Theme</label><div class="themegrid" id="ct_theme">'+grid+'</div><input type="hidden" id="ct_themeval" value="'+sel+'"></div>'+
+      '<div class="field full"><label>Benefits (one per line, customer-facing)</label><textarea id="ct_ben" rows="5">'+esc(t.benefitsText||'')+'</textarea></div>'+
+      '<div class="field full"><label>Status</label><select id="ct_status"><option value="active"'+(t.status!=='inactive'?' selected':'')+'>active</option><option value="inactive"'+(t.status==='inactive'?' selected':'')+'>inactive</option></select></div>'+
     '</div>';
     openModal(typeId?('Edit type · '+t.name):'Add card type', body, '<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="ct_save">Save</button>');
+    document.querySelectorAll('#ct_theme .themetile').forEach(function(tile){ tile.onclick=function(){ document.querySelectorAll('#ct_theme .themetile').forEach(function(x){x.classList.remove('on');}); tile.classList.add('on'); document.getElementById('ct_themeval').value=tile.getAttribute('data-theme'); }; });
     document.getElementById('ct_save').onclick=function(){
-      var data={ typeId:val('ct_id'), name:val('ct_name'), validityMonths:val('ct_val'), themeId:document.getElementById('ct_theme').value, benefitsText:document.getElementById('ct_ben').value };
+      var data={ typeId:val('ct_id'), name:val('ct_name'), validityMonths:val('ct_val'), themeId:document.getElementById('ct_themeval').value, benefitsText:document.getElementById('ct_ben').value, status:document.getElementById('ct_status').value };
       if(!data.name){ toast('Name is required.',true); return; }
       API.upsertCardType(data).then(function(r){ if(r.ok){ closeModal(); toast('Saved'); loadTypes(); } else toast(r.error,true); });
     };
