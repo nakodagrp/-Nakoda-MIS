@@ -115,21 +115,34 @@
     var et=e.endTime||(function(){ var m=toMin(st)+30; return p2(Math.floor(m/60))+':'+p2(m%60); })();
     var done=String(e.status)==='done';
     var body=
-      '<label class="fl">Title</label><input id="ceTitle" class="inp" value="'+esc(e.title||'')+'" placeholder="What is scheduled?">'+
-      '<label class="fl">Date</label><input id="ceDate" class="inp" type="date" value="'+esc(date)+'">'+
-      '<div class="row2"><div><label class="fl">Start</label><select id="ceStart" class="inp">'+timeOpts(st)+'</select></div>'+
-      '<div><label class="fl">End</label><select id="ceEnd" class="inp">'+timeOpts(et)+'</select></div></div>'+
-      '<label class="fl">Notes</label><textarea id="ceNotes" class="inp" rows="2" placeholder="Optional">'+esc(e.notes||'')+'</textarea>'+
-      (ed?'<div class="ce-stat">Status: <b class="'+(done?'st-done':'st-pend')+'">'+(done?'Completed':'Pending')+'</b></div>':'')+
+      '<div class="grid2">'+
+        '<div class="field full"><label>Title *</label><input id="ceTitle" value="'+esc(e.title||'')+'" placeholder="What is scheduled?"></div>'+
+        '<div class="field full"><label>Date</label><input id="ceDate" type="date" value="'+esc(date)+'"></div>'+
+        '<div class="field"><label>Start time</label><select id="ceStart">'+timeOpts(st)+'</select></div>'+
+        '<div class="field"><label>End time</label><select id="ceEnd">'+timeOpts(et)+'</select></div>'+
+        '<div class="field full"><label>Notes</label><textarea id="ceNotes" rows="2" placeholder="Optional">'+esc(e.notes||'')+'</textarea></div>'+
+        '<div class="field full" id="ceBusy"></div>'+
+        (ed?'<div class="field full"><div class="ce-stat">Status: <b class="'+(done?'st-done':'st-pend')+'">'+(done?'Completed':'Pending')+'</b></div></div>':'')+
+      '</div>'+
       '<div id="ceMsg"></div>';
     var foot='';
     if(ed && CAL.canManage){
-      foot+='<button class="btn-ghost danger" id="ceDel">Delete</button>'+
-            '<button class="btn-ghost" id="ceToggle">'+(done?'Reopen':'Mark done')+'</button>';
+      foot+='<button class="btn ghost sm" id="ceDel" style="color:var(--red)">Delete</button>'+
+            '<button class="btn ghost sm" id="ceToggle">'+(done?'Reopen':'Mark done')+'</button>';
     }
-    foot+=(CAL.canManage?'<button class="btn-primary" id="ceSave">'+(ed?'Save':'Add')+'</button>':'<span class="muted">View only</span>');
+    foot+=(CAL.canManage?'<button class="btn" id="ceSave">'+(ed?'Save':'Add')+'</button>':'<span class="muted">View only</span>');
     openModal(ed?'Edit entry':'New entry', body, foot);
     if(!CAL.canManage){ ['ceTitle','ceDate','ceStart','ceEnd','ceNotes'].forEach(function(id){ var n=document.getElementById(id); if(n) n.disabled=true; }); return; }
+    function renderBusy(){
+      var d=document.getElementById('ceDate').value;
+      var busy=liveEntries().filter(function(x){ return x.date===d && String(x.entryId)!==String(e.entryId||''); }).sort(byStart);
+      var box=document.getElementById('ceBusy'); if(!box) return;
+      box.innerHTML = busy.length
+        ? '<label>Already booked this day</label><div class="ce-busy">'+busy.map(function(b){ return '<span>'+(b.startTime?fmtHour(toMin(b.startTime)):'')+(b.endTime?'–'+fmtHour(toMin(b.endTime)):'')+' · '+esc(b.title)+'</span>'; }).join('')+'</div>'
+        : '';
+    }
+    renderBusy();
+    document.getElementById('ceDate').onchange=renderBusy;
     document.getElementById('ceStart').onchange=function(){ var es=document.getElementById('ceEnd'); if(toMin(es.value)<=toMin(this.value)){ var m=toMin(this.value)+30; es.value=p2(Math.floor(m/60))+':'+p2(m%60); } };
     document.getElementById('ceSave').onclick=function(){
       var t=document.getElementById('ceTitle').value.trim(); if(!t){ document.getElementById('ceMsg').innerHTML='<div class="msg error">Title is required.</div>'; return; }
@@ -144,55 +157,72 @@
     }
   }
 
-  /* ---------- export PNG (Daily Scheduler sheet) ---------- */
+  /* ---------- export PNG — A4 portrait Daily Scheduler ---------- */
   function exportPng(){
+    var logo=new Image();
+    logo.onload=function(){ renderSheet(logo); };
+    logo.onerror=function(){ renderSheet(null); };
+    logo.src='icons/login-logo.png';
+  }
+  function renderSheet(logo){
     var ds=dstr(CAL.anchor);
     var evs=liveEntries().filter(function(e){return e.date===ds;}).sort(byStart);
     var pend=pendingTasks();
-    var W=1040, headH=92, rowH=34, n=Math.max(evs.length, pend.length, 14);
-    var H=headH+rowH*(n+1)+40;
+    // A4 portrait @ ~150dpi
+    var W=1240, M=44, headH=190, colH=46, rowH=44;
+    var schRows=Math.max(evs.length, 16);
+    var schBottom=headH+colH+schRows*rowH;
+    var taskTop=schBottom+40, taskHeadH=46;
+    var needed=taskTop+taskHeadH+Math.max(pend.length,4)*40+40;
+    var H=Math.max(1754, needed);
     var c=document.createElement('canvas'); c.width=W; c.height=H; var x=c.getContext('2d');
     x.fillStyle='#ffffff'; x.fillRect(0,0,W,H);
-    // header band
-    x.fillStyle='#DA1017'; x.fillRect(0,0,W,6);
-    x.fillStyle='#1f1f1f'; x.font='bold 26px Arial'; x.fillText('DAILY SCHEDULER',28,48);
-    x.font='14px Arial'; x.fillStyle='#666';
-    x.fillText(DOW[CAL.anchor.getDay()]+', '+CAL.anchor.getDate()+' '+MON[CAL.anchor.getMonth()]+' '+CAL.anchor.getFullYear()+'   ·   '+CAL.ownerName, 28, 70);
-    x.textAlign='right'; x.fillStyle='#DA1017'; x.font='bold 20px Arial'; x.fillText('NAKODA',W-28,44);
-    x.fillStyle='#999'; x.font='11px Arial'; x.fillText('Diagnostics & Research Center', W-28, 62); x.textAlign='left';
-    // columns
-    var cT=28, cTime=110, cSch=470, cDone=80, gap=24;
-    var xTime=cT, xSch=xTime+cTime, xDone=xSch+cSch, xTasks=xDone+cDone+gap;
+    // top red bar + logo
+    x.fillStyle='#DA1017'; x.fillRect(0,0,W,9);
+    if(logo){ var lh=64, lw=Math.min(330, logo.width*(lh/logo.height)); x.drawImage(logo, M, 34, lw, lh); }
+    else { x.fillStyle='#DA1017'; x.font='bold 30px Arial'; x.fillText('NAKODA', M, 76); }
+    // right: date + owner
+    x.textAlign='right';
+    x.fillStyle='#1f1f1f'; x.font='bold 20px Arial';
+    x.fillText(DOW[CAL.anchor.getDay()]+', '+CAL.anchor.getDate()+' '+MON[CAL.anchor.getMonth()]+' '+CAL.anchor.getFullYear(), W-M, 56);
+    x.fillStyle='#777'; x.font='15px Arial'; x.fillText(CAL.ownerName, W-M, 82); x.textAlign='left';
+    // title
+    x.fillStyle='#1f1f1f'; x.font='bold 34px Arial'; x.fillText('DAILY SCHEDULER', M, 150);
+    x.strokeStyle='#e2e5ea'; x.lineWidth=1; x.beginPath(); x.moveTo(M,headH-14); x.lineTo(W-M,headH-14); x.stroke();
+    // schedule table columns
+    var xTime=M, wTime=150, wDone=130, xDone=W-M-wDone, xSch=xTime+wTime, wSch=xDone-xSch;
     var top=headH;
-    // column headers
-    x.fillStyle='#f3f4f7'; x.fillRect(cT,top,xDone+cDone-cT,rowH);
-    x.fillStyle='#444'; x.font='bold 12px Arial';
-    x.fillText('TIME',xTime+6,top+22); x.fillText('SCHEDULED',xSch+6,top+22); x.fillText('DONE',xDone+10,top+22);
-    x.fillText('TODAY’S TASKS / WAITING',xTasks+2,top+22);
-    top+=rowH;
-    // scheduled rows
-    x.font='13px Arial';
-    for(var i=0;i<Math.max(evs.length,12);i++){
-      var ry=top+i*rowH;
+    x.fillStyle='#f3f4f7'; x.fillRect(M,top,W-2*M,colH);
+    x.fillStyle='#555'; x.font='bold 14px Arial';
+    x.fillText('TIME',xTime+10,top+29); x.fillText('SCHEDULED',xSch+10,top+29); x.fillText('DONE',xDone+18,top+29);
+    var sy=top+colH;
+    x.font='15px Arial';
+    for(var i=0;i<schRows;i++){
+      var ry=sy+i*rowH;
       if(i<evs.length){
         var e=evs[i], done=String(e.status)==='done';
-        x.fillStyle=done?'#EAF6EE':'#ECEAFB'; x.fillRect(cT,ry,xDone+cDone-cT,rowH-1);
-        x.fillStyle='#555'; x.fillText((e.startTime?fmtHour(toMin(e.startTime)):'')+(e.endTime?'–'+fmtHour(toMin(e.endTime)):''), xTime+6, ry+22);
-        x.fillStyle=done?'#1a7f37':'#3c3489'; x.font='13px Arial';
-        x.fillText(clip(x,e.title,cSch-14), xSch+6, ry+22);
-        if(done){ x.fillStyle='#1a7f37'; x.font='bold 15px Arial'; x.fillText('✓', xDone+30, ry+23); x.font='13px Arial'; }
+        x.fillStyle=done?'#EAF6EE':'#ECEAFB'; x.fillRect(M,ry,W-2*M,rowH-1);
+        x.fillStyle='#555'; x.font='14px Arial';
+        x.fillText((e.startTime?fmtHour(toMin(e.startTime)):'')+(e.endTime?'–'+fmtHour(toMin(e.endTime)):''), xTime+10, ry+28);
+        x.fillStyle=done?'#1a7f37':'#3c3489'; x.font='bold 15px Arial';
+        x.fillText(clip(x,e.title,wSch-20), xSch+10, ry+28);
+        if(done){ x.fillStyle='#1a7f37'; x.font='bold 18px Arial'; x.fillText('✓', xDone+50, ry+29); }
       }
-      x.strokeStyle='#e7e9ee'; x.lineWidth=1; x.beginPath(); x.moveTo(cT,ry+rowH-0.5); x.lineTo(xDone+cDone,ry+rowH-0.5); x.stroke();
+      x.strokeStyle='#e7e9ee'; x.lineWidth=1; x.beginPath(); x.moveTo(M,ry+rowH-0.5); x.lineTo(W-M,ry+rowH-0.5); x.stroke();
     }
-    // vertical dividers
-    x.strokeStyle='#dfe2e8'; [xSch-6,xDone-6,xDone+cDone].forEach(function(vx){ x.beginPath(); x.moveTo(vx,headH); x.lineTo(vx,headH+rowH*(Math.max(evs.length,12)+1)); x.stroke(); });
-    // tasks column
-    x.fillStyle='#444'; x.font='bold 12px Arial';
-    var ty=headH+rowH+4;
-    if(!pend.length){ x.fillStyle='#999'; x.font='13px Arial'; x.fillText('No pending tasks.', xTasks+2, ty+18); }
-    pend.forEach(function(t,k){ var yy=ty+k*rowH; x.fillStyle='#DA1017'; x.fillText('•', xTasks+2, yy+18); x.fillStyle='#333'; x.font='13px Arial'; x.fillText(clip(x,t.title+(t.dueTime?'  ('+t.dueTime+')':''), W-xTasks-30), xTasks+18, yy+18); });
-    // save
-    c.toBlob(function(b){ var u=URL.createObjectURL(b); var a=document.createElement('a'); a.href=u; a.download='Daily-Scheduler-'+ds+'.png'; a.click(); setTimeout(function(){URL.revokeObjectURL(u);},2000); toast('Daily Scheduler image saved'); });
+    // borders + dividers
+    x.strokeStyle='#d7dbe2'; x.lineWidth=1.2;
+    x.strokeRect(M,top,W-2*M,colH+schRows*rowH);
+    [xSch, xDone].forEach(function(vx){ x.beginPath(); x.moveTo(vx,top); x.lineTo(vx,top+colH+schRows*rowH); x.stroke(); });
+    // tasks section
+    x.fillStyle='#fbeceA'; x.fillRect(M,taskTop,W-2*M,taskHeadH);
+    x.fillStyle='#DA1017'; x.font='bold 16px Arial'; x.fillText('TODAY’S TASKS / WAITING LIST',M+12,taskTop+30);
+    var ty=taskTop+taskHeadH+8;
+    if(!pend.length){ x.fillStyle='#999'; x.font='15px Arial'; x.fillText('No pending tasks.', M+14, ty+22); }
+    pend.forEach(function(t,k){ var yy=ty+k*40; x.fillStyle='#DA1017'; x.font='bold 16px Arial'; x.fillText('•', M+14, yy+22); x.fillStyle='#333'; x.font='15px Arial'; x.fillText(clip(x,t.title+(t.dueTime?'   ('+t.dueTime+')':''), W-2*M-40), M+36, yy+22); x.strokeStyle='#f0f1f4'; x.beginPath(); x.moveTo(M+12,yy+32); x.lineTo(W-M-12,yy+32); x.stroke(); });
+    // footer
+    x.fillStyle='#aab'; x.font='12px Arial'; x.textAlign='right'; x.fillText('Nakoda Diagnostics & Research Center', W-M, H-22); x.textAlign='left';
+    c.toBlob(function(b){ var u=URL.createObjectURL(b); var a=document.createElement('a'); a.href=u; a.download='Daily-Scheduler-'+ds+'.png'; a.click(); setTimeout(function(){URL.revokeObjectURL(u);},2000); toast('Daily Scheduler (A4) saved'); });
   }
   function clip(x,s,max){ s=String(s||''); if(x.measureText(s).width<=max) return s; while(s.length>1 && x.measureText(s+'…').width>max) s=s.slice(0,-1); return s+'…'; }
 

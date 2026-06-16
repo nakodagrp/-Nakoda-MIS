@@ -193,7 +193,9 @@ body.modal-open #mobileBottomNav{display:none!important}
 .cal-tk .dot{width:8px;height:8px;border-radius:50%;background:#bbb;flex:none}
 .cal-tk .dot.high{background:var(--red)} .cal-tk .dot.medium{background:#e6a100} .cal-tk .dot.low{background:#1a7f37}
 
-.ce-stat{font-size:13px;margin-top:8px} .st-done{color:var(--ok)} .st-pend{color:#7F77DD}
+.ce-stat{font-size:13px} .st-done{color:var(--ok)} .st-pend{color:#7F77DD}
+.ce-busy{display:flex;flex-direction:column;gap:4px}
+.ce-busy span{font-size:12px;color:#5046b8;background:#f3f1fc;border-radius:7px;padding:5px 9px}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .btn-ghost.danger{color:var(--red)}
 
