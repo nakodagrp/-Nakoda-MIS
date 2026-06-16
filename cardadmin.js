@@ -69,11 +69,15 @@
     }
     function section(title,list,action){
       if(!list.length) return '';
-      return '<div class="section-label">'+esc(title)+' ('+list.length+')</div><div class="card" style="margin-bottom:16px"><div class="table-wrap"><table><tbody>'+
+      var actionable=(action==='sent'||action==='activated');
+      var bulk=actionable?'<button class="btn sm" data-bulk="'+action+'" style="margin-left:auto">Mark selected '+(action==='sent'?'sent':'activated')+'</button>':'';
+      var head='<div style="display:flex;align-items:center;gap:8px;margin:8px 2px 8px"><span class="section-label" style="margin:0">'+esc(title)+' ('+list.length+')</span>'+bulk+'</div>';
+      return head+'<div class="card" style="margin-bottom:16px"><div class="table-wrap"><table><tbody>'+
         list.map(function(c){
-          var act=action==='sent'?'<button class="btn ghost sm" data-mark="sent" data-cn="'+esc(c.cardNumber)+'">Mark sent</button>'
-                 :action==='activated'?'<button class="btn ghost sm" data-mark="activated" data-cn="'+esc(c.cardNumber)+'">Mark activated</button>':'';
-          return '<tr><td><b>'+esc(c.holderName)+'</b><br><small style="color:#888">'+esc(c.cardNumber)+' · '+esc(c.mobile)+'</small></td>'+
+          var sel=actionable?'<input type="checkbox" class="cs-sel" data-cn="'+esc(c.cardNumber)+'" style="transform:scale(1.25);margin-right:9px">':'';
+          var act=action==='sent'?'<button class="btn ghost sm" data-mark="sent" data-cn="'+esc(c.cardNumber)+'">Sent</button>'
+                 :action==='activated'?'<button class="btn ghost sm" data-mark="activated" data-cn="'+esc(c.cardNumber)+'">Activate</button>':'';
+          return '<tr><td>'+sel+'<b>'+esc(c.holderName)+'</b><br><small style="color:#888">'+esc(c.cardNumber)+' · '+esc(c.mobile)+'</small></td>'+
             '<td>'+esc(c.typeId)+'</td>'+
             '<td><div style="display:flex;gap:6px;justify-content:flex-end"><button class="btn ghost sm" data-open="'+esc(c.cardNumber)+'">View</button>'+act+'</div></td></tr>';
         }).join('')+'</tbody></table></div></div>';
@@ -84,6 +88,17 @@
         var cn=b.getAttribute('data-cn'), mk=b.getAttribute('data-mark');
         var p=mk==='sent'?API.markCardSent(cn):API.markCardActivated(cn);
         b.disabled=true; p.then(function(r){ if(r.ok){ toast('Marked '+mk); load(); } else { toast(r.error,true); b.disabled=false; } }).catch(function(){ toast('Needs internet.',true); b.disabled=false; }); }; });
+      document.querySelectorAll('#cs_lists [data-bulk]').forEach(function(btn){ btn.onclick=function(){
+        var action=btn.getAttribute('data-bulk');
+        var card=btn.parentNode.nextElementSibling;
+        var sels=Array.prototype.slice.call(card.querySelectorAll('.cs-sel')).filter(function(x){return x.checked;});
+        if(!sels.length){ toast('Tick at least one card first.',true); return; }
+        if(!confirm('Mark '+sels.length+' card(s) as '+action+'?')) return;
+        btn.disabled=true; var n=sels.length;
+        (function next(i){ if(i>=n){ toast('Marked '+n+' card(s)'); load(); return; }
+          var cn=sels[i].getAttribute('data-cn'); var p=action==='sent'?API.markCardSent(cn):API.markCardActivated(cn);
+          p.then(function(){ next(i+1); }).catch(function(){ next(i+1); }); })(0);
+      }; });
     }
   }
 

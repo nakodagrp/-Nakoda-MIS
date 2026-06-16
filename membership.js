@@ -101,35 +101,39 @@
     document.getElementById('cardTypesBtn').onclick=function(){ openCardTypes(); };
     document.getElementById('cardPriceBtn').onclick=function(){ if(window.openPricingModal) window.openPricingModal(); };
     API.listCardPrices().then(function(r){ if(r.ok){ PRICEMAP={}; (r.prices||[]).forEach(function(p){ PRICEMAP[p.typeId+'|'+p.branchId]=p.price; }); } });
-    var deb; document.getElementById('cardSearch').addEventListener('input',function(){ clearTimeout(deb); deb=setTimeout(load,250); });
-    document.getElementById('cardStatus').addEventListener('change',load);
+    var ALLCARDS=[];
+    var deb; document.getElementById('cardSearch').addEventListener('input',function(){ clearTimeout(deb); deb=setTimeout(paint,120); });
+    document.getElementById('cardStatus').addEventListener('change',paint);
     loadTypes().then(load);
     API.cardSummary().then(function(r){ if(r.ok){ var b=document.getElementById('cardExpBanner'); if(r.expiringSoon>0) b.innerHTML='<div style="background:#fff7e6;border:1px solid #f3d98a;border-radius:10px;padding:9px 12px;font-size:13px;color:#7a5b00;margin-bottom:12px">⏳ '+r.expiringSoon+' card(s) expiring within 7 days</div>'; } });
 
     function load(){
-      var filter={ search:document.getElementById('cardSearch').value.trim(), status:document.getElementById('cardStatus').value };
-      var box=document.getElementById('cardList'); box.className='center-load'; box.innerHTML='<span class="loader dark"></span> Loading…';
-      API.listCards(filter).then(function(r){
-        if(!r.ok){ box.className=''; box.innerHTML='<div class="empty">'+esc(r.error)+'</div>'; return; }
-        _canIssue=r.perms&&r.perms.canIssue;
-        document.getElementById('issueCardBtn').style.display=_canIssue?'':'none';
-        document.getElementById('cardTypesBtn').style.display=(r.perms&&r.perms.canManageTypes)?'':'none';
-        var list=r.cards||[]; box.className='';
-        if(!list.length){ box.innerHTML='<div class="empty">No cards yet. Tap “+ Issue card”. <br><small>(If you migrated old cards, make sure the Membership_Cards sheet is copied in.)</small></div>'; return; }
-        box.innerHTML='<div class="table-wrap"><table><thead><tr><th>Card No</th><th>Name</th><th>Mobile</th><th>Type</th><th>Branch</th><th>Valid thru</th><th>Status</th><th></th></tr></thead><tbody>'+
-          list.map(function(c){ var t=TYPEMAP[c.typeId];
-            return '<tr class="crow" data-cn="'+esc(c.cardNumber)+'" style="cursor:pointer">'+
-              '<td><b>'+esc(c.cardNumber)+'</b></td>'+
-              '<td>'+esc(c.holderName)+'</td>'+
-              '<td>'+esc(c.mobile||'—')+'</td>'+
-              '<td>'+esc(t?t.name:c.typeId)+'</td>'+
-              '<td>'+esc(bName(c.branchId))+'</td>'+
-              '<td>'+esc(fmtExpiry(c.expiryDate))+'</td>'+
-              '<td>'+cstatus(c.status)+'</td>'+
-              '<td><button class="btn ghost sm">View</button></td></tr>';
-          }).join('')+'</tbody></table></div>';
-        box.querySelectorAll('.crow').forEach(function(el){ el.onclick=function(){ openCardDetail(el.getAttribute('data-cn')); }; });
+      var box=document.getElementById('cardList');
+      API.cachedCards().then(function(c){ if(c&&c.length){ ALLCARDS=c; paint(); } else { box.className='center-load'; box.innerHTML='<span class="loader dark"></span> Loading…'; } });
+      API.listCards({}).then(function(r){
+        if(r.ok){ _canIssue=r.perms&&r.perms.canIssue;
+          document.getElementById('issueCardBtn').style.display=_canIssue?'':'none';
+          document.getElementById('cardTypesBtn').style.display=(r.perms&&r.perms.canManageTypes)?'':'none';
+          document.getElementById('cardPriceBtn').style.display='';
+          ALLCARDS=r.cards||[]; paint();
+        } else if(!ALLCARDS.length){ box.className=''; box.innerHTML='<div class="empty">'+esc(r.error)+'</div>'; }
       });
+    }
+    function paint(){
+      var box=document.getElementById('cardList'); box.className='';
+      var q=document.getElementById('cardSearch').value.trim().toLowerCase(), st=document.getElementById('cardStatus').value;
+      var list=ALLCARDS.filter(function(c){
+        if(st && String(c.status)!==st) return false;
+        if(q && (String(c.cardNumber)+' '+(c.holderName||'')+' '+(c.mobile||'')).toLowerCase().indexOf(q)<0) return false;
+        return true;
+      });
+      if(!list.length){ box.innerHTML='<div class="empty">No cards'+((q||st)?' match your filter.':' yet. Tap “+ Issue card”.')+'</div>'; return; }
+      box.innerHTML='<div class="table-wrap"><table><thead><tr><th>Card No</th><th>Name</th><th>Mobile</th><th>Type</th><th>Branch</th><th>Valid thru</th><th>Status</th><th></th></tr></thead><tbody>'+
+        list.map(function(c){ var t=TYPEMAP[c.typeId];
+          return '<tr class="crow" data-cn="'+esc(c.cardNumber)+'" style="cursor:pointer">'+
+            '<td><b>'+esc(c.cardNumber)+'</b></td><td>'+esc(c.holderName)+'</td><td>'+esc(c.mobile||'—')+'</td><td>'+esc(t?t.name:c.typeId)+'</td><td>'+esc(bName(c.branchId))+'</td><td>'+esc(fmtExpiry(c.expiryDate))+'</td><td>'+cstatus(c.status)+'</td><td><button class="btn ghost sm">View</button></td></tr>';
+        }).join('')+'</tbody></table></div>';
+      box.querySelectorAll('.crow').forEach(function(el){ el.onclick=function(){ openCardDetail(el.getAttribute('data-cn')); }; });
     }
   }
   function cstatus(s){ var m={active:'#1a7f37',expired:'#9aa0a6',cancelled:'#C0392B',renewed:'#185fa5'}; return '<span class="badge" style="background:'+(m[s]||'#999')+'22;color:'+(m[s]||'#999')+'">'+esc(s||'active')+'</span>'; }

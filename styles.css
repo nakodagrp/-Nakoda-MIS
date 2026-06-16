@@ -170,6 +170,14 @@ tbody tr:hover{background:#fcfcfd}
   .field input,.field select,.field textarea{font-size:16px}
 }
 @keyframes slideUp{from{transform:translateY(100%)}to{transform:none}}
+@media(max-width:760px){
+  .page-head{gap:8px}
+  .page-head .spacer{display:none}
+  .page-head .btn{padding:9px 12px;font-size:13px}
+  .toolbar{flex-direction:column;align-items:stretch}
+  .toolbar select,.toolbar input{width:100%}
+}
+.cs-sel{accent-color:var(--red)}
 .themegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px}
 .themetile{border-radius:8px;padding:16px 6px;text-align:center;font-weight:600;font-size:12px;line-height:1.2;cursor:pointer;border:2px solid transparent;transition:.12s}
 .themetile.on{border-color:#DA1017;box-shadow:0 0 0 2px #fde8e9}

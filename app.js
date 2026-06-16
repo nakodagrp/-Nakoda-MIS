@@ -32,6 +32,20 @@ document.addEventListener('DOMContentLoaded', function(){
 });
 function kvRead(k){ return new Promise(function(res){ var r=indexedDB.open('nakoda_mis');r.onsuccess=function(){try{var s=r.result.transaction('kv','readonly').objectStore('kv').get(k);s.onsuccess=function(){res(s.result);};s.onerror=function(){res(null);};}catch(e){res(null);}};r.onerror=function(){res(null);}; }); }
 
+/* manual update: clear caches + service worker, reload latest (stays logged in) */
+function forceUpdate(){
+  if(!confirm('Reinstall the latest version? The app will refresh. You stay logged in.')) return;
+  var done=false, go=function(){ if(done) return; done=true; location.reload(true); };
+  try{
+    var jobs=[];
+    if(window.caches&&caches.keys) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){return caches.delete(k);})); }));
+    if(navigator.serviceWorker&&navigator.serviceWorker.getRegistrations) jobs.push(navigator.serviceWorker.getRegistrations().then(function(rs){ return Promise.all(rs.map(function(r){return r.unregister();})); }));
+    Promise.all(jobs).then(go, go);
+  }catch(e){ go(); }
+  setTimeout(go,1500);
+}
+window.forceUpdate=forceUpdate;
+
 /* mobile: auto-label table cells for stacked-card view */
 function labelizeTables(){
   document.querySelectorAll('table').forEach(function(tbl){
@@ -207,33 +221,75 @@ window.openMobileMore=openMobileMore; window.closeMobileMore=closeMobileMore;
 
 /* dashboard */
 function greetWord(){ var h=new Date().getHours(); return h<12?'Good morning':(h<17?'Good afternoon':'Good evening'); }
+var DASH={emps:[],cards:[],prices:{}};
+function priceMap(arr){ var m={}; (arr||[]).forEach(function(p){ m[p.typeId+'|'+p.branchId]=Number(p.price)||0; }); return m; }
+function fmtMoney(n){ return Math.round(n||0).toLocaleString('en-IN'); }
 function loadDashboard(){
   var u=S.user||{};
   $('greetHello').textContent=greetWord()+', '+(u.FullName||'');
   var lvl=S.perms&&S.perms.level;
   var scope=(S.perms&&S.perms.canManageAll)?'org-wide':(lvl==='BRANCH_MGR'?('branch: '+branchName(u.Branch)):(lvl==='BRANCH_VIEW'?('branch: '+branchName(u.Branch)+' (view)'):(S.perms&&S.perms.canViewAll?'all branches (view)':'self-service')));
   $('greetMeta').textContent=[u.Role,(u.OfficeType==='Branch'?branchName(u.Branch):'Corporate Office'),scope].filter(Boolean).join(' · ');
-  $('kpis').innerHTML='<div class="kpi"><div class="n"><span class="loader dark"></span></div><div class="l">Loading…</div></div>';
-  API.listEmployees().then(function(r){ if(r.ok){ S.employees=r.employees; S.perms=r.perms||S.perms; renderDashboard(); } });
+  if(!DASH.emps.length && !DASH.cards.length) $('kpis').innerHTML='<div class="kpi"><div class="n"><span class="loader dark"></span></div><div class="l">Loading…</div></div>';
+  Promise.all([API.cachedEmployees(),API.cachedCards(),API.cachedPrices()]).then(function(a){
+    if(a[0]) DASH.emps=a[0]; if(a[1]) DASH.cards=a[1]; DASH.prices=priceMap(a[2]||[]);
+    if(DASH.emps.length||DASH.cards.length) renderDashboard();
+  });
+  Promise.all([API.listEmployees().catch(function(){return{};}),API.listCards({}).catch(function(){return{};}),API.listCardPrices().catch(function(){return{};})]).then(function(a){
+    if(a[0]&&a[0].ok){ DASH.emps=a[0].employees; S.employees=a[0].employees; S.perms=a[0].perms||S.perms; }
+    if(a[1]&&a[1].ok){ DASH.cards=a[1].cards; }
+    if(a[2]&&a[2].ok){ DASH.prices=priceMap(a[2].prices); }
+    renderDashboard();
+  });
 }
 function renderDashboard(){
   var branch=$('dashBranch').value;
-  var emp=S.employees.filter(function(e){ return !branch || String(e.Branch)===String(branch); });
-  var active=emp.filter(function(e){return e.Status==='Active';}).length;
-  var corp=emp.filter(function(e){return e.OfficeType==='Corporate';}).length;
-  var br=emp.filter(function(e){return e.OfficeType==='Branch';}).length;
-  $('kpis').innerHTML=kpi(emp.length,'Total staff')+kpi(active,'Active')+kpi(corp,'Corporate office')+kpi(br,'Branch staff');
+  var emp=(DASH.emps||[]).filter(function(e){ return !branch || String(e.Branch)===String(branch); });
+  var cards=(DASH.cards||[]).filter(function(c){ return !branch || String(c.branchId)===String(branch); });
+  var now=new Date(), m0=new Date(now.getFullYear(),now.getMonth(),1), soon=new Date(now.getTime()+7*864e5);
+  var activeCards=cards.filter(function(c){return c.status==='active';});
+  var cardsMTD=cards.filter(function(c){return new Date(c.issuedDate)>=m0;}).length;
+  var expiring=activeCards.filter(function(c){var x=new Date(c.expiryDate);return x>=now&&x<=soon;}).length;
+  var revenue=activeCards.reduce(function(s,c){return s+(DASH.prices[c.typeId+'|'+c.branchId]||0);},0);
+  var brs={}; emp.forEach(function(e){if(e.Branch)brs[e.Branch]=1;}); cards.forEach(function(c){if(c.branchId)brs[c.branchId]=1;});
+  $('kpis').innerHTML=
+    kpi(emp.filter(function(e){return e.Status==='Active';}).length,'Active staff')+
+    kpi(activeCards.length,'Active cards')+
+    kpi(cardsMTD,'Cards this month')+
+    kpi('₹'+fmtMoney(revenue),'Card business')+
+    kpi(expiring,'Expiring (7d)')+
+    kpi(Object.keys(brs).length,'Branches');
+  var html='';
+  if((S.perms&&S.perms.canViewAll) && !branch && Object.keys(brs).length>1){
+    var rows=Object.keys(brs).map(function(bid){
+      var be=emp.filter(function(e){return String(e.Branch)===bid;}).length;
+      var bc=activeCards.filter(function(c){return String(c.branchId)===bid;});
+      var brev=bc.reduce(function(s,c){return s+(DASH.prices[c.typeId+'|'+c.branchId]||0);},0);
+      return {name:branchName(bid),staff:be,cards:bc.length,rev:brev};
+    }).sort(function(a,b){return b.rev-a.rev;});
+    html+='<div class="section-label">By branch</div><div class="card"><div class="table-wrap"><table><thead><tr><th>Branch</th><th>Staff</th><th>Active cards</th><th>Card business</th></tr></thead><tbody>'+
+      rows.map(function(r){return '<tr><td><b>'+esc(r.name)+'</b></td><td>'+r.staff+'</td><td>'+r.cards+'</td><td>₹'+fmtMoney(r.rev)+'</td></tr>';}).join('')+'</tbody></table></div></div>';
+  }
+  var byType={}; activeCards.forEach(function(c){ byType[c.typeId]=(byType[c.typeId]||0)+1; });
+  var tk=Object.keys(byType);
+  if(tk.length){
+    html+='<div class="section-label">Active cards by type</div><div class="card"><div class="table-wrap"><table><thead><tr><th>Type</th><th>Count</th></tr></thead><tbody>'+
+      tk.sort(function(a,b){return byType[b]-byType[a];}).map(function(t){return '<tr><td><b>'+esc(t)+'</b></td><td>'+byType[t]+'</td></tr>';}).join('')+'</tbody></table></div></div>';
+  }
+  $('dashExtra').innerHTML=html;
   var recent=emp.slice().sort(function(a,b){return a.EmpID<b.EmpID?1:-1;}).slice(0,6);
-  var tb=$('recentTable').querySelector('tbody'); tb.innerHTML='';
-  if(!recent.length){ tb.innerHTML='<tr><td class="empty">No staff yet. Go to Employees → Add Staff.</td></tr>'; return; }
-  var rhtml=''; recent.forEach(function(e){ rhtml+='<tr><td><b>'+esc(e.FullName)+'</b>'+pend(e)+'</td><td>'+esc(e.Role)+'</td><td>'+officeBadge(e)+'</td><td>'+statusBadge(e.Status)+'</td></tr>'; }); tb.innerHTML=rhtml;
+  var tb=$('recentTable').querySelector('tbody'); var rhtml='';
+  if(!recent.length){ rhtml='<tr><td class="empty">No staff yet.</td></tr>'; }
+  else recent.forEach(function(e){ rhtml+='<tr><td><b>'+esc(e.FullName)+'</b>'+pend(e)+'</td><td>'+esc(e.Role)+'</td><td>'+officeBadge(e)+'</td><td>'+statusBadge(e.Status)+'</td></tr>'; });
+  tb.innerHTML=rhtml;
 }
 function kpi(n,l){ return '<div class="kpi"><div class="n">'+n+'</div><div class="l">'+esc(l)+'</div></div>'; }
 
 /* employees */
 function loadEmployees(){
-  $('empLoad').classList.remove('hidden'); $('empEmpty').classList.add('hidden'); $('empTable').querySelector('tbody').innerHTML='';
-  API.listEmployees().then(function(r){ S.employees=r.employees||[]; S.perms=r.perms||S.perms; $('empLoad').classList.add('hidden'); renderEmpTable(); });
+  $('empEmpty').classList.add('hidden');
+  API.cachedEmployees().then(function(c){ if(c&&c.length){ S.employees=c; $('empLoad').classList.add('hidden'); renderEmpTable(); } else { $('empLoad').classList.remove('hidden'); $('empTable').querySelector('tbody').innerHTML=''; } });
+  API.listEmployees().then(function(r){ if(r&&r.employees){ S.employees=r.employees; S.perms=r.perms||S.perms; } $('empLoad').classList.add('hidden'); renderEmpTable(); }).catch(function(){ $('empLoad').classList.add('hidden'); });
 }
 function renderEmpTable(){
   var q=$('empSearch').value.trim().toLowerCase(), fb=$('filterBranch').value, fs=$('filterStatus').value;
@@ -365,9 +421,11 @@ function loadProfile(){
       '<div class="field full"><label>Address</label><textarea id="p_Address" rows="2">'+esc(e.Address||'')+'</textarea></div>'+
       '<div class="field"><label>Emergency name</label><input id="p_EmergencyName" value="'+esc(e.EmergencyName||'')+'"></div>'+
       '<div class="field"><label>Emergency phone</label><input id="p_EmergencyPhone" value="'+esc(e.EmergencyPhone||'')+'"></div>'+
-    '</div><div style="margin-top:16px;display:flex;gap:10px">'+
+    '</div><div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">'+
       '<button class="btn" id="saveProfileBtn">Save my details</button>'+
-      '<button class="btn ghost" id="changePwBtn">Change password</button></div>';
+      '<button class="btn ghost" id="changePwBtn">Change password</button>'+
+      '<button class="btn ghost" id="updBtn" title="Clear cache and load the latest version">↻ Check for updates</button></div>';
+    $('updBtn').addEventListener('click', forceUpdate);
     $('saveProfileBtn').addEventListener('click', function(){
       var data={Phone:val('p_Phone'),Email:val('p_Email'),Address:val('p_Address'),EmergencyName:val('p_EmergencyName'),EmergencyPhone:val('p_EmergencyPhone')};
       var b=$('saveProfileBtn'); b.disabled=true; b.innerHTML='<span class="loader"></span> Saving…';
