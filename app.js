@@ -164,9 +164,8 @@ function applyPerms(){
   var canList=S.perms.canViewAll||S.perms.level==='BRANCH_MGR'||S.perms.level==='BRANCH_VIEW';
   document.querySelectorAll('[data-page="employees"]').forEach(function(n){ n.classList.toggle('hidden',!canList); });
   document.querySelectorAll('[data-page="branches"]').forEach(function(n){ n.classList.toggle('hidden',!S.perms.canManageAll); });
-  var canCards=S.perms.canViewAll||S.perms.level==='BRANCH_MGR'||S.perms.level==='BRANCH_VIEW';
-  document.querySelectorAll('[data-page="cards"]').forEach(function(n){ n.classList.toggle('hidden',!canCards); });
-  document.querySelectorAll('[data-page="cardstatus"]').forEach(function(n){ n.classList.toggle('hidden',!canCards); });
+  document.querySelectorAll('[data-page="cards"]').forEach(function(n){ n.classList.remove('hidden'); });
+  document.querySelectorAll('[data-page="cardstatus"]').forEach(function(n){ n.classList.remove('hidden'); });
   $('addEmpBtn').classList.toggle('hidden', !S.perms.canCreate);
   buildMobileBottomNav();
 }
@@ -212,8 +211,12 @@ function buildMobileBottomNav(){
 function highlightBottomNav(){ document.querySelectorAll('#mobileBottomNav button[data-page]').forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-page')===currentPage); }); }
 function openMobileMore(){
   var g=$('moreGrid'); if(!g) return;
-  g.innerHTML=visibleNav().map(navBtn).join('');
+  g.innerHTML=visibleNav().map(navBtn).join('')+
+    '<button data-act="update"><span class="ic">↻</span><span>Check update</span></button>'+
+    '<button data-act="logout"><span class="ic">⎋</span><span>Logout</span></button>';
   g.querySelectorAll('button[data-page]').forEach(function(b){ b.onclick=function(){ closeMobileMore(); go(b.getAttribute('data-page')); }; });
+  var ub=g.querySelector('[data-act="update"]'); if(ub) ub.onclick=function(){ closeMobileMore(); forceUpdate(); };
+  var lb=g.querySelector('[data-act="logout"]'); if(lb) lb.onclick=function(){ API.logout(); API.clearLocal(); location.reload(); };
   $('mobileMoreDrawer').classList.add('show');
 }
 function closeMobileMore(){ var d=$('mobileMoreDrawer'); if(d) d.classList.remove('show'); }
@@ -250,7 +253,7 @@ function renderDashboard(){
   var activeCards=cards.filter(function(c){return c.status==='active';});
   var cardsMTD=cards.filter(function(c){return new Date(c.issuedDate)>=m0;}).length;
   var expiring=activeCards.filter(function(c){var x=new Date(c.expiryDate);return x>=now&&x<=soon;}).length;
-  var revenue=activeCards.reduce(function(s,c){return s+(DASH.prices[c.typeId+'|'+c.branchId]||0);},0);
+  var revenue=activeCards.reduce(function(s,c){return s+(Number(c.amount)||0);},0);
   var brs={}; emp.forEach(function(e){if(e.Branch)brs[e.Branch]=1;}); cards.forEach(function(c){if(c.branchId)brs[c.branchId]=1;});
   $('kpis').innerHTML=
     kpi(emp.filter(function(e){return e.Status==='Active';}).length,'Active staff')+
@@ -264,7 +267,7 @@ function renderDashboard(){
     var rows=Object.keys(brs).map(function(bid){
       var be=emp.filter(function(e){return String(e.Branch)===bid;}).length;
       var bc=activeCards.filter(function(c){return String(c.branchId)===bid;});
-      var brev=bc.reduce(function(s,c){return s+(DASH.prices[c.typeId+'|'+c.branchId]||0);},0);
+      var brev=bc.reduce(function(s,c){return s+(Number(c.amount)||0);},0);
       return {name:branchName(bid),staff:be,cards:bc.length,rev:brev};
     }).sort(function(a,b){return b.rev-a.rev;});
     html+='<div class="section-label">By branch</div><div class="card"><div class="table-wrap"><table><thead><tr><th>Branch</th><th>Staff</th><th>Active cards</th><th>Card business</th></tr></thead><tbody>'+

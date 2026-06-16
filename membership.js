@@ -161,7 +161,7 @@
         '<div><b>Holder:</b> '+esc(c.holderName)+'</div><div><b>Mobile:</b> '+esc(c.mobile)+'</div>'+
         '<div><b>Type:</b> '+esc(t?t.name:c.typeId)+'</div><div><b>Branch:</b> '+esc(r.branchName)+'</div>'+
         '<div><b>Issued:</b> '+fmtDate(c.issuedDate)+'</div><div><b>Valid till:</b> '+fmtDate(c.expiryDate)+'</div>'+
-        '<div class="full"><b>Status:</b> '+cstatus(c.status)+'</div></div>';
+        '<div><b>Amount:</b> ₹'+esc(c.amount||0)+'</div><div><b>Status:</b> '+cstatus(c.status)+'</div></div>';
       var sendBlock=r.canIssue?(
         '<div style="font-size:12px;color:#888;margin:14px 0 4px">Message to send (you can edit before sending)</div>'+
         '<textarea id="cdMsg" rows="6" style="width:100%;font-size:12.5px;border:1px solid #e3e5ea;border-radius:8px;padding:8px">'+esc(msg)+'</textarea>'+
@@ -213,25 +213,28 @@
       '<div class="field"><label>Mobile (10 digits) *</label><input id="ic_mobile" inputmode="numeric" maxlength="10"></div>'+
       '<div class="field"><label>Branch</label><select id="ic_branch">'+brOpts+'</select></div>'+
       '<div class="field"><label>Card type *</label><select id="ic_type">'+typeOpts+'</select></div>'+
-      '<div class="field full" id="ic_priceWrap" style="display:none"><label>Price (this branch)</label><div id="ic_price" style="font-size:15px;font-weight:600;color:#DA1017"></div></div>'+
+      '<div class="field"><label>Amount collected (₹)</label><input id="ic_amount" inputmode="numeric" placeholder="0"><div id="ic_sugg" style="font-size:11px;color:#888;margin-top:4px"></div></div>'+
       '<div class="field full"><label>Referred by (optional)</label><input id="ic_refer"></div>'+
       '<div class="field full"><label>Preview</label><div id="ic_preview"></div></div>'+
     '</div>';
     openModal('Issue Membership Card', body, '<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="ic_save">Create card</button>');
     var pv=document.getElementById('ic_preview'), cv=newCardCanvas(); pv.appendChild(cv);
+    var amtTouched=false;
     function redraw(){
       var t=TYPEMAP[document.getElementById('ic_type').value];
       drawCard(cv,{cardNumber:'NAK-XXXX-00000',holderName:val('ic_name')||'MEMBER NAME',expiryDate:addMonths(t?t.validityMonths:12)},t);
       var key=document.getElementById('ic_type').value+'|'+document.getElementById('ic_branch').value;
-      var pw=document.getElementById('ic_priceWrap');
-      if(PRICEMAP[key]!=null){ document.getElementById('ic_price').textContent='₹'+PRICEMAP[key]; pw.style.display=''; } else { pw.style.display='none'; }
+      var sug=PRICEMAP[key], sg=document.getElementById('ic_sugg');
+      if(sug!=null){ sg.textContent='Suggested price: ₹'+sug+' (you can change)'; if(!amtTouched) document.getElementById('ic_amount').value=sug; }
+      else { sg.textContent='Enter amount collected (leave 0 if free).'; }
     }
     document.getElementById('ic_type').addEventListener('change',redraw);
     document.getElementById('ic_branch').addEventListener('change',redraw);
     document.getElementById('ic_name').addEventListener('input',redraw);
+    document.getElementById('ic_amount').addEventListener('input',function(){ amtTouched=true; });
     redraw();
     document.getElementById('ic_save').onclick=function(){
-      var data={ holderName:val('ic_name'), mobile:val('ic_mobile'), branchId:document.getElementById('ic_branch').value, typeId:document.getElementById('ic_type').value, referByName:val('ic_refer') };
+      var data={ holderName:val('ic_name'), mobile:val('ic_mobile'), branchId:document.getElementById('ic_branch').value, typeId:document.getElementById('ic_type').value, referByName:val('ic_refer'), amount:(val('ic_amount')||'').replace(/[^\d.]/g,'')||0 };
       if(!data.holderName){ toast('Member name is required.',true); return; }
       if(!/^\d{10}$/.test(String(data.mobile||'').replace(/\D/g,''))){ toast('Enter a valid 10-digit mobile.',true); return; }
       if(!data.typeId){ toast('Select a card type.',true); return; }

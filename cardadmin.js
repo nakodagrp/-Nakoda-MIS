@@ -72,7 +72,7 @@
       var actionable=(action==='sent'||action==='activated');
       var bulk=actionable?'<button class="btn sm" data-bulk="'+action+'" style="margin-left:auto">Mark selected '+(action==='sent'?'sent':'activated')+'</button>':'';
       var head='<div style="display:flex;align-items:center;gap:8px;margin:8px 2px 8px"><span class="section-label" style="margin:0">'+esc(title)+' ('+list.length+')</span>'+bulk+'</div>';
-      return head+'<div class="card" style="margin-bottom:16px"><div class="table-wrap"><table><tbody>'+
+      return head+'<div class="card" style="margin-bottom:16px"><div class="table-wrap"><table><thead><tr><th>Member</th><th>Type</th><th></th></tr></thead><tbody>'+
         list.map(function(c){
           var sel=actionable?'<input type="checkbox" class="cs-sel" data-cn="'+esc(c.cardNumber)+'" style="transform:scale(1.25);margin-right:9px">':'';
           var act=action==='sent'?'<button class="btn ghost sm" data-mark="sent" data-cn="'+esc(c.cardNumber)+'">Sent</button>'
