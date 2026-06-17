@@ -8,7 +8,7 @@
 
   function renderAssets(){
     var v=$id('page-assets');
-    v.innerHTML='<div class="page-head"><h1>Assets</h1></div>'+
+    v.innerHTML='<div class="page-head"><h1>Information</h1></div>'+
       (canManage()?'<div class="pm2-tabs" id="asTabs"><span data-t="lib" class="on">Library</span><span data-t="manage">Manage</span></div>':'')+
       '<div id="asBody"></div>';
     v.querySelectorAll('#asTabs span').forEach(function(s){ s.onclick=function(){ v.querySelectorAll('#asTabs span').forEach(function(z){z.classList.remove('on');}); s.classList.add('on'); s.getAttribute('data-t')==='manage'?loadManage():loadLib(); }; });

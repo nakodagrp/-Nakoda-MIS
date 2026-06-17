@@ -36,10 +36,40 @@
   /* ---------- network ---------- */
   function apiUrl(){ return (window.NAKODA_CONFIG&&window.NAKODA_CONFIG.API_URL)||''; }
   function configured(){ var u=apiUrl(); return u && u.indexOf('PASTE_YOUR')<0; }
-  function call(action, payload){
+  function NET(action, payload){
     var body=JSON.stringify(Object.assign({action:action}, payload||{}));
     return fetch(apiUrl(),{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body,redirect:'follow'})
       .then(function(r){ return r.json(); });
+  }
+  /* Every action that CHANGES data (used to tell reads from writes). */
+  var WRITES={createEmployee:1,updateEmployee:1,setStatus:1,resetPassword:1,changePassword:1,createBranch:1,updateBranch:1,
+    upsertCardType:1,issueCard:1,renewCard:1,cancelCard:1,setCardPrice:1,markCardSent:1,markCardActivated:1,
+    createTask:1,updateTask:1,setTaskStatus:1,deleteTask:1,createCalEntry:1,updateCalEntry:1,saveRecurring:1,setRecurringActive:1,
+    startInstance:1,advanceStage:1,saveProcess:1,saveStage:1,deleteStage:1,reorderStages:1,saveField:1,deleteField:1,
+    checkIn:1,checkOut:1,setAttendance:1,applyLeave:1,setLeave:1,savePolicy:1,ackPolicy:1,submitClaim:1,setClaim:1,runPayroll:1,
+    saveDaily:1,verifyDaily:1,addLedger:1,setLedger:1,saveInvoice:1,recordPayment:1,saveBankRows:1,
+    saveItem:1,deleteItem:1,saveVendor:1,deleteVendor:1,saveConsumption:1,raiseIndent:1,advanceIndent:1,saveAudit:1,approveAudit:1,
+    saveSection:1,deleteSection:1,saveVideo:1,deleteVideo:1,submitQuiz:1,saveAsset:1,deleteAsset:1,
+    login:1,validate:1,logout:1,uploadFile:1,importOldCards:1,
+    submitSuggestion:1,replySuggestion:1,saveFixedAsset:1,deleteFixedAsset:1};
+  /* Writes that already do their own optimistic queueing inside the method (don't double-queue here). */
+  var SELF_QUEUE={createEmployee:1,updateEmployee:1,setStatus:1,issueCard:1,renewCard:1,cancelCard:1,markCardSent:1,markCardActivated:1,
+    createTask:1,updateTask:1,setTaskStatus:1,deleteTask:1,createCalEntry:1,updateCalEntry:1,startInstance:1,advanceStage:1};
+  /* Writes that MUST stay online (auth, server-computed, exact-time, bulk). */
+  var NOQUEUE={login:1,validate:1,logout:1,changePassword:1,resetPassword:1,checkIn:1,checkOut:1,runPayroll:1,uploadFile:1,importOldCards:1,submitQuiz:1};
+  function rk(action,payload){ var p=Object.assign({},payload||{}); delete p.token; return 'rc:'+action+':'+JSON.stringify(p); }
+  function noTok(payload){ var p=Object.assign({},payload||{}); delete p.token; return p; }
+  function enqueue(action,payload){ return obAdd({action:action,payload:noTok(payload),ts:Date.now()}).then(function(){ emit(); return {ok:true,offline:true}; }); }
+  function readGet(action,payload){ return kvGet(rk(action,payload)).then(function(c){ if(c){ try{c=JSON.parse(JSON.stringify(c));}catch(e){} c.offline=true; return c; } return {ok:false,offline:true,error:'Not available offline yet — open this once while online.'}; }); }
+  function call(action, payload){
+    var isWrite=WRITES[action], queueable=isWrite && !SELF_QUEUE[action] && !NOQUEUE[action];
+    if(!isWrite){                                   /* READ: cache-first fallback, instant when offline */
+      if(!navigator.onLine) return readGet(action,payload);
+      return NET(action,payload).then(function(r){ if(r&&r.ok){ kvSet(rk(action,payload),r); } return r; }).catch(function(){ return readGet(action,payload); });
+    }
+    if(queueable && !navigator.onLine) return enqueue(action,payload);     /* WRITE offline: save instantly to outbox */
+    if(queueable) return NET(action,payload).catch(function(){ return enqueue(action,payload); });
+    return NET(action,payload);                      /* self-queued (method handles) or online-only */
   }
 
   /* ---------- status broadcasting ---------- */
@@ -82,6 +112,17 @@
   /* ---------- public API ---------- */
   var API={
     onStatus:onStatus, getToken:getToken, configured:configured,
+
+    /* ---- Suggestion / Complaint to MD ---- */
+    submitSuggestion:function(data){ return call('submitSuggestion',{token:getToken(),data:data}); },
+    mySuggestions:function(){ return call('mySuggestions',{token:getToken()}); },
+    suggestionInbox:function(){ return call('suggestionInbox',{token:getToken()}); },
+    replySuggestion:function(sugId,reply){ return call('replySuggestion',{token:getToken(),sugId:sugId,reply:reply}); },
+
+    /* ---- Fixed Asset Management ---- */
+    fixedAssets:function(branch){ return call('fixedAssets',{token:getToken(),branch:branch||''}); },
+    saveFixedAsset:function(data){ return call('saveFixedAsset',{token:getToken(),data:data}); },
+    deleteFixedAsset:function(assetId){ return call('deleteFixedAsset',{token:getToken(),assetId:assetId}); },
 
     login:function(loginId,password){
       return call('login',{loginId:loginId,password:password}).then(function(r){
@@ -367,7 +408,7 @@
         if(it.payload){ payload=Object.assign({}, it.payload); }
         else { payload={}; if(it.action==='createEmployee') payload.data=it.data; if(it.action==='updateEmployee'){ payload.empId=it.empId; payload.data=it.data; } if(it.action==='setStatus'){ payload.empId=it.empId; payload.status=it.status; } }
         payload.token=token;
-        return call(it.action,payload).then(function(r){
+        return NET(it.action,payload).then(function(r){
           // remove on success OR on a logical (non-network) rejection so the queue never jams
           return obDel(it.id).then(function(){ return next(i+1); });
         }).catch(function(){

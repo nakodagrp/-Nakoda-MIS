@@ -207,7 +207,18 @@ body.modal-open #mobileBottomNav{display:none!important}
 @media(max-width:760px){
   .cal-daywrap{grid-template-columns:1fr}
   .btn-add{margin-left:0}
-  .cw-dh{font-size:10px}
+  /* Week view only: wide, readable day columns that scroll sideways with a sticky time axis */
+  .cw-grid:has(.cw-7){overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .cw-grid:has(.cw-7) .cw-head,
+  .cw-grid:has(.cw-7) .cw-body{min-width:max-content}
+  .cw-axhead,.cw-axis{position:sticky;left:0;z-index:4}
+  .cw-axhead{background:#fafbfc}
+  .cw-axis{background:#fff;box-shadow:1px 0 0 var(--line)}
+  .cw-dh{flex:0 0 112px;font-size:11.5px}      /* day headers render only in week view */
+  .cw-7 .cw-col{flex:0 0 112px}
+  .cw-ev{font-size:11.5px;padding:4px 7px}
+  .cw-evt{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.25}
+  .cw-eh{font-size:10.5px}
 }
 
 /* ===================== PROCESS FLOW MONITOR ===================== */
