@@ -70,21 +70,57 @@
   }
 
   /* ---- Daily Entry ---- */
+  function docLinks(d){ var a=[]; if(d.b2cDocUrl)a.push('<a href="'+esc(d.b2cDocUrl)+'" target="_blank" rel="noopener">B2C</a>'); if(d.b2dDocUrl)a.push('<a href="'+esc(d.b2dDocUrl)+'" target="_blank" rel="noopener">B2D</a>'); if(d.testXlUrl)a.push('<a href="'+esc(d.testXlUrl)+'" target="_blank" rel="noopener">Tests</a>'); return a.length?a.join(' · '):'—'; }
   function loadDaily(){ API.listDaily(ACC.branch,ACC.ym).then(function(r){ var box=$id('accBody'); if(!box) return; if(!r||!r.ok){ box.innerHTML='<div class="empty">'+esc((r&&r.error)||'')+'</div>'; return; }
     var rows=(r.daily||[]).slice().sort(function(a,b){return a.date<b.date?1:-1;});
     box.innerHTML=(canEnter()?'<div class="fin-actions"><button class="btn" id="dlyAdd">+ Daily entry</button></div>':'')+
-      '<div class="table-wrap"><table><thead><tr><th>Date</th><th>B2C</th><th>B2D</th><th>Patients</th><th>Tests</th><th>Collection</th><th>Status</th></tr></thead><tbody>'+
-      (rows.length?rows.map(function(d){ return '<tr><td>'+esc(d.date)+'</td><td>₹'+money(d.b2c)+'</td><td>₹'+money(d.b2d)+'</td><td>'+(d.patients||0)+'</td><td>'+(d.tests||0)+'</td><td>₹'+money((Number(d.cashIn)||0)+(Number(d.bankIn)||0))+'</td><td>'+(String(d.status)==='verified'?'<span class="chip paid">✓ verified</span>':(r.canVerify?'<button class="btn ghost sm" data-vf="'+esc(d.dayId)+'">Verify</button>':'<span class="chip partial">pending</span>'))+'</td></tr>'; }).join(''):'<tr><td class="empty" colspan="7">No entries this month.</td></tr>')+'</tbody></table></div>';
+      '<div class="table-wrap"><table><thead><tr><th>Date</th><th>B2C</th><th>B2D</th><th>Patients</th><th>Tests</th><th>Collection</th><th>Docs</th><th>Status</th></tr></thead><tbody>'+
+      (rows.length?rows.map(function(d){ return '<tr><td>'+esc(d.date)+'</td><td>₹'+money(d.b2c)+'</td><td>₹'+money(d.b2d)+'</td><td>'+(d.patients||0)+'</td><td>'+(d.tests||0)+'</td><td>₹'+money((Number(d.cashIn)||0)+(Number(d.bankIn)||0))+'</td><td>'+docLinks(d)+'</td><td>'+(String(d.status)==='verified'?'<span class="chip paid">✓ verified</span>':(r.canVerify?'<button class="btn ghost sm" data-vf="'+esc(d.dayId)+'">Verify</button>':'<span class="chip partial">pending</span>'))+'</td></tr>'; }).join(''):'<tr><td class="empty" colspan="8">No entries this month.</td></tr>')+'</tbody></table></div>';
     var a=$id('dlyAdd'); if(a) a.onclick=openDailyForm;
     box.querySelectorAll('[data-vf]').forEach(function(b){ b.onclick=function(){ API.verifyDaily(b.getAttribute('data-vf')).then(function(x){ if(x&&x.ok){ toast('Verified'); loadDaily(); } }); }; });
   }); }
   function openDailyForm(){
-    var body='<div class="grid2"><div class="field"><label>Date</label><input id="dlDate" class="in" type="date" value="'+(new Date().toISOString().slice(0,10))+'"></div><div class="field"><label>Patients served</label><input id="dlPat" class="in" type="number"></div>'+
-      '<div class="field"><label>B2C income (₹)</label><input id="dlB2c" class="in" type="number"></div><div class="field"><label>B2D income (₹)</label><input id="dlB2d" class="in" type="number"></div>'+
-      '<div class="field"><label>Cash collected (₹)</label><input id="dlCash" class="in" type="number"></div><div class="field"><label>UPI/Bank collected (₹)</label><input id="dlBank" class="in" type="number"></div>'+
-      '<div class="field full"><label>Tests done (count) — Excel upload comes with Inventory</label><input id="dlTests" class="in" type="number"></div></div><div id="dlMsg"></div>';
+    var brs=(S.meta&&S.meta.branches)||[];
+    /* Multi-branch users (head office) pick which branch this entry belongs to; single-branch users
+       (branch manager / branch accounts) are fixed to their own branch by the backend. */
+    var brField=canViewAll()
+      ? '<div class="field full"><label>Branch *</label><select id="dlBranch" class="in"><option value="">Select branch</option>'+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'"'+(b.BranchID===ACC.branch?' selected':'')+'>'+esc(b.BranchName)+'</option>';}).join('')+'</select></div>'
+      : '';
+    function incBlock(t,lbl){ return '<div class="dl-blk"><div class="dl-blk-h">'+lbl+'</div><div class="row2">'+
+        '<div class="field"><label>Cash (₹)</label><input id="dl'+t+'Cash" class="in dl-amt" type="number" inputmode="numeric"></div>'+
+        '<div class="field"><label>Bank / UPI (₹)</label><input id="dl'+t+'Bank" class="in dl-amt" type="number" inputmode="numeric"></div></div>'+
+        '<label class="dl-file"><span id="dl'+t+'DocSt">📎 Attach '+t.toUpperCase()+' document (PDF)</span><input id="dl'+t+'Doc" type="file" accept="application/pdf,image/*" hidden></label></div>'; }
+    var body='<div class="grid2">'+brField+
+      '<div class="field"><label>Date</label><input id="dlDate" class="in" type="date" value="'+(new Date().toISOString().slice(0,10))+'"></div>'+
+      '<div class="field"><label>Patients served</label><input id="dlPat" class="in" type="number" inputmode="numeric"></div></div>'+
+      incBlock('B2c','B2C income (walk-in / patient)')+
+      incBlock('B2d','B2D income (doctor / referral)')+
+      '<div class="dl-total"><span>Total business</span><b id="dlTotal">₹0</b></div>'+
+      '<div class="grid2"><div class="field"><label>Tests done (count)</label><input id="dlTests" class="in" type="number" inputmode="numeric"></div>'+
+      '<div class="field"><label>Tests Excel (.xlsx)</label><label class="dl-file"><span id="dlXlSt">📎 Attach Excel</span><input id="dlXl" type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden></label></div></div>'+
+      '<div id="dlMsg"></div>';
     openModal('Daily business entry', body, '<button class="btn" id="dlSave">Submit to Accountant</button>');
-    $id('dlSave').onclick=function(){ this.disabled=true; API.saveDaily({branchId:ACC.branch,date:$id('dlDate').value,b2c:$id('dlB2c').value,b2d:$id('dlB2d').value,patients:$id('dlPat').value,tests:$id('dlTests').value,cashIn:$id('dlCash').value,bankIn:$id('dlBank').value}).then(function(r){ if(r&&r.ok){ closeModal(); toast('Saved'); loadDaily(); } else $id('dlMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; }); };
+
+    var st={b2cDocUrl:'',b2dDocUrl:'',testXlUrl:''};
+    function recalc(){ var t=0; ['dlB2cCash','dlB2cBank','dlB2dCash','dlB2dBank'].forEach(function(id){ t+=Number(($id(id)||{}).value)||0; }); $id('dlTotal').textContent='₹'+money(t); }
+    ['dlB2cCash','dlB2cBank','dlB2dCash','dlB2dBank'].forEach(function(id){ var el=$id(id); if(el) el.addEventListener('input',recalc); });
+    function bindUpload(inputId,stEl,stKey,label){ var inp=$id(inputId); if(!inp) return; inp.onchange=function(){ var f=this.files[0]; if(!f) return; if(f.size>8*1024*1024){ toast('File too large (max 8MB)',true); this.value=''; return; }
+      var s=$id(stEl); s.textContent='Uploading…'; var fr=new FileReader();
+      fr.onload=function(){ var d=fr.result,i=d.indexOf(',');
+        API.uploadFile({base64:d.slice(i+1),fileName:f.name,mimeType:f.type,subPath:'DailyBusiness/'+(($id('dlDate')||{}).value||'')}).then(function(r){ if(r&&r.ok){ st[stKey]=r.url; s.innerHTML='✓ '+esc(f.name)+' — tap to replace'; } else { s.textContent='Upload failed — tap to retry'; } }, function(){ s.textContent='Upload failed — tap to retry'; }); };
+      fr.readAsDataURL(f); }; }
+    bindUpload('dlB2cDoc','dlB2cDocSt','b2cDocUrl');
+    bindUpload('dlB2dDoc','dlB2dDocSt','b2dDocUrl');
+    bindUpload('dlXl','dlXlSt','testXlUrl');
+
+    $id('dlSave').onclick=function(){
+      var bsel=$id('dlBranch'); var bid=bsel?bsel.value:ACC.branch;
+      if(bsel && !bid){ $id('dlMsg').innerHTML='<div class="msg error">Please select a branch.</div>'; return; }
+      this.disabled=true;
+      API.saveDaily({branchId:bid,date:$id('dlDate').value,patients:$id('dlPat').value,tests:$id('dlTests').value,
+        b2cCash:$id('dlB2cCash').value,b2cBank:$id('dlB2cBank').value,b2dCash:$id('dlB2dCash').value,b2dBank:$id('dlB2dBank').value,
+        b2cDocUrl:st.b2cDocUrl,b2dDocUrl:st.b2dDocUrl,testXlUrl:st.testXlUrl}).then(function(r){ if(r&&r.ok){ closeModal(); toast('Saved'); loadDaily(); } else { $id('dlMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; var b=$id('dlSave'); if(b) b.disabled=false; } });
+    };
   }
 
   /* ---- Invoices ---- */

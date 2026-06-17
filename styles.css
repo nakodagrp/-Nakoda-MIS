@@ -336,8 +336,7 @@ table.pm-grid{border-collapse:collapse;font-size:11px;min-width:560px}
 .ddot{display:inline-block;width:9px;height:9px;border-radius:50%;flex:none}
 .ddot.ok{background:#1a7f37}.ddot.warn{background:#c47f00}.ddot.bad{background:#DA1017}
 .dept-board{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:10px;margin-bottom:6px}
-.dept-card{text-align:left;border:1px solid var(--line);background:#fff;border-radius:12px;padding:11px 12px;cursor:pointer;display:block;width:100%}
-.dept-card:hover{border-color:var(--red)}
+.dept-card{text-align:left;border:1px solid var(--line);background:#fff;border-radius:12px;padding:11px 12px;cursor:default;display:block;width:100%}
 .dept-top{display:flex;align-items:center;gap:7px;margin-bottom:8px}
 .dept-ic{font-size:16px;flex:none}
 .dept-nm{font-size:12px;font-weight:600;color:#33373d;flex:1;line-height:1.25;min-width:0}
@@ -414,6 +413,14 @@ table.pm-grid{border-collapse:collapse;font-size:11px;min-width:560px}
 .rec-bad{background:#fdeef0;color:var(--red);font-weight:700;border-radius:8px;padding:6px 12px}
 td.dr,.dr{color:var(--red);font-weight:600}
 td.cr,.cr{color:#1a7f37;font-weight:600}
+/* Daily business entry — income blocks, file attach, live total */
+.dl-blk{border:1px solid var(--line);border-radius:11px;padding:11px 12px;margin-bottom:10px}
+.dl-blk-h{font-size:12.5px;font-weight:600;color:#33373d;margin-bottom:8px}
+.dl-file{display:flex;align-items:center;justify-content:center;gap:7px;border:1px dashed #cfd3da;border-radius:9px;padding:10px;font-size:12.5px;color:#555;cursor:pointer;text-align:center;background:#fafbfc;margin-top:2px}
+.dl-file:hover{border-color:var(--red);color:var(--red)}
+.dl-total{display:flex;align-items:center;justify-content:space-between;background:#eafaf3;border-radius:10px;padding:11px 14px;margin:2px 0 12px}
+.dl-total span{font-size:13px;font-weight:600;color:#1a7f37}
+.dl-total b{font-size:21px;color:#1a7f37}
 
 /* ===================== STAFF TRAINING ===================== */
 .sec-h{font-size:11px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.04em;margin:14px 0 7px}
