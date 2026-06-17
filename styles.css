@@ -207,12 +207,18 @@ body.modal-open #mobileBottomNav{display:none!important}
 @media(max-width:760px){
   .cal-daywrap{grid-template-columns:1fr}
   .btn-add{margin-left:0}
-  /* Week view only: wide, readable day columns that scroll sideways with a sticky time axis */
-  .cw-grid.cw-week,.cw-grid:has(.cw-7){overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;max-width:100%;touch-action:pan-x pan-y}
+  /* Week view: ONE 2D scroll container (the .cw-grid itself scrolls both axes). The old approach used
+     nested scrollers (grid scrolled X, body scrolled Y) which silently failed in many mobile WebViews —
+     horizontal panning got swallowed. A single scroll container with a sticky header (top) and sticky
+     time-axis (left) is reliable everywhere. */
+  .cw-grid.cw-week,.cw-grid:has(.cw-7){overflow:auto;-webkit-overflow-scrolling:touch;max-width:100%;max-height:78vh;touch-action:pan-x pan-y}
   .cw-grid.cw-week .cw-head,.cw-grid:has(.cw-7) .cw-head,
   .cw-grid.cw-week .cw-body,.cw-grid:has(.cw-7) .cw-body{width:max-content;min-width:max-content}
+  /* body is no longer its own scroller on mobile — let its full height feed the grid's vertical scroll */
+  .cw-grid.cw-week .cw-body,.cw-grid:has(.cw-7) .cw-body{height:auto;max-height:none;overflow:visible}
+  .cw-grid.cw-week .cw-head,.cw-grid:has(.cw-7) .cw-head{position:sticky;top:0;z-index:5}
   .cw-axhead,.cw-axis{position:sticky;left:0;z-index:4}
-  .cw-axhead{background:#fafbfc}
+  .cw-axhead{background:#fafbfc;z-index:6}
   .cw-axis{background:#fff;box-shadow:1px 0 0 var(--line)}
   .cw-dh{flex:0 0 112px;font-size:11.5px}      /* day headers render only in week view */
   .cw-7 .cw-col{flex:0 0 112px}
@@ -324,6 +330,24 @@ table.pm-grid{border-collapse:collapse;font-size:11px;min-width:560px}
 .dash-launch button{border:1px solid var(--line);background:#fff;border-radius:11px;padding:12px 6px;display:flex;flex-direction:column;align-items:center;gap:5px;font-size:11px;color:#444;cursor:pointer}
 .dash-launch button:hover{border-color:var(--red);color:var(--red)}
 .dash-launch .li{font-size:20px}
+/* Department health board (role-wise decision view) */
+.dept-legend{display:flex;gap:14px;font-size:11px;color:#8a9099;margin:2px 0 9px}
+.dept-legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:1px}
+.ddot{display:inline-block;width:9px;height:9px;border-radius:50%;flex:none}
+.ddot.ok{background:#1a7f37}.ddot.warn{background:#c47f00}.ddot.bad{background:#DA1017}
+.dept-board{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:10px;margin-bottom:6px}
+.dept-card{text-align:left;border:1px solid var(--line);background:#fff;border-radius:12px;padding:11px 12px;cursor:pointer;display:block;width:100%}
+.dept-card:hover{border-color:var(--red)}
+.dept-top{display:flex;align-items:center;gap:7px;margin-bottom:8px}
+.dept-ic{font-size:16px;flex:none}
+.dept-nm{font-size:12px;font-weight:600;color:#33373d;flex:1;line-height:1.25;min-width:0}
+.dept-open{display:flex;align-items:baseline;gap:6px}
+.dept-open b{font-size:22px;font-weight:700;color:#222}
+.dept-open span{font-size:11px;color:#8a9099}
+.dept-sub{display:flex;gap:10px;margin-top:5px;font-size:11.5px}
+.dept-sub .due{color:#c47f00}.dept-sub .over{color:#DA1017}
+.dept-foot{display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:#8a9099}
+.dept-foot .rev{color:#1a7f37;font-weight:600}
 
 /* ===================== ATTENDANCE ===================== */
 .att-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px;text-align:center;max-width:420px;margin:0 auto}

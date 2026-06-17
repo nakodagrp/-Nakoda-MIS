@@ -255,6 +255,7 @@
   }
 
   window.renderCRM=renderCRM;
+  window.openPipeline=openPipeline;
   window.openProcessInstance=openInstance;
   window.renderProcessGridInto=renderProcessGridInto;
 })();

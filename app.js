@@ -298,10 +298,17 @@ function renderDashboard(){
   var myOver=myT.filter(function(t){var d=dd10(t.dueDate); return t.status!=='done' && d && d<tdy;}).length;
   var myProcDue=myT.filter(function(t){var d=dd10(t.dueDate); return t.source==='process' && t.status!=='done' && d && d<=tdy;}).length;
   var calToday=(DASH.cal||[]).filter(function(c){return String(c.status)!=='deleted' && dd10(c.date)===tdy;}).sort(function(a,b){return (a.startTime||'')<(b.startTime||'')?-1:1;});
-  var openLeads=(DASH.procs||[]).reduce(function(s,p){return s+(Number(p.open)||0);},0);
   var branch=$('dashBranch').value;
-  var emp=(DASH.emps||[]).filter(function(e){ return !branch || String(e.Branch)===String(branch); });
-  var cards=(DASH.cards||[]).filter(function(c){ return !branch || String(c.branchId)===String(branch); });
+  /* Effective branch scope for the WHOLE dashboard (staff, cards, revenue, pipelines):
+     - managers (canViewAll) honour the branch picker ('' = all branches)
+     - branch managers & branch-view users are pinned to their own branch
+     - other staff see their personal totals (no branch scoping)
+     This guarantees a branch-level user never sees org-wide numbers behind "Branch …" labels. */
+  var effBranch=isManager?branch:((isBranchMgr||lvl==='BRANCH_VIEW')?String(u.Branch||''):'');
+  var scopeBranch=effBranch;
+  var openLeads=(DASH.procs||[]).reduce(function(s,p){return s+procCounts(p,scopeBranch).open;},0);
+  var emp=(DASH.emps||[]).filter(function(e){ return !effBranch || String(e.Branch)===String(effBranch); });
+  var cards=(DASH.cards||[]).filter(function(c){ return !effBranch || String(c.branchId)===String(effBranch); });
   var now=new Date(), m0=new Date(now.getFullYear(),now.getMonth(),1), soon=new Date(now.getTime()+7*864e5);
   var activeCards=cards.filter(function(c){return c.status==='active';});
   var cardsMTD=cards.filter(function(c){return new Date(c.issuedDate)>=m0;}).length;
@@ -323,11 +330,36 @@ function renderDashboard(){
   calToday.slice(0,5).forEach(function(c){ items+='<div class="dash-att" onclick="go(\'calendar\')"><span class="dot" style="background:'+(String(c.status)==='done'?'#1a7f37':'#7F77DD')+'"></span><span class="t">'+(c.startTime?esc(c.startTime)+' · ':'')+esc(c.title)+'</span><span class="r">calendar ›</span></div>'; });
   if(!items) items='<div class="dash-att muted"><span class="t">Nothing pending today. 🎉</span></div>';
   att+='<div class="section-label">Needs attention today</div>'+items;
-  if((isManager||isBranchMgr) && (DASH.procs||[]).length){
-    att+='<div class="section-label">CRM pipelines</div>'+(DASH.procs||[]).map(function(p){ return '<div class="dash-att" onclick="go(\'crm\')"><b style="min-width:150px">'+esc(p.name)+'</b><span class="t" style="color:#777">open '+p.open+' · due '+p.dueToday+' · <span style="color:#DA1017">overdue '+p.overdue+'</span></span><span class="r">CRM ›</span></div>'; }).join('');
-  }
   var html=att;
-  html+='<div class="section-label">Open a module</div><div class="dash-launch">'+visibleNav().filter(function(d){return d[0]!=='dashboard';}).map(function(d){ return '<button type="button" onclick="go(\''+d[0]+'\')"><span class="li">'+d[1]+'</span><span>'+esc(d[2])+'</span></button>'; }).join('')+'</div>';
+  /* Department health board (role-wise) — replaces the old module launcher + CRM pipelines list.
+     Driven by the process pipelines the backend returns for this user's scope. Counts (open/due/overdue)
+     are live; on-time % is an approximation = (open-overdue)/open; ₹ shown only where derivable. */
+  var procs=(DASH.procs||[]);
+  if(procs.length){
+    /* ---- role-specific framing of the board ---- */
+    var boardProcs=procs, boardLabel='Department health';
+    if(isManager){ boardLabel='Department health · '+(branch?branchName(branch):'all branches'); }
+    else if(isBranchMgr){ boardLabel='Department health · '+branchName(u.Branch); }
+    else if(isMon){ boardLabel='Department health · operations'; }
+    else {
+      /* functional / self-service staff: only the pipelines where they actually have work */
+      boardProcs=procs.filter(function(p){ var c=procCounts(p,scopeBranch); return (c.open+c.dueToday+c.overdue)>0; });
+      if(!boardProcs.length) boardProcs=procs;
+      boardLabel='My department'+(boardProcs.length>1?'s':'');
+    }
+    html+='<div class="section-label">'+esc(boardLabel)+'</div>';
+    html+='<div class="dept-legend"><span><i class="ddot ok"></i>on track</span><span><i class="ddot warn"></i>watch</span><span><i class="ddot bad"></i>action needed</span></div>';
+    html+='<div class="dept-board">'+boardProcs.map(function(p){ return deptCard(p,revenue,procCounts(p,scopeBranch)); }).join('')+'</div>';
+    /* monitor roles (SUPER / Ops Manager / Process Coordinator): surface the worst offenders to chase */
+    if(isMon){
+      var bn=procs.map(function(p){ return {p:p,over:procCounts(p,scopeBranch).overdue}; }).filter(function(x){ return x.over>0; }).sort(function(a,b){ return b.over-a.over; }).slice(0,3);
+      if(bn.length){
+        html+='<div class="section-label">Top bottlenecks to chase</div>'+bn.map(function(x){
+          return '<div class="dash-att" onclick="openDept(\''+esc(x.p.processId||'')+'\')"><span class="dot" style="background:#DA1017"></span><span class="t"><b>'+esc(x.p.name)+'</b> · '+x.over+' overdue</span><span class="r">work it ›</span></div>';
+        }).join('');
+      }
+    }
+  }
   if(isManager && !branch && Object.keys(brs).length>1){
     var rows=Object.keys(brs).map(function(bid){
       var be=emp.filter(function(e){return String(e.Branch)===bid;}).length;
@@ -353,6 +385,48 @@ function renderDashboard(){
 }
 function kpi(n,l){ return '<div class="kpi"><div class="n">'+n+'</div><div class="l">'+esc(l)+'</div></div>'; }
 function kpiC(n,l,cls){ return '<div class="kpi k-'+(cls||'')+'"><div class="n">'+n+'</div><div class="l">'+esc(l)+'</div></div>'; }
+/* Open the CRM page straight to one pipeline (deep-link from the dashboard department cards).
+   go('crm') paints the pipeline list; openPipeline() then replaces it with that pipeline's board. */
+function openDept(pid){ go('crm'); if(pid && window.openPipeline) window.openPipeline(pid); }
+window.openDept=openDept;
+function deptIcon(n){ n=String(n||'').toLowerCase();
+  if(/sample|report|diagnos|\blab\b|test/.test(n)) return '🔬';
+  if(/home|collection|phlebo/.test(n)) return '🏠';
+  if(/member|card/.test(n)) return '🏷';
+  if(/vendor|payable|\bap\b/.test(n)) return '💳';
+  if(/account|receiv|invoice|billing/.test(n)) return '📊';
+  if(/onboard|employee|\bhr\b|joining/.test(n)) return '🧑‍💼';
+  if(/procure|indent|purchase|supply/.test(n)) return '🛒';
+  if(/complaint|grievance|escalat/.test(n)) return '⚠️';
+  if(/asset|equip|mainten|amc/.test(n)) return '🛠';
+  return '📁';
+}
+/* Scope a pipeline's counts to a branch using the backend's byBranch breakdown.
+   branchId '' (or falsy) = org-wide totals. If a branch is chosen but the pipeline has no
+   instances there, returns zeros. */
+function procCounts(p,branchId){
+  if(branchId){
+    var b=(p.byBranch&&p.byBranch[branchId])||null;
+    return b?{open:Number(b.open)||0,dueToday:Number(b.dueToday)||0,overdue:Number(b.overdue)||0}:{open:0,dueToday:0,overdue:0};
+  }
+  return {open:Number(p.open)||0,dueToday:Number(p.dueToday)||0,overdue:Number(p.overdue)||0};
+}
+function deptCard(p,cardRev,sc){
+  sc=sc||procCounts(p,'');
+  var open=sc.open||0, due=sc.dueToday||0, over=sc.overdue||0;
+  var ot=open>0?Math.round((open-over)/open*100):100;
+  var cls=over===0?'ok':((over/Math.max(open,1))>=0.18?'bad':'warn');
+  var isCard=/member|card/i.test(p.name||'');
+  var foot=(isCard&&cardRev)
+    ? '<div class="dept-foot"><span class="rev">₹'+fmtMoney(cardRev)+'</span><span class="ot">'+ot+'% on-time</span></div>'
+    : '<div class="dept-foot"><span class="ot">'+ot+'% on-time</span></div>';
+  var pid=esc(p.processId||'');
+  return '<button type="button" class="dept-card" onclick="openDept(\''+pid+'\')">'+
+    '<div class="dept-top"><span class="dept-ic">'+deptIcon(p.name)+'</span><span class="dept-nm">'+esc(p.name)+'</span><span class="ddot '+cls+'"></span></div>'+
+    '<div class="dept-open"><b>'+open+'</b><span>open</span></div>'+
+    '<div class="dept-sub"><span class="due">'+due+' due</span><span class="over">'+over+' overdue</span></div>'+
+    foot+'</button>';
+}
 
 /* employees */
 function loadEmployees(){

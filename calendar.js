@@ -75,8 +75,12 @@
       body.innerHTML=buildDay();
     }
     bindGrid();
-    // default view = 8am–6pm: scroll the grid so 8:00 sits at the top (earlier/later hours reachable by scrolling)
-    var sc=body.querySelector('.cw-body'); if(sc) sc.scrollTop=Math.max(0,(VIEW_START-START_MIN)/STEP*ROWH);
+    // default view = 8am–6pm: scroll so 8:00 sits at the top (earlier/later hours reachable by scrolling).
+    // Desktop: .cw-body is the vertical scroller. Mobile week view: the whole .cw-grid scrolls (single
+    // 2D scroll container), so set scrollTop on both — the non-scrollable one is a harmless no-op.
+    var topY=Math.max(0,(VIEW_START-START_MIN)/STEP*ROWH);
+    var sc=body.querySelector('.cw-body'); if(sc) sc.scrollTop=topY;
+    var grid=body.querySelector('.cw-grid'); if(grid) grid.scrollTop=topY;
     var off=document.getElementById('calOffline'); if(off) off.classList.toggle('hidden', !liveEntries().some(function(e){return e._pending;}) && navigator.onLine);
   }
 
