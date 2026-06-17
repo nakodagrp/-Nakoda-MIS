@@ -188,6 +188,69 @@
     }
   }
 
+  /* ---------- full Process Monitor (PC stage grid) ---------- */
+  var PM={ pid:null, procs:[], data:null, filter:{status:'running',delayedOnly:false} };
+  function renderProcessGridInto(box){
+    box.innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>';
+    API.listProcesses().then(function(r){ PM.procs=(r&&r.ok)?r.processes:[]; if(!PM.pid && PM.procs.length) PM.pid=PM.procs[0].processId; shell(box); loadGrid(box); });
+  }
+  function shell(box){
+    var brs=(S.meta&&S.meta.branches)||[];
+    box.innerHTML=
+      '<div class="pm2-bar"><button class="btn ghost sm" id="pmXls">⤓ Export Excel</button> <button class="btn ghost sm" id="pmRef">↻ Refresh</button></div>'+
+      '<div class="pm2-tabs">'+PM.procs.map(function(p){ return '<span data-pid="'+esc(p.processId)+'"'+(p.processId===PM.pid?' class="on"':'')+'>'+esc(p.name)+'</span>'; }).join('')+'</div>'+
+      '<div class="pm2-filt">'+
+        '<div><label>Branch</label><select class="in" id="pmBranch"><option value="">All branches</option>'+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'">'+esc(b.BranchName)+'</option>';}).join('')+'</select></div>'+
+        '<div><label>From</label><input class="in" id="pmFrom" type="date"></div>'+
+        '<div><label>To</label><input class="in" id="pmTo" type="date"></div>'+
+        '<div><label>Status</label><select class="in" id="pmStatus"><option value="running">In progress</option><option value="completed">Completed</option><option value="all">All</option></select></div>'+
+      '</div>'+
+      '<label class="pm2-del"><input type="checkbox" id="pmDelayed"> Show only delayed</label>'+
+      '<div id="pmKpis" class="pm2-kpis"></div>'+
+      '<div id="pmGrid"></div>';
+    box.querySelectorAll('.pm2-tabs span').forEach(function(s){ s.onclick=function(){ PM.pid=s.getAttribute('data-pid'); shell(box); loadGrid(box); }; });
+    function fchg(){ PM.filter={ branch:document.getElementById('pmBranch').value, from:document.getElementById('pmFrom').value, to:document.getElementById('pmTo').value, status:document.getElementById('pmStatus').value, delayedOnly:document.getElementById('pmDelayed').checked }; loadGrid(box); }
+    ['pmBranch','pmFrom','pmTo','pmStatus','pmDelayed'].forEach(function(id){ var el=document.getElementById(id); if(el) el.onchange=fchg; });
+    document.getElementById('pmRef').onclick=function(){ loadGrid(box); };
+    document.getElementById('pmXls').onclick=exportXls;
+  }
+  function loadGrid(box){
+    var grid=document.getElementById('pmGrid'); if(grid) grid.innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>';
+    API.processMonitor(PM.pid, PM.filter).then(function(r){ if(!r||!r.ok){ if(grid) grid.innerHTML='<div class="empty">'+esc((r&&r.error)||'')+'</div>'; return; } PM.data=r; paintKpis(); paintGrid(); });
+  }
+  function paintKpis(){
+    var r=PM.data, k=document.getElementById('pmKpis'); if(!k) return; var kp=r.kpis||{};
+    var html='<div class="pm2k t"><div class="l">Total flows</div><div class="n">'+(kp.total||0)+'</div></div>'+
+      '<div class="pm2k p"><div class="l">In progress</div><div class="n">'+(kp.inProgress||0)+'</div></div>'+
+      '<div class="pm2k c"><div class="l">Completed</div><div class="n">'+(kp.completed||0)+'</div></div>'+
+      '<div class="pm2k d"><div class="l">Delayed</div><div class="n">'+(kp.delayed||0)+'</div></div>';
+    (r.stages||[]).forEach(function(s){ html+='<div class="pm2k"><div class="l">At '+esc(s.name)+'</div><div class="n">'+((kp.atStage&&kp.atStage[s.stageId])||0)+'</div></div>'; });
+    k.innerHTML=html;
+  }
+  function paintGrid(){
+    var r=PM.data, g=document.getElementById('pmGrid'); if(!g) return;
+    if(!(r.rows||[]).length){ g.innerHTML='<div class="empty">No flows for these filters.</div>'; return; }
+    var head='<tr><th class="lead">Lead</th>'+(r.stages||[]).map(function(s,i){return '<th class="grp'+(i%2?' alt':'')+'" colspan="3">'+esc(s.name)+'</th>';}).join('')+'</tr>'+
+      '<tr><th class="lead"></th>'+(r.stages||[]).map(function(){return '<th class="sub">Owner</th><th class="sub">Plan</th><th class="sub">Actual</th>';}).join('')+'</tr>';
+    var body=(r.rows||[]).map(function(row){
+      return '<tr'+(row.late?' class="late"':'')+' data-iid="'+esc(row.instanceId)+'"><td class="lead">'+esc(row.leadName)+(row.late?' <span class="warn">⚠</span>':'')+'</td>'+
+        row.cells.map(function(c){ var a=c.state==='done'?('<span class="ok">✓ '+esc(c.actual||'')+'</span>'):c.state==='late'?'<span class="red">late</span>':c.state==='due'?'<span class="amber">due</span>':(c.state==='pending'?'<span style="color:#bbb">…</span>':'—');
+          return '<td>'+esc(c.owner||'')+'</td><td>'+esc(c.planned||'')+'</td><td>'+a+'</td>'; }).join('')+'</tr>';
+    }).join('');
+    g.innerHTML='<div class="pm2-banner">Owner: '+esc(r.ownerRole||'')+' — '+esc(r.processName||'')+'</div><div class="pm2-wrap"><table class="pm2-grid">'+head+body+'</table></div>';
+    g.querySelectorAll('tr[data-iid]').forEach(function(tr){ tr.onclick=function(){ openInstance(tr.getAttribute('data-iid'), function(){ loadGrid(document.getElementById('pmGrid').parentNode); }); }; });
+  }
+  function exportXls(){
+    var r=PM.data; if(!r) return;
+    var h1='<tr><th>Lead</th>'+(r.stages||[]).map(function(s){return '<th colspan="3">'+s.name+'</th>';}).join('')+'</tr>';
+    var h2='<tr><th></th>'+(r.stages||[]).map(function(){return '<th>Owner</th><th>Plan</th><th>Actual</th>';}).join('')+'</tr>';
+    var rows=(r.rows||[]).map(function(row){ return '<tr><td>'+esc(row.leadName)+'</td>'+row.cells.map(function(c){ var a=c.state==='done'?('Done '+(c.actual||'')):c.state==='late'?'LATE':c.state==='due'?'Due':(c.state==='pending'?'Pending':''); return '<td>'+esc(c.owner||'')+'</td><td>'+esc(c.planned||'')+'</td><td>'+esc(a)+'</td>'; }).join('')+'</tr>'; }).join('');
+    var html='<table border="1">'+h1+h2+rows+'</table>';
+    var blob=new Blob(['﻿<html><head><meta charset="utf-8"></head><body>'+html+'</body></html>'],{type:'application/vnd.ms-excel'});
+    var u=URL.createObjectURL(blob),a=document.createElement('a'); a.href=u; a.download=(r.processName||'process')+'-monitor.xls'; a.click(); setTimeout(function(){URL.revokeObjectURL(u);},2000); toast('Excel exported');
+  }
+
   window.renderCRM=renderCRM;
   window.openProcessInstance=openInstance;
+  window.renderProcessGridInto=renderProcessGridInto;
 })();

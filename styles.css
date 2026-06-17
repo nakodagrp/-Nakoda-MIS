@@ -332,6 +332,36 @@ table.pm-grid{border-collapse:collapse;font-size:11px;min-width:560px}
 .att-m{font-size:11px;color:#888;margin-top:2px}
 .att-ok{color:var(--ok);font-size:12px;font-weight:600;flex:none}
 .att-sel{border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px;flex:none}
+
+/* ===================== PROCESS MONITOR (full grid) ===================== */
+.tm-seg{margin:10px 0 4px}
+.pm2-bar{display:flex;gap:8px;margin-bottom:8px}
+.pm2-tabs{display:flex;gap:16px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin-bottom:10px}
+.pm2-tabs span{font-size:13px;color:#777;padding:6px 0;cursor:pointer}
+.pm2-tabs span.on{color:var(--red);font-weight:700;border-bottom:2px solid var(--red)}
+.pm2-filt{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:8px}
+.pm2-filt label{font-size:10.5px;color:#888;display:block;margin-bottom:3px}
+@media(max-width:620px){.pm2-filt{grid-template-columns:1fr 1fr}}
+.pm2-del{font-size:12.5px;color:#555;display:inline-flex;align-items:center;gap:6px;margin-bottom:10px}
+.pm2-kpis{display:flex;gap:10px;overflow-x:auto;margin-bottom:12px}
+.pm2k{min-width:110px;flex:none;border:1px solid var(--line);border-radius:10px;padding:9px 11px}
+.pm2k .l{font-size:9.5px;color:#8a9099;text-transform:uppercase}.pm2k .n{font-size:21px;font-weight:700;margin-top:2px}
+.pm2k.t{background:#eef4ff}.pm2k.t .n{color:#2f5fd0}
+.pm2k.p{background:#fff6e8}.pm2k.p .n{color:#c47f00}
+.pm2k.c{background:#eafaf3}.pm2k.c .n{color:#1a7f37}
+.pm2k.d{background:#fdeef0}.pm2k.d .n{color:var(--red)}
+.pm2-banner{background:var(--red-soft);color:var(--red);font-weight:700;font-size:12.5px;padding:9px 12px;border-radius:8px;margin-bottom:10px}
+.pm2-wrap{overflow-x:auto}
+table.pm2-grid{border-collapse:collapse;font-size:11px;min-width:760px}
+.pm2-grid th,.pm2-grid td{border:1px solid #eef1f5;padding:7px 9px;white-space:nowrap;text-align:left}
+.pm2-grid .lead{position:sticky;left:0;background:#fff;font-weight:600;z-index:2;cursor:pointer}
+.pm2-grid .grp{background:#3a3f63;color:#fff;text-align:center;font-weight:700}
+.pm2-grid .grp.alt{background:#5a4db0}
+.pm2-grid .sub{background:#f3f4f7;font-size:9.5px;color:#666}
+.pm2-grid .ok{color:var(--ok);font-weight:600}.pm2-grid .amber{color:#c47f00;font-weight:700}.pm2-grid .red{color:var(--red);font-weight:700}
+.pm2-grid tr.late{background:#fffaf0;cursor:pointer}
+.pm2-grid tr[data-iid]{cursor:pointer}
+.pm2-grid .warn{color:var(--red)}
 .hamburger{display:none}
 
 /* ===== Mobile bottom navigation + More sheet (app-like) ===== */

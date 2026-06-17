@@ -148,11 +148,19 @@
     var canPick=S.perms&&S.perms.canViewAll, branches=(S.meta&&S.meta.branches)||[];
     var brOpts='<option value="">All branches</option>'+branches.map(function(b){return '<option value="'+esc(b.BranchID)+'">'+esc(b.BranchName)+'</option>';}).join('');
     v.innerHTML='<div class="page-head"><h1>Process Flow Monitor</h1></div>'+
-      '<div style="color:#888;font-size:13px;margin-bottom:12px">Everyone’s overdue tasks &amp; missed scheduled items — call or message the person.</div>'+
-      (canPick?'<div style="margin-bottom:10px"><select id="tmBranch" class="greet-select">'+brOpts+'</select></div>':'')+
-      '<div id="tmKpis" class="kpis"></div>'+
-      '<div id="tmFilt" class="tmfilt"></div>'+
-      '<div class="section-label">Overdue — follow up</div><div id="tmList"></div>';
+      '<div class="seg tm-seg" id="tmSeg"><div data-v="tasks" class="on">Tasks &amp; Schedule</div><div data-v="proc">Processes (stage by stage)</div></div>'+
+      '<div id="tmMain">'+
+        '<div style="color:#888;font-size:13px;margin:10px 0 12px">Everyone’s overdue tasks &amp; missed scheduled items — call or message the person.</div>'+
+        (canPick?'<div style="margin-bottom:10px"><select id="tmBranch" class="greet-select">'+brOpts+'</select></div>':'')+
+        '<div id="tmKpis" class="kpis"></div>'+
+        '<div id="tmFilt" class="tmfilt"></div>'+
+        '<div class="section-label">Overdue — follow up</div><div id="tmList"></div>'+
+      '</div>'+
+      '<div id="tmProc" class="hidden"></div>';
+    var procLoaded=false;
+    document.querySelectorAll('#tmSeg div').forEach(function(d){ d.onclick=function(){ document.querySelectorAll('#tmSeg div').forEach(function(z){z.classList.remove('on');}); d.classList.add('on'); var pv=d.getAttribute('data-v')==='proc';
+      document.getElementById('tmMain').classList.toggle('hidden',pv); document.getElementById('tmProc').classList.toggle('hidden',!pv);
+      if(pv && !procLoaded && window.renderProcessGridInto){ procLoaded=true; window.renderProcessGridInto(document.getElementById('tmProc')); } }; });
     if(canPick){ var sel=document.getElementById('tmBranch'); if(sel) sel.addEventListener('change',paint); }
 
     function collect(){
