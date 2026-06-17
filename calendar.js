@@ -102,6 +102,7 @@
     return '<div class="cw-col" data-date="'+s+'" style="height:'+(ROWS*ROWH)+'px">'+evs.map(evHtml).join('')+'</div>';
   }
   function buildWeek(){
+    /* 7-column time grid in both Day & Week, on desktop and mobile (mobile scrolls sideways). */
     var ws=startOfWeek(CAL.anchor), days=[], i; for(i=0;i<7;i++) days.push(addDays(ws,i));
     var todayS=dstr(new Date());
     var head='<div class="cw-head"><div class="cw-axhead"></div>'+days.map(function(d){ return '<div class="cw-dh'+(dstr(d)===todayS?' today':'')+'">'+DOW[d.getDay()]+' '+d.getDate()+'</div>'; }).join('')+'</div>';
@@ -119,8 +120,9 @@
 
   function bindGrid(){
     var pg=document.getElementById('page-calendar');
-    pg.querySelectorAll('.cw-ev').forEach(function(node){ node.onclick=function(ev){ ev.stopPropagation(); var id=node.getAttribute('data-id'); var e=liveEntries().filter(function(x){return String(x.entryId)===id;})[0]; if(e) openEntry(e); }; });
+    pg.querySelectorAll('.cw-ev,.cwa-ev').forEach(function(node){ node.onclick=function(ev){ ev.stopPropagation(); var id=node.getAttribute('data-id'); var e=liveEntries().filter(function(x){return String(x.entryId)===id;})[0]; if(e) openEntry(e); }; });
     if(!CAL.canManage) return;
+    pg.querySelectorAll('.cwa-add').forEach(function(a){ a.onclick=function(){ openEntry(null,{date:a.getAttribute('data-add')}); }; });
     pg.querySelectorAll('.cw-col').forEach(function(col){ col.onclick=function(ev){ if(ev.target!==col) return; var y=ev.offsetY; var min=START_MIN+Math.floor(y/ROWH)*STEP; openEntry(null,{date:col.getAttribute('data-date'), start:p2(Math.floor(min/60))+':'+p2(min%60)}); }; });
   }
 
