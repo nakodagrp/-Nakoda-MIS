@@ -309,6 +309,29 @@ table.pm-grid{border-collapse:collapse;font-size:11px;min-width:560px}
 .dash-att .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dash-att .r{margin-left:auto;font-size:11px;color:#9aa0a6;flex:none}
 .dash-att.muted{cursor:default;color:#8a9099}
+
+/* ===================== ATTENDANCE ===================== */
+.att-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px;text-align:center;max-width:420px;margin:0 auto}
+.att-day{font-size:16px;font-weight:700}
+.att-sub{font-size:12px;color:#8a9099;margin:2px 0 12px}
+.att-big{border:0;border-radius:14px;padding:16px 20px;font-size:18px;font-weight:700;color:#fff;width:100%}
+.att-big.in{background:#1ba94c}.att-big.out{background:var(--red)}
+.att-done{background:#eafaf3;color:#1a7f37;border-radius:12px;padding:14px;font-weight:700}
+.att-stat{font-size:12.5px;color:#555;margin-top:11px}
+.att-note{font-size:11px;color:#9aa0a6;margin-top:8px}
+.att-month{max-width:420px;margin:14px auto 0}
+.att-mh{font-size:11px;font-weight:700;color:#888;text-transform:uppercase;margin-bottom:7px}
+.att-strip{display:flex;flex-wrap:wrap;gap:4px}
+.wd{width:26px;height:26px;border-radius:6px;font-size:10px;display:flex;align-items:center;justify-content:center;color:#fff}
+.wd.wP{background:#1ba94c}.wd.wA{background:var(--red)}.wd.wL{background:#e0a91f}.wd.wW{background:#eef1f5;color:#9aa0a6}.wd.wF{background:#f6f8fb;color:#cfd3da}
+.att-legend{font-size:10px;color:#9aa0a6;margin-top:7px}
+.att-row{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:11px;padding:10px 12px;margin-bottom:8px}
+.att-av{width:34px;height:34px;border-radius:50%;background:#fbeceA;color:var(--red);font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:center;flex:none}
+.att-mid{flex:1;min-width:0}.att-nm b{font-size:14px}
+.att-late{background:#fdeaec;color:var(--red);font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:20px;margin-left:4px}
+.att-m{font-size:11px;color:#888;margin-top:2px}
+.att-ok{color:var(--ok);font-size:12px;font-weight:600;flex:none}
+.att-sel{border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px;flex:none}
 .hamburger{display:none}
 
 /* ===== Mobile bottom navigation + More sheet (app-like) ===== */
