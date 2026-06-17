@@ -410,6 +410,32 @@ td.cr,.cr{color:#1a7f37;font-weight:600}
 .msd-opt input{width:17px;height:17px}
 .msd-opt.all{font-weight:600;background:#fafbfc}
 
+/* ===================== INVENTORY ===================== */
+.ind-card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px}
+.ind-h{display:flex;align-items:center;gap:8px;font-size:13.5px;flex-wrap:wrap}
+.ind-items{font-size:11.5px;color:#666;margin:6px 0}
+.ind-flow{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:4px}
+.ind-step{font-size:10px;font-weight:600;color:#999;background:#f3f4f6;border-radius:20px;padding:3px 9px}
+.ind-step.on{background:#eafaf3;color:#1a7f37}
+.ind-arr{color:#cfd3da;font-size:11px}
+.cn-i{border:1px solid var(--line);border-radius:6px;padding:5px;font-size:12px;text-align:right}
+.cn-cons{font-weight:700}
+td.qc,.qc{color:#6f63d6;font-weight:600}
+.g-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+table.g-stock{border-collapse:collapse;font-size:11px}
+.g-stock th,.g-stock td{border:1px solid #eef1f5;padding:6px 8px;text-align:center;white-space:nowrap;min-width:40px}
+.g-stock th{background:#fafbfc;font-size:9.5px;color:#888;position:sticky;top:0}
+.g-stock .g-item{position:sticky;left:0;background:#fff;text-align:left;min-width:170px;z-index:2}
+.g-stock th.g-item{z-index:3}
+.g-stock .g-min{color:#DA1017;font-weight:700}.g-stock .g-max{color:#1f1f1f;font-weight:700}
+.g-stock .g-above{background:#e7efff;color:#2f5fd0}
+.g-stock .g-ok{background:#eafaf3;color:#1a7f37}
+.g-stock .g-near{background:#fdf4e3;color:#c47f00}
+.g-stock .g-below{background:#fdeaec;color:#DA1017;font-weight:600}
+.leg{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:#888;flex-wrap:wrap}
+.leg i{width:12px;height:12px;border-radius:3px;display:inline-block;margin-left:6px}
+.leg i.g-above{background:#cfe0ff}.leg i.g-ok{background:#cdeede}.leg i.g-near{background:#f6e4bf}.leg i.g-below{background:#f6cdd3}
+
 /* ===================== PROCESS MONITOR (full grid) ===================== */
 .tm-seg{margin:10px 0 4px}
 .pm2-bar{display:flex;gap:8px;margin-bottom:8px}
