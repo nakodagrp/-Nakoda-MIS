@@ -253,7 +253,7 @@ window.openMobileMore=openMobileMore; window.closeMobileMore=closeMobileMore;
 
 /* dashboard */
 function greetWord(){ var h=new Date().getHours(); return h<12?'Good morning':(h<17?'Good afternoon':'Good evening'); }
-var DASH={emps:[],cards:[],prices:{},tasks:[],procs:[],cal:[],chaseT:0,chaseC:0};
+var DASH={emps:[],cards:[],prices:{},tasks:[],procs:[],cal:[],chaseT:0,chaseC:0,daily:[]};
 function priceMap(arr){ var m={}; (arr||[]).forEach(function(p){ m[p.typeId+'|'+p.branchId]=Number(p.price)||0; }); return m; }
 function fmtMoney(n){ return Math.round(n||0).toLocaleString('en-IN'); }
 function todayD(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
@@ -289,6 +289,11 @@ function loadDashboard(){
       renderDashboard();
     });
   }
+  /* Daily business figures (collection / patients / tests) for the current month, used by the
+     "Business (MTD)" KPI and the By-branch table. Only roles that can see branch business fetch it. */
+  if(S.perms && (S.perms.canViewAll || S.perms.level==='BRANCH_MGR' || S.perms.level==='BRANCH_VIEW')){
+    API.listDaily('', todayD().slice(0,7)).then(function(r){ if(r&&r.ok){ DASH.daily=r.daily||[]; renderDashboard(); } }).catch(function(){});
+  }
 }
 function renderDashboard(){
   var u=S.user||{}, lvl=S.perms&&S.perms.level, isManager=S.perms&&S.perms.canViewAll, isBranchMgr=lvl==='BRANCH_MGR', isMon=isMonitorRole();
@@ -315,9 +320,15 @@ function renderDashboard(){
   var revenue=activeCards.reduce(function(s,c){return s+(Number(c.amount)||0);},0);
   var brs={}; emp.forEach(function(e){if(e.Branch)brs[e.Branch]=1;}); cards.forEach(function(c){if(c.branchId)brs[c.branchId]=1;});
   var staffN=emp.filter(function(e){return e.Status==='Active';}).length;
+  /* Daily business (this month) — per-branch map + scoped totals. business = b2c + b2d. */
+  var dailyByBr={};
+  (DASH.daily||[]).forEach(function(d){ var b=String(d.branchId||''); if(b)brs[b]=1; var o=dailyByBr[b]||(dailyByBr[b]={biz:0,pat:0,test:0}); o.biz+=(Number(d.b2c)||0)+(Number(d.b2d)||0); o.pat+=Number(d.patients)||0; o.test+=Number(d.tests)||0; });
+  var bizMTD=0,patMTD=0,testMTD=0;
+  (DASH.daily||[]).forEach(function(d){ if(effBranch && String(d.branchId)!==String(effBranch)) return; bizMTD+=(Number(d.b2c)||0)+(Number(d.b2d)||0); patMTD+=Number(d.patients)||0; testMTD+=Number(d.tests)||0; });
+  var avgPat=patMTD>0?Math.round(bizMTD/patMTD):0;
   var K=kpiC(myToday,'Tasks today','amber')+kpiC(myOver,'My overdue','red');
-  if(isManager){ K+=kpiC(openLeads,'Open CRM leads','violet')+kpiC('₹'+fmtMoney(revenue),'Card revenue','green')+kpiC(staffN,'Active staff','blue')+kpiC(Object.keys(brs).length,'Branches','blue'); }
-  else if(isBranchMgr){ K+=kpiC(openLeads,'Branch CRM leads','violet')+kpiC(staffN,'Branch staff','blue')+kpiC('₹'+fmtMoney(revenue),'Cards business','green'); }
+  if(isManager){ K+=kpiC('₹'+fmtMoney(bizMTD),'Business (MTD)','green')+kpiC(openLeads,'Open CRM leads','violet')+kpiC('₹'+fmtMoney(revenue),'Card revenue','green')+kpiC(staffN,'Active staff','blue')+kpiC(Object.keys(brs).length,'Branches','blue'); }
+  else if(isBranchMgr){ K+=kpiC('₹'+fmtMoney(bizMTD),'Business (MTD)','green')+kpiC(openLeads,'Branch CRM leads','violet')+kpiC(staffN,'Branch staff','blue')+kpiC('₹'+fmtMoney(revenue),'Cards business','green'); }
   else { K+=kpiC(myProcDue,'My CRM leads due','violet')+kpiC(calToday.length,'Today’s events','blue'); }
   if(isMon){ K+=kpiC((DASH.chaseT||0)+(DASH.chaseC||0),'To chase','red'); }
   $('kpis').innerHTML=K;
@@ -365,10 +376,11 @@ function renderDashboard(){
       var be=emp.filter(function(e){return String(e.Branch)===bid;}).length;
       var bc=activeCards.filter(function(c){return String(c.branchId)===bid;});
       var brev=bc.reduce(function(s,c){return s+(Number(c.amount)||0);},0);
-      return {name:branchName(bid),staff:be,cards:bc.length,rev:brev};
-    }).sort(function(a,b){return b.rev-a.rev;});
-    html+='<div class="section-label">By branch</div><div class="card"><div class="table-wrap"><table><thead><tr><th>Branch</th><th>Staff</th><th>Active cards</th><th>Card business</th></tr></thead><tbody>'+
-      rows.map(function(r){return '<tr><td><b>'+esc(r.name)+'</b></td><td>'+r.staff+'</td><td>'+r.cards+'</td><td>₹'+fmtMoney(r.rev)+'</td></tr>';}).join('')+'</tbody></table></div></div>';
+      var dd=dailyByBr[bid]||{biz:0,pat:0,test:0};
+      return {name:branchName(bid),staff:be,cards:bc.length,rev:brev,biz:dd.biz,pat:dd.pat,test:dd.test,avg:(dd.pat>0?Math.round(dd.biz/dd.pat):0)};
+    }).sort(function(a,b){return b.biz-a.biz;});
+    html+='<div class="section-label">By branch · business this month</div><div class="card"><div class="table-wrap"><table><thead><tr><th>Branch</th><th>Business (MTD)</th><th>Patients</th><th>Tests</th><th>Avg / patient</th><th>Card business</th><th>Staff</th></tr></thead><tbody>'+
+      rows.map(function(r){return '<tr><td><b>'+esc(r.name)+'</b></td><td>₹'+fmtMoney(r.biz)+'</td><td>'+r.pat+'</td><td>'+r.test+'</td><td>₹'+fmtMoney(r.avg)+'</td><td>₹'+fmtMoney(r.rev)+'</td><td>'+r.staff+'</td></tr>';}).join('')+'</tbody></table></div></div>';
   }
   var byType={}; activeCards.forEach(function(c){ byType[c.typeId]=(byType[c.typeId]||0)+1; });
   var tk=Object.keys(byType);
@@ -420,12 +432,12 @@ function deptCard(p,cardRev,sc){
   var foot=(isCard&&cardRev)
     ? '<div class="dept-foot"><span class="rev">₹'+fmtMoney(cardRev)+'</span><span class="ot">'+ot+'% on-time</span></div>'
     : '<div class="dept-foot"><span class="ot">'+ot+'% on-time</span></div>';
-  var pid=esc(p.processId||'');
-  return '<button type="button" class="dept-card" onclick="openDept(\''+pid+'\')">'+
+  /* Display-only tile (not clickable) — it's a decision read-out, not a nav target. */
+  return '<div class="dept-card">'+
     '<div class="dept-top"><span class="dept-ic">'+deptIcon(p.name)+'</span><span class="dept-nm">'+esc(p.name)+'</span><span class="ddot '+cls+'"></span></div>'+
     '<div class="dept-open"><b>'+open+'</b><span>open</span></div>'+
     '<div class="dept-sub"><span class="due">'+due+' due</span><span class="over">'+over+' overdue</span></div>'+
-    foot+'</button>';
+    foot+'</div>';
 }
 
 /* employees */
