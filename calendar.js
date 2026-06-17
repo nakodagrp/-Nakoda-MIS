@@ -107,7 +107,10 @@
     var todayS=dstr(new Date());
     var head='<div class="cw-head"><div class="cw-axhead"></div>'+days.map(function(d){ return '<div class="cw-dh'+(dstr(d)===todayS?' today':'')+'">'+DOW[d.getDay()]+' '+d.getDate()+'</div>'; }).join('')+'</div>';
     var body='<div class="cw-body">'+axisHtml()+'<div class="cw-cols cw-7">'+days.map(dayCol).join('')+'</div></div>';
-    return '<div class="cw-grid cw-week">'+head+body+'</div>';
+    /* Mobile-only ◀ ▶ buttons scroll the week grid sideways via JS — reliable even where touch-swipe
+       scrolling of the grid fails in the device WebView. Hidden on desktop. */
+    var hs='<div class="cw-hscroll"><button type="button" class="cw-sl" data-dir="-1">◀ Earlier</button><button type="button" class="cw-sl" data-dir="1">Later ▶</button></div>';
+    return hs+'<div class="cw-grid cw-week">'+head+body+'</div>';
   }
   function buildDay(){
     var grid='<div class="cw-grid cw-day"><div class="cw-body">'+axisHtml()+'<div class="cw-cols cw-1">'+dayCol(CAL.anchor)+'</div></div></div>';
@@ -121,6 +124,7 @@
   function bindGrid(){
     var pg=document.getElementById('page-calendar');
     pg.querySelectorAll('.cw-ev,.cwa-ev').forEach(function(node){ node.onclick=function(ev){ ev.stopPropagation(); var id=node.getAttribute('data-id'); var e=liveEntries().filter(function(x){return String(x.entryId)===id;})[0]; if(e) openEntry(e); }; });
+    pg.querySelectorAll('.cw-sl').forEach(function(b){ b.onclick=function(){ var g=pg.querySelector('.cw-grid.cw-week'); if(!g) return; var amt=Math.max(160,Math.round(g.clientWidth*0.7)); g.scrollBy({left:(b.getAttribute('data-dir')==='1'?amt:-amt), behavior:'smooth'}); }; });
     if(!CAL.canManage) return;
     pg.querySelectorAll('.cwa-add').forEach(function(a){ a.onclick=function(){ openEntry(null,{date:a.getAttribute('data-add')}); }; });
     pg.querySelectorAll('.cw-col').forEach(function(col){ col.onclick=function(ev){ if(ev.target!==col) return; var y=ev.offsetY; var min=START_MIN+Math.floor(y/ROWH)*STEP; openEntry(null,{date:col.getAttribute('data-date'), start:p2(Math.floor(min/60))+':'+p2(min%60)}); }; });
@@ -321,7 +325,20 @@
 
   /* ---------- load ---------- */
   function loadTargets(){
-    API.calendarTargets().then(function(r){ if(r&&r.ok){ CAL.targets=r.targets||[]; if(CAL.targets.length>1){ buildShell(); draw(); } } });
+    API.calendarTargets().then(function(r){
+      if(!(r&&r.ok)) return;
+      CAL.targets=r.targets||[];
+      /* Inject the calendar (owner) picker IN PLACE — do NOT rebuild the whole toolbar+grid.
+         The old buildShell() rebuild wiped the toolbar a second after load (options "disappeared"). */
+      if(CAL.targets.length>1 && !document.getElementById('calOwner')){
+        var top=document.querySelector('#page-calendar .cal-top'); if(!top) return;
+        var sel=document.createElement('select'); sel.id='calOwner'; sel.className='cal-owner';
+        sel.innerHTML=CAL.targets.map(function(t){ return '<option value="'+esc(t.EmpID)+'"'+(String(t.EmpID)===String(CAL.owner)?' selected':'')+'>'+esc(t.FullName)+'</option>'; }).join('');
+        var ttl=top.querySelector('.cal-ttl');
+        if(ttl && ttl.nextSibling) top.insertBefore(sel, ttl.nextSibling); else top.appendChild(sel);
+        sel.onchange=function(){ var t=CAL.targets.filter(function(x){return String(x.EmpID)===sel.value;})[0]; CAL.owner=sel.value; CAL.ownerName=(t?t.FullName:'').replace(/\s*\(.*\)$/,''); CAL.ownerRole=(t&&t.Role)||''; reload(); };
+      }
+    });
   }
   function reload(){
     var sub=document.getElementById('calSub'); if(sub) sub.textContent=CAL.ownerName+'’s schedule';

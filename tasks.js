@@ -84,20 +84,52 @@
       API.updateCalEntry(t.calId,{status:nc},meId()).then(function(){ API.cachedCalendar(meId()).then(function(e){ if(e){ CALITEMS=e.filter(function(x){return String(x.status)!=='deleted';}).map(calToItem); paintList(); } }); }); return; }
     var ns=t.status==='done'?'open':'done'; t.status=ns; t._pending=true; paintList(); API.setTaskStatus(id,ns).then(function(){ API.cachedTasks().then(function(c){ if(c){TASKS=c; paintList();} }); }); }
 
+  function dailyPanelHtml(e){
+    function m(n){ return '₹'+Math.round(Number(n)||0).toLocaleString('en-IN'); }
+    var b2cCash=Number(e.b2cCash)||0,b2cBank=Number(e.b2cBank)||0,b2dCash=Number(e.b2dCash)||0,b2dBank=Number(e.b2dBank)||0;
+    var total=b2cCash+b2cBank+b2dCash+b2dBank;
+    var docs=[];
+    if(e.b2cDocUrl) docs.push('<a href="'+esc(e.b2cDocUrl)+'" target="_blank" rel="noopener" style="color:var(--red);font-weight:600">📎 B2C document ↗</a>');
+    if(e.b2dDocUrl) docs.push('<a href="'+esc(e.b2dDocUrl)+'" target="_blank" rel="noopener" style="color:var(--red);font-weight:600">📎 B2D document ↗</a>');
+    if(e.testXlUrl) docs.push('<a href="'+esc(e.testXlUrl)+'" target="_blank" rel="noopener" style="color:var(--red);font-weight:600">📎 Tests Excel ↗</a>');
+    return '<div style="border:1px solid var(--line);border-radius:10px;padding:11px;margin-top:10px">'+
+      '<div style="font-weight:700;font-size:12.5px;margin-bottom:8px">'+esc(e.branchName||e.branchId||'')+' · '+esc(e.date||'')+(String(e.status)==='verified'?' · <span style="color:#1a7f37">verified</span>':'')+'</div>'+
+      '<table style="width:100%;font-size:13px;border-collapse:collapse">'+
+      '<tr><td style="color:#888;padding:3px 0">B2C — Cash</td><td style="text-align:right">'+m(b2cCash)+'</td><td style="color:#888;text-align:right;padding-left:10px">Bank/UPI</td><td style="text-align:right">'+m(b2cBank)+'</td></tr>'+
+      '<tr><td style="color:#888;padding:3px 0">B2D — Cash</td><td style="text-align:right">'+m(b2dCash)+'</td><td style="color:#888;text-align:right;padding-left:10px">Bank/UPI</td><td style="text-align:right">'+m(b2dBank)+'</td></tr>'+
+      '<tr><td style="color:#888;padding:3px 0">Patients</td><td style="text-align:right">'+(Number(e.patients)||0)+'</td><td style="color:#888;text-align:right;padding-left:10px">Tests</td><td style="text-align:right">'+(Number(e.tests)||0)+'</td></tr>'+
+      '</table>'+
+      '<div style="display:flex;justify-content:space-between;border-top:1px solid var(--line);margin-top:7px;padding-top:7px;font-weight:700"><span>Total business</span><span style="color:#1a7f37">'+m(total)+'</span></div>'+
+      '<div style="margin-top:10px;font-size:13px;display:flex;flex-direction:column;gap:6px">'+(docs.length?docs.join(''):'<span style="color:#999">No documents attached</span>')+'</div>'+
+      '</div>';
+  }
   function openTaskDetail(id){
     var t=byId(id); if(!t) return; var cl=pc(t);
+    var isDaily=(t.source==='accounts' && t.instanceId);
     var clHtml=cl.length?('<div style="background:#f6f7f9;border-radius:8px;padding:10px;margin-top:10px">'+cl.map(function(it,i){
       return '<label style="display:flex;align-items:flex-start;gap:9px;padding:4px 0;font-size:13px;cursor:pointer"><input type="checkbox" data-ci="'+i+'"'+(it.done?' checked':'')+' style="transform:scale(1.2);margin-top:2px"><span'+(it.done?' style="text-decoration:line-through;color:#999"':'')+'>'+esc(it.text)+'</span></label>';
     }).join('')+'</div>'):'';
     var body='<div style="font-size:13px;color:#8a8f98;margin-bottom:8px"><span class="pdot" style="background:'+(PRI[t.priority]||'#999')+'"></span> Due '+esc(dueLabel(t))+' · '+esc(t.priority||'Normal')+' · <b style="color:'+(t.status==='done'?'#1a7f37':'#DA1017')+'">'+(t.status==='done'?'Done':'Open')+'</b></div>'+
       (t.description?'<div style="font-size:13px;background:#f6f7f9;border-radius:8px;padding:10px;white-space:pre-line">'+esc(t.description)+'</div>':'')+
       clHtml+
+      (isDaily?'<div id="tdDaily" style="font-size:13px;color:#888;margin-top:10px">Loading entry…</div>':'')+
       '<div style="font-size:11px;color:#aaa;margin-top:10px">'+(t.source==='assigned'?('Assigned by '+esc(t.assignedByName||'manager')):'Created by you · self task')+'</div>';
-    var foot='<button class="btn ghost" onclick="closeModal()">Close</button><button class="btn ghost" id="tdEdit">Edit</button><button class="btn" id="tdComplete">'+(t.status==='done'?'Reopen':'✓ Complete')+'</button>';
+    var completeLabel=isDaily?(t.status==='done'?'Reopen':'✓ Verify & complete'):(t.status==='done'?'Reopen':'✓ Complete');
+    var foot='<button class="btn ghost" onclick="closeModal()">Close</button><button class="btn ghost" id="tdEdit">Edit</button><button class="btn" id="tdComplete">'+completeLabel+'</button>';
     openModal(t.title, body, foot);
     document.querySelectorAll('#modalRoot [data-ci]').forEach(function(cb){ cb.onchange=function(){ cl[parseInt(cb.getAttribute('data-ci'),10)].done=cb.checked; var sp=cb.parentNode.querySelector('span'); if(sp) sp.style.cssText=cb.checked?'text-decoration:line-through;color:#999':''; t.checklist=cl; t._pending=true; API.updateTask(t.taskId,{checklist:cl}); }; });
     document.getElementById('tdEdit').onclick=function(){ closeModal(); openTaskForm(t); };
-    document.getElementById('tdComplete').onclick=function(){ var ns=t.status==='done'?'open':'done'; t.status=ns; t._pending=true; API.setTaskStatus(t.taskId,ns).then(function(){ API.cachedTasks().then(function(c){ if(c)TASKS=c; }); }); closeModal(); paintList(); toast(ns==='done'?'Task completed':'Task reopened'); };
+    if(isDaily){
+      API.getDaily(t.instanceId).then(function(r){ var box=document.getElementById('tdDaily'); if(!box) return; if(r&&r.ok&&r.entry){ box.outerHTML=dailyPanelHtml(r.entry); } else { box.textContent=(r&&r.error)||'Could not load entry.'; } });
+    }
+    document.getElementById('tdComplete').onclick=function(){
+      if(isDaily && t.status!=='done'){
+        var btn=this; btn.disabled=true;
+        API.verifyDaily(t.instanceId).then(function(r){ if(r&&r.ok){ closeModal(); toast('Verified & completed'); if(window.renderMyTasks) window.renderMyTasks(); else paintList(); } else { toast((r&&r.error)||'Could not verify',true); btn.disabled=false; } });
+        return;
+      }
+      var ns=t.status==='done'?'open':'done'; t.status=ns; t._pending=true; API.setTaskStatus(t.taskId,ns).then(function(){ API.cachedTasks().then(function(c){ if(c)TASKS=c; }); }); closeModal(); paintList(); toast(ns==='done'?'Task completed':'Task reopened');
+    };
   }
 
   function openTaskForm(t){

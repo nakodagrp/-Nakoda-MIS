@@ -296,6 +296,7 @@
     myPayslip:function(m){ return call('myPayslip',{token:getToken(),month:m}); },
     saveDaily:function(d){ return call('saveDaily',{token:getToken(),data:d}); },
     listDaily:function(b,ym){ return call('listDaily',{token:getToken(),branch:b,ym:ym}); },
+    getDaily:function(id){ return call('getDaily',{token:getToken(),dayId:id}); },
     verifyDaily:function(id){ return call('verifyDaily',{token:getToken(),dayId:id}); },
     addLedger:function(d){ return call('addLedger',{token:getToken(),data:d}); },
     listLedger:function(b,ym,op){ return call('listLedger',{token:getToken(),branch:b,ym:ym,onlyPending:op}); },
