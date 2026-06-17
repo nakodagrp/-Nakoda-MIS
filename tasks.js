@@ -144,14 +144,17 @@
     return 'late, not done';
   }
   function renderTaskMonitor(){
-    var v=document.getElementById('page-taskmon'), ALLT=[], ALLC=[], FILT='all';
+    var v=document.getElementById('page-taskmon'), ALLT=[], ALLC=[], FILT='all', EMP='';
     var canPick=S.perms&&S.perms.canViewAll, branches=(S.meta&&S.meta.branches)||[];
     var brOpts='<option value="">All branches</option>'+branches.map(function(b){return '<option value="'+esc(b.BranchID)+'">'+esc(b.BranchName)+'</option>';}).join('');
     v.innerHTML='<div class="page-head"><h1>Process Flow Monitor</h1></div>'+
       '<div class="seg tm-seg" id="tmSeg"><div data-v="tasks" class="on">Tasks &amp; Schedule</div><div data-v="proc">Processes (stage by stage)</div></div>'+
       '<div id="tmMain">'+
         '<div style="color:#888;font-size:13px;margin:10px 0 12px">Everyone’s overdue tasks &amp; missed scheduled items — call or message the person.</div>'+
-        (canPick?'<div style="margin-bottom:10px"><select id="tmBranch" class="greet-select">'+brOpts+'</select></div>':'')+
+        '<div class="tm-filters" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'+
+          (canPick?'<select id="tmBranch" class="greet-select">'+brOpts+'</select>':'')+
+          '<select id="tmEmp" class="greet-select"><option value="">All people</option></select>'+
+        '</div>'+
         '<div id="tmKpis" class="kpis"></div>'+
         '<div id="tmFilt" class="tmfilt"></div>'+
         '<div class="section-label">Overdue — follow up</div><div id="tmList"></div>'+
@@ -161,7 +164,8 @@
     document.querySelectorAll('#tmSeg div').forEach(function(d){ d.onclick=function(){ document.querySelectorAll('#tmSeg div').forEach(function(z){z.classList.remove('on');}); d.classList.add('on'); var pv=d.getAttribute('data-v')==='proc';
       document.getElementById('tmMain').classList.toggle('hidden',pv); document.getElementById('tmProc').classList.toggle('hidden',!pv);
       if(pv && !procLoaded && window.renderProcessGridInto){ procLoaded=true; window.renderProcessGridInto(document.getElementById('tmProc')); } }; });
-    if(canPick){ var sel=document.getElementById('tmBranch'); if(sel) sel.addEventListener('change',paint); }
+    if(canPick){ var sel=document.getElementById('tmBranch'); if(sel) sel.addEventListener('change',function(){ EMP=''; var e=document.getElementById('tmEmp'); if(e) e.value=''; paint(); }); }
+    var esel=document.getElementById('tmEmp'); if(esel) esel.addEventListener('change',function(){ EMP=this.value; paint(); });
 
     function collect(){
       var tdy=todayStr(), nowMin=new Date().getHours()*60+new Date().getMinutes();
@@ -184,7 +188,14 @@
       return items;
     }
     function paint(){
-      var all=collect();
+      var base=collect();
+      // employee dropdown reflects whoever currently has overdue/missed items (within the chosen branch)
+      var esel=document.getElementById('tmEmp');
+      if(esel){ var names=[]; base.forEach(function(i){ if(i.name && names.indexOf(i.name)<0) names.push(i.name); }); names.sort();
+        if(EMP && names.indexOf(EMP)<0) EMP='';
+        esel.innerHTML='<option value="">All people ('+names.length+')</option>'+names.map(function(n){ return '<option value="'+esc(n)+'"'+(n===EMP?' selected':'')+'>'+esc(n)+'</option>'; }).join('');
+        esel.value=EMP; }
+      var all = EMP ? base.filter(function(i){ return i.name===EMP; }) : base;
       var tasks=all.filter(function(i){return i.kind==='task';}), sch=all.filter(function(i){return i.kind==='sch';});
       var staff={}; all.forEach(function(i){ staff[i.name]=1; });
       document.getElementById('tmKpis').innerHTML=

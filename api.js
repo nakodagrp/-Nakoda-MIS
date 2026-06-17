@@ -38,8 +38,11 @@
   function configured(){ var u=apiUrl(); return u && u.indexOf('PASTE_YOUR')<0; }
   function NET(action, payload){
     var body=JSON.stringify(Object.assign({action:action}, payload||{}));
-    return fetch(apiUrl(),{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body,redirect:'follow'})
-      .then(function(r){ return r.json(); });
+    var ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
+    var to=ctrl?setTimeout(function(){ try{ctrl.abort();}catch(e){} }, 60000):null;   // never hang forever
+    return fetch(apiUrl(),{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body,redirect:'follow',signal:ctrl?ctrl.signal:undefined})
+      .then(function(r){ return r.json(); })
+      .then(function(j){ if(to) clearTimeout(to); return j; }, function(e){ if(to) clearTimeout(to); throw e; });
   }
   /* Every action that CHANGES data (used to tell reads from writes). */
   var WRITES={createEmployee:1,updateEmployee:1,setStatus:1,resetPassword:1,changePassword:1,createBranch:1,updateBranch:1,
@@ -260,6 +263,7 @@
     getInstance:function(iid){ return call('getInstance',{token:getToken(),instanceId:iid}).then(function(r){ if(r&&r.ok) kvSet('inst1_'+iid,r); return r; }).catch(function(){ return kvGet('inst1_'+iid).then(function(x){ return x||{ok:false,offline:true}; }); }); },
     startInstance:function(pid,data){ var f=function(){ return queueGeneric('startInstance',{processId:pid,data:data}); }; if(navigator.onLine) return call('startInstance',{token:getToken(),processId:pid,data:data}).catch(f); return f(); },
     advanceStage:function(iid,data){ var f=function(){ return queueGeneric('advanceStage',{instanceId:iid,data:data}); }; if(navigator.onLine) return call('advanceStage',{token:getToken(),instanceId:iid,data:data}).catch(f); return f(); },
+    cachedProcessMonitor:function(pid){ return kvGet('procmon_'+pid); },
     processMonitor:function(pid,filter){ return call('processMonitor',{token:getToken(),processId:pid,filter:filter||{}}).then(function(r){ if(r.ok) kvSet('procmon_'+pid,r); return r; }).catch(function(){ return kvGet('procmon_'+pid).then(function(x){ return x||{ok:true,rows:[],stages:[],offline:true}; }); }); },
     saveProcess:function(d){ return call('saveProcess',{token:getToken(),data:d}).then(function(r){ if(r.ok) API.listProcesses(); return r; }); },
     saveStage:function(d){ return call('saveStage',{token:getToken(),data:d}); },

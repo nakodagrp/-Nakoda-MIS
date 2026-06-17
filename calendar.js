@@ -3,8 +3,9 @@
    EA can switch to and manage the Director's calendar & tasks.
    Export PNG = the Daily Scheduler sheet (Time | Scheduled | Done | Pending tasks). */
 (function(){
-  var START_MIN=240, END_MIN=1320, STEP=30, ROWH=30;       // 4:00 → 22:00, 30-min slots
+  var START_MIN=240, END_MIN=1320, STEP=30, ROWH=30;       // 4:00 → 22:00, 30-min slots (full scrollable range)
   var ROWS=(END_MIN-START_MIN)/STEP;                        // 36
+  var VIEW_START=480, VIEW_END=1080;                        // default visible window 8:00 → 18:00 (scroll for the rest)
   var DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   var MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
@@ -74,6 +75,8 @@
       body.innerHTML=buildDay();
     }
     bindGrid();
+    // default view = 8am–6pm: scroll the grid so 8:00 sits at the top (earlier/later hours reachable by scrolling)
+    var sc=body.querySelector('.cw-body'); if(sc) sc.scrollTop=Math.max(0,(VIEW_START-START_MIN)/STEP*ROWH);
     var off=document.getElementById('calOffline'); if(off) off.classList.toggle('hidden', !liveEntries().some(function(e){return e._pending;}) && navigator.onLine);
   }
 
@@ -99,10 +102,10 @@
     var todayS=dstr(new Date());
     var head='<div class="cw-head"><div class="cw-axhead"></div>'+days.map(function(d){ return '<div class="cw-dh'+(dstr(d)===todayS?' today':'')+'">'+DOW[d.getDay()]+' '+d.getDate()+'</div>'; }).join('')+'</div>';
     var body='<div class="cw-body">'+axisHtml()+'<div class="cw-cols cw-7">'+days.map(dayCol).join('')+'</div></div>';
-    return '<div class="cw-grid">'+head+body+'</div>';
+    return '<div class="cw-grid cw-week">'+head+body+'</div>';
   }
   function buildDay(){
-    var grid='<div class="cw-grid"><div class="cw-body">'+axisHtml()+'<div class="cw-cols cw-1">'+dayCol(CAL.anchor)+'</div></div></div>';
+    var grid='<div class="cw-grid cw-day"><div class="cw-body">'+axisHtml()+'<div class="cw-cols cw-1">'+dayCol(CAL.anchor)+'</div></div></div>';
     var pend=pendingTasks();
     var panel='<div class="cal-tasks"><div class="cal-tk-h">Today’s pending tasks ('+pend.length+')</div>'+
       (pend.length?pend.map(function(t){ return '<div class="cal-tk"><span class="dot '+(String(t.priority||'').toLowerCase())+'"></span>'+esc(t.title)+(t.dueTime?'<span class="tm">'+esc(t.dueTime)+'</span>':'')+'</div>'; }).join('')
@@ -312,7 +315,7 @@
 
   /* ---------- load ---------- */
   function loadTargets(){
-    API.calendarTargets().then(function(r){ if(r&&r.ok){ CAL.targets=r.targets||[]; if(CAL.targets.length>1) buildShell(); } });
+    API.calendarTargets().then(function(r){ if(r&&r.ok){ CAL.targets=r.targets||[]; if(CAL.targets.length>1){ buildShell(); draw(); } } });
   }
   function reload(){
     var sub=document.getElementById('calSub'); if(sub) sub.textContent=CAL.ownerName+'’s schedule';

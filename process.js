@@ -192,7 +192,9 @@
   var PM={ pid:null, procs:[], data:null, filter:{status:'running',delayedOnly:false} };
   function renderProcessGridInto(box){
     box.innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>';
-    API.listProcesses().then(function(r){ PM.procs=(r&&r.ok)?r.processes:[]; if(!PM.pid && PM.procs.length) PM.pid=PM.procs[0].processId; shell(box); loadGrid(box); });
+    // offline-first: paint instantly from cached process list, then refresh in the background
+    API.cachedProcesses().then(function(p){ if(p&&p.length){ PM.procs=p; if(!PM.pid) PM.pid=p[0].processId; shell(box); loadGrid(box); } });
+    API.listProcesses().then(function(r){ if(r&&r.ok){ PM.procs=r.processes||[]; } if(!PM.pid && PM.procs.length) PM.pid=PM.procs[0].processId; shell(box); loadGrid(box); });
   }
   function shell(box){
     var brs=(S.meta&&S.meta.branches)||[];
@@ -215,8 +217,10 @@
     document.getElementById('pmXls').onclick=exportXls;
   }
   function loadGrid(box){
-    var grid=document.getElementById('pmGrid'); if(grid) grid.innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>';
-    API.processMonitor(PM.pid, PM.filter).then(function(r){ if(!r||!r.ok){ if(grid) grid.innerHTML='<div class="empty">'+esc((r&&r.error)||'')+'</div>'; return; } PM.data=r; paintKpis(); paintGrid(); });
+    var grid=document.getElementById('pmGrid'); var painted=false;
+    // offline-first: show last-cached grid instantly, then refresh from the network in the background
+    API.cachedProcessMonitor(PM.pid).then(function(c){ if(c && c.ok!==false && (c.rows||c.stages)){ PM.data=c; painted=true; paintKpis(); paintGrid(); } else if(grid && !painted){ grid.innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>'; } });
+    API.processMonitor(PM.pid, PM.filter).then(function(r){ if(!r||!r.ok){ if(grid && !painted) grid.innerHTML='<div class="empty">'+esc((r&&r.error)||'')+'</div>'; return; } PM.data=r; painted=true; paintKpis(); paintGrid(); });
   }
   function paintKpis(){
     var r=PM.data, k=document.getElementById('pmKpis'); if(!k) return; var kp=r.kpis||{};

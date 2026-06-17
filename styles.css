@@ -172,7 +172,7 @@ body.modal-open #mobileBottomNav{display:none!important}
 .cw-axhead{width:54px;flex:none}
 .cw-dh{flex:1;text-align:center;font-size:11.5px;color:#555;padding:7px 2px;border-left:1px solid var(--line)}
 .cw-dh.today{color:var(--red);font-weight:700}
-.cw-body{display:flex;max-height:62vh;overflow-y:auto}
+.cw-body{display:flex;height:600px;max-height:72vh;overflow-y:auto}  /* 600px = 8am–6pm default window; scroll for 4–8am & 6–10pm */
 .cw-axis{width:54px;flex:none}
 .cw-hr{font-size:9.5px;color:var(--muted);text-align:right;padding:2px 6px 0 0;border-top:1px solid #f1f3f6;box-sizing:border-box}
 .cw-cols{flex:1;display:flex}
@@ -208,9 +208,9 @@ body.modal-open #mobileBottomNav{display:none!important}
   .cal-daywrap{grid-template-columns:1fr}
   .btn-add{margin-left:0}
   /* Week view only: wide, readable day columns that scroll sideways with a sticky time axis */
-  .cw-grid:has(.cw-7){overflow-x:auto;-webkit-overflow-scrolling:touch}
-  .cw-grid:has(.cw-7) .cw-head,
-  .cw-grid:has(.cw-7) .cw-body{min-width:max-content}
+  .cw-grid.cw-week{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .cw-grid.cw-week .cw-head,
+  .cw-grid.cw-week .cw-body{min-width:max-content}
   .cw-axhead,.cw-axis{position:sticky;left:0;z-index:4}
   .cw-axhead{background:#fafbfc}
   .cw-axis{background:#fff;box-shadow:1px 0 0 var(--line)}
