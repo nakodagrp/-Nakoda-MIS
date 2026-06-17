@@ -322,6 +322,7 @@ function renderDashboard(){
     att+='<div class="section-label">CRM pipelines</div>'+(DASH.procs||[]).map(function(p){ return '<div class="dash-att" onclick="go(\'crm\')"><b style="min-width:150px">'+esc(p.name)+'</b><span class="t" style="color:#777">open '+p.open+' · due '+p.dueToday+' · <span style="color:#DA1017">overdue '+p.overdue+'</span></span><span class="r">CRM ›</span></div>'; }).join('');
   }
   var html=att;
+  html+='<div class="section-label">Open a module</div><div class="dash-launch">'+visibleNav().filter(function(d){return d[0]!=='dashboard';}).map(function(d){ return '<button type="button" onclick="go(\''+d[0]+'\')"><span class="li">'+d[1]+'</span><span>'+esc(d[2])+'</span></button>'; }).join('')+'</div>';
   if(isManager && !branch && Object.keys(brs).length>1){
     var rows=Object.keys(brs).map(function(bid){
       var be=emp.filter(function(e){return String(e.Branch)===bid;}).length;
