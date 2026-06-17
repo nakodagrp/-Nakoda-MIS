@@ -376,6 +376,25 @@ table.pm-grid{border-collapse:collapse;font-size:11px;min-width:560px}
 td.dr,.dr{color:var(--red);font-weight:600}
 td.cr,.cr{color:#1a7f37;font-weight:600}
 
+/* ===================== STAFF TRAINING ===================== */
+.sec-h{font-size:11px;font-weight:700;color:#555;text-transform:uppercase;letter-spacing:.04em;margin:14px 0 7px}
+.tv-card{display:flex;align-items:center;gap:11px;background:#fff;border:1px solid var(--line);border-radius:11px;padding:9px 11px;margin-bottom:8px;cursor:pointer}
+.tv-thumb{width:50px;height:36px;border-radius:6px;background:#1c1c1c;color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;flex:none}
+.tv-m{flex:1;min-width:0}.tv-m b{font-size:13.5px}.tv-d{font-size:11px;color:#888;margin-top:2px}
+.tv-st{font-size:10px;font-weight:700;border-radius:20px;padding:3px 9px;flex:none}
+.tv-st.passed{background:#eafaf3;color:#1a7f37}.tv-st.due{background:#fff4e8;color:#c47f00}.tv-st.over{background:#fdeaec;color:var(--red)}
+.tv-embed{height:200px;background:#000;border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center;color:#bbb;margin-bottom:12px}
+.tv-embed iframe{border:0;width:100%;height:100%}
+.tv-q{margin-bottom:12px;font-size:13px}.tv-q b{display:block;margin-bottom:6px}
+.tv-opt{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:6px;font-size:12.5px;cursor:pointer}
+.rolechips{display:flex;gap:6px;flex-wrap:wrap}
+.rc{border:1px solid var(--line);border-radius:18px;padding:5px 11px;font-size:11.5px;color:#666;cursor:pointer}
+.rc.on{background:var(--red-soft);border-color:var(--red);color:var(--red);font-weight:600}
+.vq{border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px}
+.vq .vq-q{margin-bottom:6px}
+.vq-opt{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+.vq-opt .vq-o{flex:1}
+
 /* ===================== PROCESS MONITOR (full grid) ===================== */
 .tm-seg{margin:10px 0 4px}
 .pm2-bar{display:flex;gap:8px;margin-bottom:8px}

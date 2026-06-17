@@ -173,6 +173,8 @@ function applyPerms(){
   document.querySelectorAll('[data-page="recurring"]').forEach(function(n){ n.classList.toggle('hidden',!canRec); });
   var canBuild=(S.perms.level==='SUPER')||(S.user && S.user.Role==='Executive Assistant');
   document.querySelectorAll('[data-page="builder"]').forEach(function(n){ n.classList.toggle('hidden',!canBuild); });
+  var canAcc=S.perms.canViewAll||S.perms.level==='BRANCH_MGR'||S.perms.level==='BRANCH_VIEW'||(S.user && ['CRM','Accounts'].indexOf(S.user.Role)>=0);
+  document.querySelectorAll('[data-page="accounts"]').forEach(function(n){ n.classList.toggle('hidden',!canAcc); });
   buildMobileBottomNav();
 }
 
@@ -193,7 +195,7 @@ var currentPage='dashboard';
 function go(page){
   currentPage=page;
   document.querySelectorAll('.nav-item').forEach(function(n){ n.classList.toggle('active', n.getAttribute('data-page')===page); });
-  ['dashboard','tasks','calendar','attendance','leave','field','policy','payroll','recurring','crm','builder','taskmon','employees','profile','branches','cards','cardstatus'].forEach(function(p){ $('page-'+p).classList.toggle('hidden',p!==page); });
+  ['dashboard','tasks','calendar','attendance','leave','field','policy','training','payroll','accounts','recurring','crm','builder','taskmon','employees','profile','branches','cards','cardstatus'].forEach(function(p){ $('page-'+p).classList.toggle('hidden',p!==page); });
   if(page==='dashboard') loadDashboard();
   if(page==='tasks' && window.renderMyTasks) window.renderMyTasks();
   if(page==='calendar' && window.renderCalendar) window.renderCalendar();
@@ -201,7 +203,9 @@ function go(page){
   if(page==='leave' && window.renderLeave) window.renderLeave();
   if(page==='field' && window.renderField) window.renderField();
   if(page==='policy' && window.renderPolicy) window.renderPolicy();
+  if(page==='training' && window.renderTraining) window.renderTraining();
   if(page==='payroll' && window.renderPayroll) window.renderPayroll();
+  if(page==='accounts' && window.renderAccounts) window.renderAccounts();
   if(page==='recurring' && window.renderRecurring) window.renderRecurring();
   if(page==='crm' && window.renderCRM) window.renderCRM();
   if(page==='builder' && window.renderBuilder) window.renderBuilder();
@@ -215,7 +219,7 @@ function go(page){
 }
 
 /* ---------- mobile bottom navigation + "More" sheet ---------- */
-var NAVDEF=[['dashboard','▦','Home'],['tasks','✓','Tasks'],['calendar','📅','Calendar'],['attendance','🕒','Attend'],['crm','📁','CRM'],['builder','🔧','Builder'],['recurring','🔁','Recurring'],['taskmon','📋','Monitor'],['employees','👥','Staff'],['leave','🌴','Leave'],['field','🚗','Field'],['policy','📋','Policy'],['payroll','💰','Payroll'],['cards','🏷','Cards'],['cardstatus','✅','Status'],['branches','🏢','Branches'],['profile','⚙','Profile']];
+var NAVDEF=[['dashboard','▦','Home'],['tasks','✓','Tasks'],['calendar','📅','Calendar'],['attendance','🕒','Attend'],['crm','📁','CRM'],['builder','🔧','Builder'],['recurring','🔁','Recurring'],['taskmon','📋','Monitor'],['employees','👥','Staff'],['leave','🌴','Leave'],['field','🚗','Field'],['policy','📋','Policy'],['training','🎓','Training'],['payroll','💰','Payroll'],['accounts','📊','Accounts'],['cards','🏷','Cards'],['cardstatus','✅','Status'],['branches','🏢','Branches'],['profile','⚙','Profile']];
 function visibleNav(){ return NAVDEF.filter(function(d){ var el=document.querySelector('.nav-item[data-page="'+d[0]+'"]'); return el && !el.classList.contains('hidden'); }); }
 function navBtn(d){ return '<button data-page="'+d[0]+'"><span class="ic">'+d[1]+'</span><span>'+d[2]+'</span></button>'; }
 function buildMobileBottomNav(){
