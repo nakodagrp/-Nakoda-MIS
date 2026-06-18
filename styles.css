@@ -74,7 +74,7 @@ a{color:var(--red);text-decoration:none}
 .nav-item:hover{background:var(--bg)}
 .nav-item.active{background:var(--red-soft);color:var(--red)}
 .nav-group{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:16px 13px 7px;font-weight:700}
-.content{flex:1;padding:24px;max-width:1180px}
+.content{flex:1;min-width:0;padding:24px;max-width:1180px}
 
 .page-head{display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap}
 .page-head h1{font-size:21px;margin:0}
@@ -227,6 +227,7 @@ body.modal-open #mobileBottomNav{display:none!important}
 @media(max-width:760px){
   .cal-daywrap{grid-template-columns:1fr}
   .btn-add{margin-left:0}
+  .cal-owner{min-width:0;max-width:100%}
   /* Week view: ONE 2D scroll container (the .cw-grid itself scrolls both axes). The old approach used
      nested scrollers (grid scrolled X, body scrolled Y) which silently failed in many mobile WebViews —
      horizontal panning got swallowed. A single scroll container with a sticky header (top) and sticky
