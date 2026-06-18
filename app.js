@@ -322,7 +322,7 @@ function renderDashboard(){
   var staffN=emp.filter(function(e){return e.Status==='Active';}).length;
   /* Daily business (this month) — per-branch map + scoped totals. business = b2c + b2d. */
   var dailyByBr={};
-  (DASH.daily||[]).forEach(function(d){ var b=String(d.branchId||''); if(b)brs[b]=1; var o=dailyByBr[b]||(dailyByBr[b]={biz:0,pat:0,test:0}); o.biz+=(Number(d.b2c)||0)+(Number(d.b2d)||0); o.pat+=Number(d.patients)||0; o.test+=Number(d.tests)||0; });
+  (DASH.daily||[]).forEach(function(d){ var b=String(d.branchId||''); if(b)brs[b]=1; var o=dailyByBr[b]||(dailyByBr[b]={biz:0,pat:0,test:0,cash:0,bank:0}); o.biz+=(Number(d.b2c)||0)+(Number(d.b2d)||0); o.pat+=Number(d.patients)||0; o.test+=Number(d.tests)||0; o.cash+=Number(d.cashIn)||0; o.bank+=Number(d.bankIn)||0; });
   var bizMTD=0,patMTD=0,testMTD=0;
   (DASH.daily||[]).forEach(function(d){ if(effBranch && String(d.branchId)!==String(effBranch)) return; bizMTD+=(Number(d.b2c)||0)+(Number(d.b2d)||0); patMTD+=Number(d.patients)||0; testMTD+=Number(d.tests)||0; });
   var avgPat=patMTD>0?Math.round(bizMTD/patMTD):0;
@@ -376,11 +376,11 @@ function renderDashboard(){
       var be=emp.filter(function(e){return String(e.Branch)===bid;}).length;
       var bc=activeCards.filter(function(c){return String(c.branchId)===bid;});
       var brev=bc.reduce(function(s,c){return s+(Number(c.amount)||0);},0);
-      var dd=dailyByBr[bid]||{biz:0,pat:0,test:0};
-      return {name:branchName(bid),staff:be,cards:bc.length,rev:brev,biz:dd.biz,pat:dd.pat,test:dd.test,avg:(dd.pat>0?Math.round(dd.biz/dd.pat):0)};
+      var dd=dailyByBr[bid]||{biz:0,pat:0,test:0,cash:0,bank:0};
+      return {name:branchName(bid),staff:be,cards:bc.length,rev:brev,biz:dd.biz,pat:dd.pat,test:dd.test,cash:dd.cash||0,bank:dd.bank||0,avg:(dd.pat>0?Math.round(dd.biz/dd.pat):0)};
     }).sort(function(a,b){return b.biz-a.biz;});
-    html+='<div class="section-label">By branch · business this month</div><div class="card"><div class="table-wrap"><table><thead><tr><th>Branch</th><th>Business (MTD)</th><th>Patients</th><th>Tests</th><th>Avg / patient</th><th>Card business</th><th>Staff</th></tr></thead><tbody>'+
-      rows.map(function(r){return '<tr><td><b>'+esc(r.name)+'</b></td><td>₹'+fmtMoney(r.biz)+'</td><td>'+r.pat+'</td><td>'+r.test+'</td><td>₹'+fmtMoney(r.avg)+'</td><td>₹'+fmtMoney(r.rev)+'</td><td>'+r.staff+'</td></tr>';}).join('')+'</tbody></table></div></div>';
+    html+='<div class="section-label">By branch · business this month</div><div class="card"><div class="table-wrap"><table><thead><tr><th>Branch</th><th>Business (MTD)</th><th>Cash</th><th>Bank / UPI</th><th>Patients</th><th>Tests</th><th>Avg / patient</th><th>Card business</th><th>Staff</th></tr></thead><tbody>'+
+      rows.map(function(r){return '<tr><td><b>'+esc(r.name)+'</b></td><td>₹'+fmtMoney(r.biz)+'</td><td>₹'+fmtMoney(r.cash)+'</td><td>₹'+fmtMoney(r.bank)+'</td><td>'+r.pat+'</td><td>'+r.test+'</td><td>₹'+fmtMoney(r.avg)+'</td><td>₹'+fmtMoney(r.rev)+'</td><td>'+r.staff+'</td></tr>';}).join('')+'</tbody></table></div></div>';
   }
   var byType={}; activeCards.forEach(function(c){ byType[c.typeId]=(byType[c.typeId]||0)+1; });
   var tk=Object.keys(byType);
