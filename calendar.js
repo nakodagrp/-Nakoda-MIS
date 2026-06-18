@@ -53,14 +53,20 @@
     var fe=document.getElementById('calFootEdit'); if(fe) fe.onclick=openFooterEditor;
   }
   function footerKey(){ return 'nk_sched_footer_'+((typeof S!=='undefined'&&S.user&&S.user.EmpID)||''); }
-  function footerLine(){ try{ return localStorage.getItem(footerKey()) || localStorage.getItem('nk_sched_footer') || 'For You, At Your Doorstep · Nakoda Diagnostics & Research Center'; }catch(e){ return 'Nakoda Diagnostics & Research Center'; } }
+  function footerLine(){
+    try{
+      var sv=(typeof S!=='undefined'&&S.user&&S.user.SchedFooter)||'';   // server value follows the user across devices
+      if(sv) return sv;
+      return localStorage.getItem(footerKey()) || localStorage.getItem('nk_sched_footer') || 'For You, At Your Doorstep · Nakoda Diagnostics & Research Center';
+    }catch(e){ return 'Nakoda Diagnostics & Research Center'; }
+  }
   function openFooterEditor(){
     var cur=footerLine();
     openModal('PNG footer line',
       '<div class="grid2"><div class="field full"><label>Your line printed at the bottom of your Daily Scheduler PNG</label><input id="ffText" value="'+esc(cur)+'" placeholder="e.g. For You, At Your Doorstep"></div></div><div style="font-size:11px;color:#9aa0a6">Each staff member has their own footer line (saved on this device).</div>',
       '<button class="btn ghost sm" id="ffReset">Reset to default</button><button class="btn" id="ffSave">Save</button>');
-    document.getElementById('ffSave').onclick=function(){ try{ localStorage.setItem(footerKey(), document.getElementById('ffText').value.trim()); }catch(e){} closeModal(); toast('Footer line saved'); };
-    document.getElementById('ffReset').onclick=function(){ try{ localStorage.removeItem(footerKey()); }catch(e){} closeModal(); toast('Reset to default'); };
+    document.getElementById('ffSave').onclick=function(){ var v=document.getElementById('ffText').value.trim(); try{ localStorage.setItem(footerKey(), v); }catch(e){} if(typeof S!=='undefined'&&S.user) S.user.SchedFooter=v; if(window.API&&API.saveSchedFooter) API.saveSchedFooter(v); closeModal(); toast('Footer line saved'); };
+    document.getElementById('ffReset').onclick=function(){ try{ localStorage.removeItem(footerKey()); }catch(e){} if(typeof S!=='undefined'&&S.user) S.user.SchedFooter=''; if(window.API&&API.saveSchedFooter) API.saveSchedFooter(''); closeModal(); toast('Reset to default'); };
   }
 
   /* ---------- draw ---------- */
@@ -283,7 +289,10 @@
     var schRows=Math.max(evs.length, 9);
     var schBottom=headH+colH+schRows*rowH;
     var taskTop=schBottom+30, taskHeadH=40;
-    var H=taskTop+taskHeadH+Math.max(pend.length,3)*40+86;
+    /* footer can be a long custom line — wrap it so it never gets cut off, and reserve height for it */
+    var mc=document.createElement('canvas').getContext('2d'); mc.font='bold 14px Arial';
+    var footLines=wrapText(mc, footerLine(), W-2*M);
+    var H=taskTop+taskHeadH+Math.max(pend.length,3)*40+30+footLines.length*20+24;
     var c=document.createElement('canvas'); c.width=W; c.height=H; var x=c.getContext('2d');
     pngHeader(x,logo,W,M,'DAILY SCHEDULER', DOW[dObj.getDay()]+', '+dObj.getDate()+' '+MON[dObj.getMonth()]+' '+dObj.getFullYear());
     x.fillStyle='#555'; x.font='15px Arial'; x.fillText('Prepared for: '+CAL.ownerName+(CAL.ownerRole?('  ·  '+CAL.ownerRole):''), M, 200);
@@ -317,11 +326,15 @@
     var ty=taskTop+taskHeadH+6;
     if(!pend.length){ x.fillStyle='#999'; x.font='15px Arial'; x.fillText('No pending tasks.', M+12, ty+22); }
     pend.forEach(function(t,k){ var yy=ty+k*40; x.fillStyle='#DA1017'; x.font='bold 16px Arial'; x.fillText('•', M+12, yy+22); x.fillStyle='#333'; x.font='15px Arial'; x.fillText(clip(x,t.title+(t.dueTime?'   ('+t.dueTime+')':''), W-2*M-34), M+32, yy+22); x.strokeStyle='#f0f1f4'; x.beginPath(); x.moveTo(M+10,yy+32); x.lineTo(W-M-10,yy+32); x.stroke(); });
-    // footer — single line, BOLD, per-staff
-    x.fillStyle='#444'; x.font='bold 14px Arial'; x.textAlign='center'; x.fillText(footerLine(), W/2, H-30); x.textAlign='left';
+    // footer — BOLD, per-staff, wraps across lines so a long line is never cut off
+    x.fillStyle='#444'; x.font='bold 14px Arial'; x.textAlign='center';
+    var fy=H-18-(footLines.length-1)*20;
+    footLines.forEach(function(ln,i){ x.fillText(ln, W/2, fy+i*20); });
+    x.textAlign='left';
     c.toBlob(function(b){ var u=URL.createObjectURL(b); var a=document.createElement('a'); a.href=u; a.download='Daily-Scheduler-'+ds+'.png'; a.click(); setTimeout(function(){URL.revokeObjectURL(u);},2000); toast('Daily Scheduler saved'); });
   }
   function clip(x,s,max){ s=String(s||''); if(x.measureText(s).width<=max) return s; while(s.length>1 && x.measureText(s+'…').width>max) s=s.slice(0,-1); return s+'…'; }
+  function wrapText(x,text,maxW){ var words=String(text||'').split(/\s+/), lines=[], cur=''; words.forEach(function(w){ var t=cur?(cur+' '+w):w; if(x.measureText(t).width<=maxW||!cur){ cur=t; } else { lines.push(cur); cur=w; } }); if(cur) lines.push(cur); return lines.length?lines:['']; }
 
   /* ---------- load ---------- */
   function loadTargets(){

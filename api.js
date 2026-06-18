@@ -198,6 +198,7 @@
       }
       return queueUpdate(empId,data);
     },
+    saveSchedFooter:function(text){ return call('saveSchedFooter',{token:getToken(),text:text}); },
 
     setStatus:function(empId,status){
       var t=getToken();
