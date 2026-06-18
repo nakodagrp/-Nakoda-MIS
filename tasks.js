@@ -41,7 +41,7 @@
   function typeCount(key){
     if(key==='others') return DELEG.filter(function(t){return t.status!=='deleted';}).length;
     return combined().filter(function(t){ if(t.status==='deleted') return false;
-      if(key==='me') return t.source==='assigned';
+      if(key==='me') return t.source==='assigned'||t.source==='training';
       if(key==='recurring') return t.source==='recurring' && t.status!=='done';
       if(key==='calendar') return t.isCal;
       if(key==='process') return t.source==='process' && t.status!=='done';
@@ -68,7 +68,7 @@
       switch(FILTER){
         case 'all': case 'others': return true;
         case 'today': case 'upcoming': case 'overdue': case 'done': return bucket(t)===FILTER;
-        case 'me': return t.source==='assigned';
+        case 'me': return t.source==='assigned'||t.source==='training';
         case 'recurring': return t.source==='recurring' && t.status!=='done';
         case 'calendar': return t.isCal;
         case 'process': return t.source==='process' && t.status!=='done';
@@ -83,8 +83,9 @@
       var tag=t.isDeleg?'<span style="background:#fff4e8;color:#c47f00;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">→ Assigned to '+esc(t.assigneeName||'')+'</span>'
               :t.isCal?'<span style="background:#ECEAFB;color:#5046b8;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">📅 Meeting / Calendar</span>'
               :(t.source==='recurring'?'<span style="background:#ECEAFB;color:#5046b8;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">🔁 Recurring</span>'
+              :(t.source==='training'?'<span style="background:#eafaf3;color:#1aa37a;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">🎓 Training</span>'
               :(t.source==='process'?'<span style="background:#eafaf3;color:#1aa37a;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">📁 CRM stage</span>'
-              :(t.source==='assigned'?'<span style="background:#eef2ff;color:#4253c5;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">Assigned by '+esc(t.assignedByName||'manager')+'</span>':'')));
+              :(t.source==='assigned'?'<span style="background:#eef2ff;color:#4253c5;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">Assigned by '+esc(t.assignedByName||'manager')+'</span>':''))));
       return '<div class="tcard'+(done?' tdone':'')+'" data-id="'+esc(t.taskId)+'">'+
         '<span class="tbox'+(done?' on':'')+'" data-tog="'+esc(t.taskId)+'"></span>'+
         '<div class="tbody">'+

@@ -322,6 +322,7 @@
     myTraining:function(){ return call('myTraining',{token:getToken()}).then(function(r){ if(r.ok) kvSet('mytrain',r); return r; }).catch(function(){ return kvGet('mytrain').then(function(x){ return x||{ok:true,sections:[],videos:[],offline:true}; }); }); },
     getVideoQuiz:function(id){ return call('getVideoQuiz',{token:getToken(),videoId:id}); },
     submitQuiz:function(id,a){ return call('submitQuiz',{token:getToken(),videoId:id,answers:a}); },
+    trainingStats:function(){ return call('trainingStats',{token:getToken()}); },
     trainingMonitor:function(){ return call('trainingMonitor',{token:getToken()}); },
     cachedAssets:function(){ return kvGet('assets_lib'); },
     listAssets:function(){ return call('listAssets',{token:getToken()}).then(function(r){ if(r.ok) kvSet('assets_lib',r); return r; }).catch(function(){ return kvGet('assets_lib').then(function(x){ return x||{ok:true,assets:[],offline:true}; }); }); },

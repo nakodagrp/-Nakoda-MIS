@@ -254,7 +254,7 @@ window.openMobileMore=openMobileMore; window.closeMobileMore=closeMobileMore;
 
 /* dashboard */
 function greetWord(){ var h=new Date().getHours(); return h<12?'Good morning':(h<17?'Good afternoon':'Good evening'); }
-var DASH={emps:[],cards:[],prices:{},tasks:[],procs:[],cal:[],chaseT:0,chaseC:0,daily:[]};
+var DASH={emps:[],cards:[],prices:{},tasks:[],procs:[],cal:[],chaseT:0,chaseC:0,daily:[],training:null};
 function priceMap(arr){ var m={}; (arr||[]).forEach(function(p){ m[p.typeId+'|'+p.branchId]=Number(p.price)||0; }); return m; }
 function fmtMoney(n){ return Math.round(n||0).toLocaleString('en-IN'); }
 function todayD(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
@@ -296,6 +296,10 @@ function loadDashboard(){
   var ym=(dm&&dm.value)||todayD().slice(0,7);
   if(S.perms && (S.perms.canViewAll || S.perms.level==='BRANCH_MGR' || S.perms.level==='BRANCH_VIEW')){
     API.listDaily('', ym).then(function(r){ if(r&&r.ok){ DASH.daily=r.daily||[]; renderDashboard(); } }).catch(function(){});
+  }
+  /* org-wide training progress for the dashboard "Staff Training" tile */
+  if(isMonitorRole() || (S.perms && (S.perms.canViewAll||S.perms.level==='BRANCH_MGR'))){
+    API.trainingStats().then(function(r){ if(r&&r.ok){ DASH.training=r; renderDashboard(); } }).catch(function(){});
   }
 }
 function renderDashboard(){
@@ -364,7 +368,12 @@ function renderDashboard(){
     }
     html+='<div class="section-label">'+esc(boardLabel)+'</div>';
     html+='<div class="dept-legend"><span><i class="ddot ok"></i>on track</span><span><i class="ddot warn"></i>watch</span><span><i class="ddot bad"></i>action needed</span></div>';
-    html+='<div class="dept-board">'+boardProcs.map(function(p){ return deptCard(p,revenue,procCounts(p,scopeBranch)); }).join('')+'</div>';
+    /* Staff Training tile (org-wide progress) — managers/monitor roles only */
+    var renderProcs=boardProcs.slice();
+    if((isManager||isBranchMgr||isMon) && DASH.training && (DASH.training.open>0||DASH.training.total>0)){
+      renderProcs.push({name:'Staff Training', processId:'', byBranch:DASH.training.byBranch, open:DASH.training.open, dueToday:DASH.training.dueToday, overdue:DASH.training.overdue});
+    }
+    html+='<div class="dept-board">'+renderProcs.map(function(p){ return deptCard(p,revenue,procCounts(p,scopeBranch)); }).join('')+'</div>';
     /* monitor roles (SUPER / Ops Manager / Process Coordinator): surface the worst offenders to chase */
     if(isMon){
       var bn=procs.map(function(p){ return {p:p,over:procCounts(p,scopeBranch).overdue}; }).filter(function(x){ return x.over>0; }).sort(function(a,b){ return b.over-a.over; }).slice(0,3);
@@ -413,6 +422,7 @@ function deptIcon(n){ n=String(n||'').toLowerCase();
   if(/member|card/.test(n)) return '🏷';
   if(/vendor|payable|\bap\b/.test(n)) return '💳';
   if(/account|receiv|invoice|billing/.test(n)) return '📊';
+  if(/train|learn|course|quiz/.test(n)) return '🎓';
   if(/onboard|employee|\bhr\b|joining/.test(n)) return '🧑‍💼';
   if(/procure|indent|purchase|supply/.test(n)) return '🛒';
   if(/complaint|grievance|escalat/.test(n)) return '⚠️';

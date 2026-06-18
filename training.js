@@ -38,18 +38,21 @@
     box.innerHTML=html;
     box.querySelectorAll('.tv-card').forEach(function(el){ el.onclick=function(){ openVideo(el.getAttribute('data-vid')); }; });
   }
-  function openVideo(videoId){
+  function openVideo(videoId, preview){
     API.getVideoQuiz(videoId).then(function(r){ if(!r||!r.ok){ toast((r&&r.error)||'Could not open',true); return; }
       var id=ytId(r.youtubeUrl);
-      var body='<div class="tv-embed">'+(id?'<iframe width="100%" height="100%" src="https://www.youtube.com/embed/'+id+'" frameborder="0" allowfullscreen></iframe>':'<a href="'+esc(r.youtubeUrl)+'" target="_blank">Open video</a>')+'</div>'+
-        '<div class="tv-quiz">'+(r.questions||[]).map(function(q,qi){ return '<div class="tv-q"><b>Q'+(qi+1)+'. '+esc(q.q)+'</b>'+(q.options||[]).map(function(o,oi){ return '<label class="tv-opt"><input type="radio" name="q'+qi+'" value="'+oi+'"> '+esc(o)+'</label>'; }).join('')+'</div>'; }).join('')+
+      var note=preview?'<div class="msg" style="background:#fff7e6;color:#7a5b00">Preview — this is exactly what staff see. Answers are not recorded.</div>':'';
+      var body='<div class="tv-embed">'+(id?'<iframe width="100%" height="100%" src="https://www.youtube.com/embed/'+id+'" frameborder="0" allowfullscreen></iframe>':'<a href="'+esc(r.youtubeUrl)+'" target="_blank">Open video</a>')+'</div>'+note+
+        '<div class="tv-quiz">'+(r.questions||[]).map(function(q,qi){ return '<div class="tv-q"><b>Q'+(qi+1)+'. '+esc(q.q)+'</b>'+(q.options||[]).map(function(o,oi){ return '<label class="tv-opt"><input type="radio" name="q'+qi+'" value="'+oi+'"'+(preview?' disabled':'')+'> '+esc(o)+'</label>'; }).join('')+'</div>'; }).join('')+
         '<div style="font-size:11px;color:#888">Pass mark '+r.passMark+'% · you can retry.</div><div id="tvMsg"></div></div>';
-      openModal(r.title, body, '<button class="btn" id="tvSubmit">Submit answers</button>');
+      openModal((preview?'Preview · ':'')+r.title, body, preview?'<button class="btn ghost" onclick="closeModal()">Close preview</button>':'<button class="btn" id="tvSubmit">Submit answers</button>');
+      if(preview) return;
       $id('tvSubmit').onclick=function(){ var ans=(r.questions||[]).map(function(q,qi){ var sel=document.querySelector('input[name="q'+qi+'"]:checked'); return sel?Number(sel.value):-1; });
         if(ans.indexOf(-1)>=0){ $id('tvMsg').innerHTML='<div class="msg error">Answer all questions.</div>'; return; }
         this.disabled=true; API.submitQuiz(videoId,ans).then(function(x){ if(x&&x.ok){ if(x.passed){ closeModal(); toast('Passed '+x.score+'% 🎉'); loadMy(); } else { $id('tvMsg').innerHTML='<div class="msg error">Scored '+x.score+'% — need '+x.passMark+'%. Watch again & retry.</div>'; $id('tvSubmit').disabled=false; } } else { $id('tvMsg').innerHTML='<div class="msg error">'+esc((x&&x.error)||'Failed')+'</div>'; $id('tvSubmit').disabled=false; } }); };
     });
   }
+  window.previewTrainingVideo=function(vid){ openVideo(vid,true); };
 
   /* ---- Manage ---- */
   function loadManage(){
@@ -57,11 +60,12 @@
       var secs=(a[0]&&a[0].ok)?a[0].sections:[], vids=(a[1]&&a[1].ok)?a[1].videos:[];
       box.innerHTML='<div class="fin-actions"><button class="btn" id="mSec">+ Section</button> <button class="btn" id="mVid">+ Video</button></div>'+
         '<div class="sec-h">Sections</div>'+(secs.length?secs.map(function(s){return '<div class="hx-row"><div class="hx-mid"><b>'+esc(s.name)+'</b></div><a href="javascript:void(0)" data-es="'+esc(s.sectionId)+'">✎</a> <a href="javascript:void(0)" data-ds="'+esc(s.sectionId)+'" style="color:var(--red)">🗑</a></div>';}).join(''):'<div class="empty">No sections.</div>')+
-        '<div class="sec-h">Videos</div>'+(vids.length?vids.map(function(v){return '<div class="hx-row"><div class="tv-thumb">▶</div><div class="hx-mid"><b>'+esc(v.title)+'</b> <span style="font-size:10px;color:#aaa">v'+v.version+'</span><div class="hx-m">'+esc(v.roles||'')+' · '+(v.questions?v.questions.length:0)+' Q · pass '+v.passMark+'%</div></div><a href="javascript:void(0)" data-ev="'+esc(v.videoId)+'">✎</a> <a href="javascript:void(0)" data-dv="'+esc(v.videoId)+'" style="color:var(--red)">🗑</a></div>';}).join(''):'<div class="empty">No videos yet.</div>');
+        '<div class="sec-h">Videos</div>'+(vids.length?vids.map(function(v){return '<div class="hx-row"><div class="tv-thumb">▶</div><div class="hx-mid"><b>'+esc(v.title)+'</b> <span style="font-size:10px;color:#aaa">v'+v.version+'</span><div class="hx-m">'+esc(v.roles||'')+' · '+(v.questions?v.questions.length:0)+' Q · pass '+v.passMark+'%</div></div><a href="javascript:void(0)" data-pv="'+esc(v.videoId)+'" title="Preview as employee">👁</a> <a href="javascript:void(0)" data-ev="'+esc(v.videoId)+'">✎</a> <a href="javascript:void(0)" data-dv="'+esc(v.videoId)+'" style="color:var(--red)">🗑</a></div>';}).join(''):'<div class="empty">No videos yet.</div>');
       $id('mSec').onclick=function(){ openSectionForm(null); };
       $id('mVid').onclick=function(){ openVideoForm(null,secs); };
       box.querySelectorAll('[data-es]').forEach(function(b){ b.onclick=function(){ openSectionForm(secs.filter(function(x){return x.sectionId===b.getAttribute('data-es');})[0]); }; });
       box.querySelectorAll('[data-ds]').forEach(function(b){ b.onclick=function(){ if(confirm('Delete section?')) API.deleteSection(b.getAttribute('data-ds')).then(function(){toast('Deleted');loadManage();}); }; });
+      box.querySelectorAll('[data-pv]').forEach(function(b){ b.onclick=function(){ openVideo(b.getAttribute('data-pv'), true); }; });
       box.querySelectorAll('[data-ev]').forEach(function(b){ b.onclick=function(){ openVideoForm(vids.filter(function(x){return x.videoId===b.getAttribute('data-ev');})[0],secs); }; });
       box.querySelectorAll('[data-dv]').forEach(function(b){ b.onclick=function(){ if(confirm('Delete video?')) API.deleteVideo(b.getAttribute('data-dv')).then(function(){toast('Deleted');loadManage();}); }; });
     });
@@ -78,10 +82,10 @@
       '<div class="field"><label>Pass mark %</label><input id="vPass" class="in" type="number" value="'+(v.passMark||70)+'"></div>'+
       '<div class="field full"><label>YouTube unlisted link</label><input id="vUrl" class="in" value="'+esc(v.youtubeUrl||'')+'"></div>'+
       '<div class="field full"><label>Visible to roles</label><div class="rolechips" id="vRoles">'+roles.map(function(r){var n=r.Role||r;return '<span class="rc'+(vr.indexOf(n)>=0?' on':'')+'" data-r="'+esc(n)+'">'+esc(n)+'</span>';}).join('')+'</div></div>'+
-      '<div class="field full"><label>Quiz questions</label><div id="vQs"></div><button type="button" class="btn ghost sm" id="vAddQ">+ Add question</button></div></div><div id="vMsg"></div>';
+      '<div class="field full"><label>Quiz questions <span style="font-weight:400;color:#1a7f37">— tap the circle to mark the correct answer</span></label><div id="vQs"></div><button type="button" class="btn ghost sm" id="vAddQ">+ Add question</button></div></div><div id="vMsg"></div>';
     openModal(v.videoId?'Edit video':'New video', body, '<button class="btn" id="vSave">'+(v.videoId?'Save (new version)':'Publish')+'</button>');
     document.querySelectorAll('#vRoles .rc').forEach(function(c){ c.onclick=function(){ c.classList.toggle('on'); }; });
-    function paintQ(){ $id('vQs').innerHTML=VQ.map(function(q,i){ return '<div class="vq" data-i="'+i+'"><input class="in vq-q" placeholder="Question" value="'+esc(q.q)+'">'+q.options.map(function(o,oi){ return '<label class="vq-opt"><input type="radio" name="ans'+i+'" '+(q.answer===oi?'checked':'')+' data-a="'+oi+'"><input class="in vq-o" data-o="'+oi+'" placeholder="Option '+(oi+1)+'" value="'+esc(o)+'"></label>'; }).join('')+'<button type="button" class="bmini" data-rmq="'+i+'">✕ question</button></div>'; }).join(''); bindQ(); }
+    function paintQ(){ $id('vQs').innerHTML=VQ.map(function(q,i){ return '<div class="vq" data-i="'+i+'"><input class="in vq-q" placeholder="Question" value="'+esc(q.q)+'">'+q.options.map(function(o,oi){ return '<label class="vq-opt"><input type="radio" name="ans'+i+'" '+(q.answer===oi?'checked':'')+' data-a="'+oi+'"><input class="in vq-o" data-o="'+oi+'" placeholder="Option '+(oi+1)+'" value="'+esc(o)+'"><span class="vq-correct">✓ correct</span></label>'; }).join('')+'<button type="button" class="bmini" data-rmq="'+i+'">✕ question</button></div>'; }).join(''); bindQ(); }
     function readQ(){ $id('vQs').querySelectorAll('.vq').forEach(function(row){ var i=row.getAttribute('data-i'); var opts=[].slice.call(row.querySelectorAll('.vq-o')).map(function(o){return o.value;}); var ans=row.querySelector('input[type=radio]:checked'); VQ[i]={q:row.querySelector('.vq-q').value,options:opts,answer:ans?Number(ans.getAttribute('data-a')):0}; }); }
     function bindQ(){ $id('vQs').querySelectorAll('[data-rmq]').forEach(function(b){ b.onclick=function(){ readQ(); VQ.splice(+b.getAttribute('data-rmq'),1); paintQ(); }; }); }
     $id('vAddQ').onclick=function(){ readQ(); VQ.push({q:'',options:['','','',''],answer:0}); paintQ(); }; paintQ();

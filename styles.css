@@ -461,6 +461,8 @@ td.cr,.cr{color:#1a7f37;font-weight:600}
 .vq{border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px}
 .vq .vq-q{margin-bottom:6px}
 .vq-opt{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+.vq-correct{font-size:10px;color:#c7ccd3;flex:none;white-space:nowrap}
+.vq-opt input[type=radio]:checked ~ .vq-correct{color:#1a7f37;font-weight:700}
 .vq-opt .vq-o{flex:1}
 
 /* ===================== ASSET LIBRARY ===================== */
