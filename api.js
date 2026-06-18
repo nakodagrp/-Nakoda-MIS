@@ -300,6 +300,8 @@
     listDaily:function(b,ym){ return call('listDaily',{token:getToken(),branch:b,ym:ym}); },
     getDaily:function(id){ return call('getDaily',{token:getToken(),dayId:id}); },
     verifyDaily:function(id){ return call('verifyDaily',{token:getToken(),dayId:id}); },
+    saveDeposit:function(d){ return call('saveDeposit',{token:getToken(),data:d}); },
+    listDeposits:function(b,ym){ return call('listDeposits',{token:getToken(),branch:b,ym:ym}); },
     addLedger:function(d){ return call('addLedger',{token:getToken(),data:d}); },
     listLedger:function(b,ym,op){ return call('listLedger',{token:getToken(),branch:b,ym:ym,onlyPending:op}); },
     setLedger:function(id,a){ return call('setLedger',{token:getToken(),ledId:id,action:a}); },

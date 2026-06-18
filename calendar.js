@@ -35,6 +35,7 @@
         '<div class="seg cal-seg" id="calView"><button data-v="day"'+(CAL.view==='day'?' class="on"':'')+'>Day</button><button data-v="week"'+(CAL.view==='week'?' class="on"':'')+'>Week</button></div>'+
         '<div class="cal-nav"><button id="calPrev">◀</button><button id="calToday">Today</button><button id="calNext">▶</button></div>'+
         '<button class="btn-png" id="calPng">⤓ PNG</button>'+
+        '<button class="btn-png" id="calFootBtn">✎ Footer</button>'+
         '<button class="btn-add" id="calAdd">+ Add</button>'+
       '</div>'+
       '<div class="cal-range" id="calRange"></div>'+
@@ -51,6 +52,7 @@
     document.getElementById('calPng').onclick=exportPng;
     var os=document.getElementById('calOwner'); if(os) os.onchange=function(){ var t=CAL.targets.filter(function(x){return String(x.EmpID)===os.value;})[0]; CAL.owner=os.value; CAL.ownerName=(t?t.FullName:'').replace(/\s*\(.*\)$/,''); CAL.ownerRole=(t&&t.Role)||''; reload(); };
     var fe=document.getElementById('calFootEdit'); if(fe) fe.onclick=openFooterEditor;
+    var fb=document.getElementById('calFootBtn'); if(fb) fb.onclick=openFooterEditor;
   }
   function footerKey(){ return 'nk_sched_footer_'+((typeof S!=='undefined'&&S.user&&S.user.EmpID)||''); }
   function footerLine(){

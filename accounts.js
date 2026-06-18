@@ -2,7 +2,7 @@
 (function(){
   var EXP_CATS=['Material Purchased','Outsourced Services','Professional fees','Rent','Light bill','Petrol','Miscellaneous','Management cost','Software cost','Sales','Marketing','Other'];
   var INC_CATS=['B2Camp','Other income'];
-  var ACC={branch:'',ym:ymNowA(),tab:'finance'};
+  var ACC={branch:'',ym:ymNowA(),tab:'finance',dailyPage:0};
   function $id(i){ return document.getElementById(i); }
   function ymNowA(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
   function money(n){ return Math.round(Number(n)||0).toLocaleString('en-IN'); }
@@ -23,8 +23,8 @@
       '</div>'+
       '<div class="pm2-tabs" id="accTabs">'+tabs.map(function(t){return '<span data-t="'+t[0]+'"'+(t[0]===ACC.tab?' class="on"':'')+'>'+t[1]+'</span>';}).join('')+'</div>'+
       '<div id="accBody"></div>';
-    var bsel=$id('accBranch'); if(bsel) bsel.onchange=function(){ ACC.branch=bsel.value; paintTab(); };
-    $id('accYm').onchange=function(){ ACC.ym=$id('accYm').value; paintTab(); };
+    var bsel=$id('accBranch'); if(bsel) bsel.onchange=function(){ ACC.branch=bsel.value; ACC.dailyPage=0; paintTab(); };
+    $id('accYm').onchange=function(){ ACC.ym=$id('accYm').value; ACC.dailyPage=0; paintTab(); };
     v.querySelectorAll('#accTabs span').forEach(function(s){ s.onclick=function(){ ACC.tab=s.getAttribute('data-t'); v.querySelectorAll('#accTabs span').forEach(function(z){z.classList.remove('on');}); s.classList.add('on'); paintTab(); }; });
     if(isInvestor()) ACC.tab='finance';
     paintTab();
@@ -72,13 +72,32 @@
   /* ---- Daily Entry ---- */
   function docLinks(d){ var a=[]; if(d.b2cDocUrl)a.push('<a href="'+esc(d.b2cDocUrl)+'" target="_blank" rel="noopener">B2C</a>'); if(d.b2dDocUrl)a.push('<a href="'+esc(d.b2dDocUrl)+'" target="_blank" rel="noopener">B2D</a>'); if(d.testXlUrl)a.push('<a href="'+esc(d.testXlUrl)+'" target="_blank" rel="noopener">Tests</a>'); return a.length?a.join(' · '):'—'; }
   function loadDaily(){ API.listDaily(ACC.branch,ACC.ym).then(function(r){ var box=$id('accBody'); if(!box) return; if(!r||!r.ok){ box.innerHTML='<div class="empty">'+esc((r&&r.error)||'')+'</div>'; return; }
-    var rows=(r.daily||[]).slice().sort(function(a,b){return a.date<b.date?1:-1;});
-    box.innerHTML=(canEnter()?'<div class="fin-actions"><button class="btn" id="dlyAdd">+ Daily entry</button></div>':'')+
-      '<div class="table-wrap"><table><thead><tr><th>Date</th><th>B2C</th><th>B2D</th><th>Patients</th><th>Tests</th><th>Collection</th><th>Docs</th><th>Status</th></tr></thead><tbody>'+
-      (rows.length?rows.map(function(d){ return '<tr><td>'+esc(d.date)+'</td><td>₹'+money(d.b2c)+'</td><td>₹'+money(d.b2d)+'</td><td>'+(d.patients||0)+'</td><td>'+(d.tests||0)+'</td><td>₹'+money((Number(d.cashIn)||0)+(Number(d.bankIn)||0))+'</td><td>'+docLinks(d)+'</td><td>'+(String(d.status)==='verified'?'<span class="chip paid">✓ verified</span>':(r.canVerify?'<button class="btn ghost sm" data-vf="'+esc(d.dayId)+'">Verify</button>':'<span class="chip partial">pending</span>'))+'</td></tr>'; }).join(''):'<tr><td class="empty" colspan="8">No entries this month.</td></tr>')+'</tbody></table></div>';
+    var all=(r.daily||[]).slice().sort(function(a,b){return a.date<b.date?1:-1;});
+    var PAGE=15, total=all.length, pages=Math.max(1,Math.ceil(total/PAGE));
+    if(ACC.dailyPage>=pages) ACC.dailyPage=pages-1; if(ACC.dailyPage<0) ACC.dailyPage=0;
+    var start=ACC.dailyPage*PAGE, rows=all.slice(start,start+PAGE);
+    var actions=canEnter()?'<div class="fin-actions"><button class="btn" id="dlyAdd">+ Daily entry</button><button class="btn ghost" id="dlyDep">🏦 Bank deposit</button></div>':'';
+    box.innerHTML=actions+
+      '<div class="table-wrap"><table><thead><tr><th>Date</th><th>B2C</th><th>B2D</th><th>Other</th><th>Patients</th><th>Tests</th><th>Collection</th><th>Docs</th><th>Status</th></tr></thead><tbody>'+
+      (rows.length?rows.map(function(d){ var coll=(Number(d.cashIn)||0)+(Number(d.bankIn)||0)+(Number(d.other)||0); return '<tr><td>'+esc(d.date)+'</td><td>₹'+money(d.b2c)+'</td><td>₹'+money(d.b2d)+'</td><td>₹'+money(d.other)+'</td><td>'+(d.patients||0)+'</td><td>'+(d.tests||0)+'</td><td>₹'+money(coll)+'</td><td>'+docLinks(d)+'</td><td>'+(String(d.status)==='verified'?'<span class="chip paid">✓ verified</span>':(r.canVerify?'<button class="btn ghost sm" data-vf="'+esc(d.dayId)+'">Verify</button>':'<span class="chip partial">pending</span>'))+'</td></tr>'; }).join(''):'<tr><td class="empty" colspan="9">No entries this month.</td></tr>')+'</tbody></table></div>'+
+      (total>PAGE?'<div class="acc-pager">'+(ACC.dailyPage>0?'<button class="btn ghost sm" id="dlyPrev">‹ Prev</button>':'<span></span>')+'<span>'+(start+1)+'–'+Math.min(start+PAGE,total)+' of '+total+'</span>'+(ACC.dailyPage<pages-1?'<button class="btn ghost sm" id="dlyNext">Next ›</button>':'<span></span>')+'</div>':'');
     var a=$id('dlyAdd'); if(a) a.onclick=openDailyForm;
+    var dp=$id('dlyDep'); if(dp) dp.onclick=openDepositForm;
+    var pv=$id('dlyPrev'); if(pv) pv.onclick=function(){ ACC.dailyPage--; loadDaily(); };
+    var nx=$id('dlyNext'); if(nx) nx.onclick=function(){ ACC.dailyPage++; loadDaily(); };
     box.querySelectorAll('[data-vf]').forEach(function(b){ b.onclick=function(){ API.verifyDaily(b.getAttribute('data-vf')).then(function(x){ if(x&&x.ok){ toast('Verified'); loadDaily(); } }); }; });
   }); }
+  function openDepositForm(){
+    var brs=(S.meta&&S.meta.branches)||[];
+    var brField=canViewAll()?'<div class="field full"><label>Branch *</label><select id="dpBranch" class="in"><option value="">Select branch</option>'+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'"'+(b.BranchID===ACC.branch?' selected':'')+'>'+esc(b.BranchName)+'</option>';}).join('')+'</select></div>':'';
+    var body='<div class="grid2">'+brField+
+      '<div class="field"><label>Date</label><input id="dpDate" class="in" type="date" value="'+(new Date().toISOString().slice(0,10))+'"></div>'+
+      '<div class="field"><label>Amount deposited to bank (₹)</label><input id="dpAmt" class="in" type="number" inputmode="numeric"></div>'+
+      '<div class="field full"><label>Note (slip no. / bank)</label><input id="dpNote" class="in" type="text"></div></div>'+
+      '<div style="font-size:12px;color:#1a7f37;background:#eafaf3;border-radius:8px;padding:8px 10px;margin-top:6px">Recorded as a cash → bank transfer. Total business is unchanged.</div><div id="dpMsg"></div>';
+    openModal('Bank deposit', body, '<button class="btn" id="dpSave">Save deposit</button>');
+    $id('dpSave').onclick=function(){ var bsel=$id('dpBranch'); var bid=bsel?bsel.value:ACC.branch; if(bsel&&!bid){ $id('dpMsg').innerHTML='<div class="msg error">Please select a branch.</div>'; return; } var amt=Number($id('dpAmt').value)||0; if(amt<=0){ $id('dpMsg').innerHTML='<div class="msg error">Enter an amount.</div>'; return; } this.disabled=true; API.saveDeposit({branchId:bid,date:$id('dpDate').value,amount:amt,notes:$id('dpNote').value}).then(function(r){ if(r&&r.ok){ closeModal(); toast('Deposit recorded'); } else { $id('dpMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; var b=$id('dpSave'); if(b) b.disabled=false; } }); };
+  }
   function openDailyForm(){
     var brs=(S.meta&&S.meta.branches)||[];
     /* Multi-branch users (head office) pick which branch this entry belongs to; single-branch users
@@ -95,15 +114,18 @@
       '<div class="field"><label>Patients served</label><input id="dlPat" class="in" type="number" inputmode="numeric"></div></div>'+
       incBlock('B2c','B2C income (walk-in / patient)')+
       incBlock('B2d','B2D income (doctor / referral)')+
-      '<div class="dl-total"><span>Total business</span><b id="dlTotal">₹0</b></div>'+
+      '<div class="dl-blk"><div class="dl-blk-h">Other income (B2B — credit, billed monthly)</div>'+
+        '<div class="field"><label>Amount (₹)</label><input id="dlOther" class="in dl-amt" type="number" inputmode="numeric"></div>'+
+        '<div style="font-size:11px;color:#888;margin-top:4px">At month-end this is replaced by your B2B invoice total.</div></div>'+
+      '<div class="dl-total"><span>Total business (Cash + Bank + Other)</span><b id="dlTotal">₹0</b></div>'+
       '<div class="grid2"><div class="field"><label>Tests done (count)</label><input id="dlTests" class="in" type="number" inputmode="numeric"></div>'+
       '<div class="field"><label>Tests Excel (.xlsx)</label><label class="dl-file"><span id="dlXlSt">📎 Attach Excel</span><input id="dlXl" type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden></label></div></div>'+
       '<div id="dlMsg"></div>';
     openModal('Daily business entry', body, '<button class="btn" id="dlSave">Submit to Accountant</button>');
 
     var st={b2cDocUrl:'',b2dDocUrl:'',testXlUrl:''};
-    function recalc(){ var t=0; ['dlB2cCash','dlB2cBank','dlB2dCash','dlB2dBank'].forEach(function(id){ t+=Number(($id(id)||{}).value)||0; }); $id('dlTotal').textContent='₹'+money(t); }
-    ['dlB2cCash','dlB2cBank','dlB2dCash','dlB2dBank'].forEach(function(id){ var el=$id(id); if(el) el.addEventListener('input',recalc); });
+    function recalc(){ var t=0; ['dlB2cCash','dlB2cBank','dlB2dCash','dlB2dBank','dlOther'].forEach(function(id){ t+=Number(($id(id)||{}).value)||0; }); $id('dlTotal').textContent='₹'+money(t); }
+    ['dlB2cCash','dlB2cBank','dlB2dCash','dlB2dBank','dlOther'].forEach(function(id){ var el=$id(id); if(el) el.addEventListener('input',recalc); });
     function bindUpload(inputId,stEl,stKey,label){ var inp=$id(inputId); if(!inp) return; inp.onchange=function(){ var f=this.files[0]; if(!f) return; if(f.size>8*1024*1024){ toast('File too large (max 8MB)',true); this.value=''; return; }
       var s=$id(stEl); s.textContent='Uploading…'; var fr=new FileReader();
       fr.onload=function(){ var d=fr.result,i=d.indexOf(',');
@@ -118,7 +140,7 @@
       if(bsel && !bid){ $id('dlMsg').innerHTML='<div class="msg error">Please select a branch.</div>'; return; }
       this.disabled=true;
       API.saveDaily({branchId:bid,date:$id('dlDate').value,patients:$id('dlPat').value,tests:$id('dlTests').value,
-        b2cCash:$id('dlB2cCash').value,b2cBank:$id('dlB2cBank').value,b2dCash:$id('dlB2dCash').value,b2dBank:$id('dlB2dBank').value,
+        b2cCash:$id('dlB2cCash').value,b2cBank:$id('dlB2cBank').value,b2dCash:$id('dlB2dCash').value,b2dBank:$id('dlB2dBank').value,other:$id('dlOther').value,
         b2cDocUrl:st.b2cDocUrl,b2dDocUrl:st.b2dDocUrl,testXlUrl:st.testXlUrl}).then(function(r){ if(r&&r.ok){ closeModal(); toast('Saved'); loadDaily(); } else { $id('dlMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; var b=$id('dlSave'); if(b) b.disabled=false; } });
     };
   }
