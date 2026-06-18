@@ -52,14 +52,15 @@
     var os=document.getElementById('calOwner'); if(os) os.onchange=function(){ var t=CAL.targets.filter(function(x){return String(x.EmpID)===os.value;})[0]; CAL.owner=os.value; CAL.ownerName=(t?t.FullName:'').replace(/\s*\(.*\)$/,''); CAL.ownerRole=(t&&t.Role)||''; reload(); };
     var fe=document.getElementById('calFootEdit'); if(fe) fe.onclick=openFooterEditor;
   }
-  function footerLine(){ try{ return localStorage.getItem('nk_sched_footer') || 'For You, At Your Doorstep · Nakoda Diagnostics & Research Center'; }catch(e){ return 'Nakoda Diagnostics & Research Center'; } }
+  function footerKey(){ return 'nk_sched_footer_'+((typeof S!=='undefined'&&S.user&&S.user.EmpID)||''); }
+  function footerLine(){ try{ return localStorage.getItem(footerKey()) || localStorage.getItem('nk_sched_footer') || 'For You, At Your Doorstep · Nakoda Diagnostics & Research Center'; }catch(e){ return 'Nakoda Diagnostics & Research Center'; } }
   function openFooterEditor(){
     var cur=footerLine();
     openModal('PNG footer line',
-      '<div class="grid2"><div class="field full"><label>Line printed at the bottom of every Daily Scheduler PNG</label><input id="ffText" value="'+esc(cur)+'" placeholder="e.g. For You, At Your Doorstep"></div></div><div style="font-size:11px;color:#9aa0a6">Saved on this device.</div>',
+      '<div class="grid2"><div class="field full"><label>Your line printed at the bottom of your Daily Scheduler PNG</label><input id="ffText" value="'+esc(cur)+'" placeholder="e.g. For You, At Your Doorstep"></div></div><div style="font-size:11px;color:#9aa0a6">Each staff member has their own footer line (saved on this device).</div>',
       '<button class="btn ghost sm" id="ffReset">Reset to default</button><button class="btn" id="ffSave">Save</button>');
-    document.getElementById('ffSave').onclick=function(){ try{ localStorage.setItem('nk_sched_footer', document.getElementById('ffText').value.trim()); }catch(e){} closeModal(); toast('Footer line saved'); };
-    document.getElementById('ffReset').onclick=function(){ try{ localStorage.removeItem('nk_sched_footer'); }catch(e){} closeModal(); toast('Reset to default'); };
+    document.getElementById('ffSave').onclick=function(){ try{ localStorage.setItem(footerKey(), document.getElementById('ffText').value.trim()); }catch(e){} closeModal(); toast('Footer line saved'); };
+    document.getElementById('ffReset').onclick=function(){ try{ localStorage.removeItem(footerKey()); }catch(e){} closeModal(); toast('Reset to default'); };
   }
 
   /* ---------- draw ---------- */
@@ -276,34 +277,33 @@
     var ds=dstr(dObj);
     var evs=liveEntries().filter(function(e){return e.date===ds;}).sort(byStart);
     var pend=pendingTasks();
-    // A4 portrait @ ~150dpi
-    var W=1240, M=44, headH=190, colH=46, rowH=44;
-    var schRows=Math.max(evs.length, 16);
+    /* Mobile-friendly portrait: narrower canvas + bigger text so it stays legible when a phone fits
+       the image to screen width; only a few blank rows instead of a full A4 page. */
+    var W=640, M=26, headH=212, colH=40, rowH=46;
+    var schRows=Math.max(evs.length, 9);
     var schBottom=headH+colH+schRows*rowH;
-    var taskTop=schBottom+40, taskHeadH=46;
-    var needed=taskTop+taskHeadH+Math.max(pend.length,4)*40+40;
-    var H=Math.max(1754, needed);
+    var taskTop=schBottom+30, taskHeadH=40;
+    var H=taskTop+taskHeadH+Math.max(pend.length,3)*40+86;
     var c=document.createElement('canvas'); c.width=W; c.height=H; var x=c.getContext('2d');
     pngHeader(x,logo,W,M,'DAILY SCHEDULER', DOW[dObj.getDay()]+', '+dObj.getDate()+' '+MON[dObj.getMonth()]+' '+dObj.getFullYear());
-    x.fillStyle='#555'; x.font='16px Arial'; x.fillText('Prepared for: '+CAL.ownerName+(CAL.ownerRole?('  ·  '+CAL.ownerRole):''), M+360, 150);
+    x.fillStyle='#555'; x.font='15px Arial'; x.fillText('Prepared for: '+CAL.ownerName+(CAL.ownerRole?('  ·  '+CAL.ownerRole):''), M, 200);
     // schedule table columns
-    var xTime=M, wTime=150, wDone=130, xDone=W-M-wDone, xSch=xTime+wTime, wSch=xDone-xSch;
+    var xTime=M, wTime=128, wDone=72, xDone=W-M-wDone, xSch=xTime+wTime, wSch=xDone-xSch;
     var top=headH;
     x.fillStyle='#f3f4f7'; x.fillRect(M,top,W-2*M,colH);
     x.fillStyle='#555'; x.font='bold 14px Arial';
-    x.fillText('TIME',xTime+10,top+29); x.fillText('SCHEDULED',xSch+10,top+29); x.fillText('DONE',xDone+18,top+29);
+    x.fillText('TIME',xTime+8,top+26); x.fillText('SCHEDULED',xSch+8,top+26); x.fillText('DONE',xDone+12,top+26);
     var sy=top+colH;
-    x.font='15px Arial';
     for(var i=0;i<schRows;i++){
       var ry=sy+i*rowH;
       if(i<evs.length){
         var e=evs[i], done=String(e.status)==='done';
         x.fillStyle=done?'#EAF6EE':'#ECEAFB'; x.fillRect(M,ry,W-2*M,rowH-1);
         x.fillStyle='#555'; x.font='14px Arial';
-        x.fillText((e.startTime?fmtHour(toMin(e.startTime)):'')+(e.endTime?'–'+fmtHour(toMin(e.endTime)):''), xTime+10, ry+28);
-        x.fillStyle=done?'#1a7f37':'#3c3489'; x.font='bold 15px Arial';
-        x.fillText(clip(x,e.title,wSch-20), xSch+10, ry+28);
-        if(done){ x.fillStyle='#1a7f37'; x.font='bold 18px Arial'; x.fillText('✓', xDone+50, ry+29); }
+        x.fillText((e.startTime?fmtHour(toMin(e.startTime)):'')+(e.endTime?'–'+fmtHour(toMin(e.endTime)):''), xTime+8, ry+29);
+        x.fillStyle=done?'#1a7f37':'#3c3489'; x.font='bold 16px Arial';
+        x.fillText(clip(x,e.title,wSch-14), xSch+8, ry+29);
+        if(done){ x.fillStyle='#1a7f37'; x.font='bold 19px Arial'; x.fillText('✓', xDone+30, ry+30); }
       }
       x.strokeStyle='#e7e9ee'; x.lineWidth=1; x.beginPath(); x.moveTo(M,ry+rowH-0.5); x.lineTo(W-M,ry+rowH-0.5); x.stroke();
     }
@@ -313,13 +313,13 @@
     [xSch, xDone].forEach(function(vx){ x.beginPath(); x.moveTo(vx,top); x.lineTo(vx,top+colH+schRows*rowH); x.stroke(); });
     // tasks section
     x.fillStyle='#fbeceA'; x.fillRect(M,taskTop,W-2*M,taskHeadH);
-    x.fillStyle='#DA1017'; x.font='bold 16px Arial'; x.fillText('TODAY’S TASKS / WAITING LIST',M+12,taskTop+30);
-    var ty=taskTop+taskHeadH+8;
-    if(!pend.length){ x.fillStyle='#999'; x.font='15px Arial'; x.fillText('No pending tasks.', M+14, ty+22); }
-    pend.forEach(function(t,k){ var yy=ty+k*40; x.fillStyle='#DA1017'; x.font='bold 16px Arial'; x.fillText('•', M+14, yy+22); x.fillStyle='#333'; x.font='15px Arial'; x.fillText(clip(x,t.title+(t.dueTime?'   ('+t.dueTime+')':''), W-2*M-40), M+36, yy+22); x.strokeStyle='#f0f1f4'; x.beginPath(); x.moveTo(M+12,yy+32); x.lineTo(W-M-12,yy+32); x.stroke(); });
-    // footer
-    x.fillStyle='#888'; x.font='italic 15px Arial'; x.textAlign='center'; x.fillText(footerLine(), W/2, H-30); x.textAlign='left';
-    c.toBlob(function(b){ var u=URL.createObjectURL(b); var a=document.createElement('a'); a.href=u; a.download='Daily-Scheduler-'+ds+'.png'; a.click(); setTimeout(function(){URL.revokeObjectURL(u);},2000); toast('Daily Scheduler (A4) saved'); });
+    x.fillStyle='#DA1017'; x.font='bold 15px Arial'; x.fillText('TODAY’S TASKS / WAITING LIST',M+10,taskTop+26);
+    var ty=taskTop+taskHeadH+6;
+    if(!pend.length){ x.fillStyle='#999'; x.font='15px Arial'; x.fillText('No pending tasks.', M+12, ty+22); }
+    pend.forEach(function(t,k){ var yy=ty+k*40; x.fillStyle='#DA1017'; x.font='bold 16px Arial'; x.fillText('•', M+12, yy+22); x.fillStyle='#333'; x.font='15px Arial'; x.fillText(clip(x,t.title+(t.dueTime?'   ('+t.dueTime+')':''), W-2*M-34), M+32, yy+22); x.strokeStyle='#f0f1f4'; x.beginPath(); x.moveTo(M+10,yy+32); x.lineTo(W-M-10,yy+32); x.stroke(); });
+    // footer — single line, BOLD, per-staff
+    x.fillStyle='#444'; x.font='bold 14px Arial'; x.textAlign='center'; x.fillText(footerLine(), W/2, H-30); x.textAlign='left';
+    c.toBlob(function(b){ var u=URL.createObjectURL(b); var a=document.createElement('a'); a.href=u; a.download='Daily-Scheduler-'+ds+'.png'; a.click(); setTimeout(function(){URL.revokeObjectURL(u);},2000); toast('Daily Scheduler saved'); });
   }
   function clip(x,s,max){ s=String(s||''); if(x.measureText(s).width<=max) return s; while(s.length>1 && x.measureText(s+'…').width>max) s=s.slice(0,-1); return s+'…'; }
 
