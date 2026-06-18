@@ -1,6 +1,6 @@
 /* Nakoda MIS — My Tasks (self source for now). Loads after app.js; reuses globals. */
 (function(){
-  var TASKS=[], CALITEMS=[], FILTER='today';
+  var TASKS=[], CALITEMS=[], DELEG=[], FILTER='today';
   var PRI={High:'#C0392B',Normal:'#1A8AC2',Low:'#9aa0a6'};
   function meId(){ return S.user&&S.user.EmpID; }
   function calToItem(e){ return { taskId:'CAL::'+e.entryId, calId:e.entryId, isCal:true, source:'calendar', title:e.title, dueDate:e.date, dueTime:e.startTime, endTime:e.endTime, priority:'', status:(String(e.status)==='done'?'done':'open'), checklist:(e.checklist||'[]') }; }
@@ -36,13 +36,26 @@
     var mid=meId();
     API.cachedCalendar(mid).then(function(e){ if(e){ CALITEMS=e.filter(function(x){return String(x.status)!=='deleted';}).map(calToItem); paintList(); } });
     API.listCalendar(mid).then(function(r){ if(r&&r.ok){ CALITEMS=(r.entries||[]).map(calToItem); paintList(); } });
+    API.listAssignedByMe().then(function(r){ if(r&&r.ok){ DELEG=(r.tasks||[]).map(function(t){ t.isDeleg=true; return t; }); paintList(); } });
+  }
+  function typeCount(key){
+    if(key==='others') return DELEG.filter(function(t){return t.status!=='deleted';}).length;
+    return combined().filter(function(t){ if(t.status==='deleted') return false;
+      if(key==='me') return t.source==='assigned';
+      if(key==='recurring') return t.source==='recurring';
+      if(key==='calendar') return t.isCal;
+      if(key==='process') return t.source==='process';
+      return false; }).length;
   }
   function paintChips(){
     var ALL=combined();
-    var defs=[['today','Today'],['upcoming','Upcoming'],['overdue','Overdue'],['done','Done'],['all','All']];
+    var defs=[['today','Today'],['upcoming','Upcoming'],['overdue','Overdue'],['done','Done'],['all','All'],
+              ['me','Assigned to me'],['others','Assigned to others'],['recurring','Recurring'],['calendar','Calendar'],['process','Process']];
     document.getElementById('taskChips').innerHTML=defs.map(function(d){
-      var on=FILTER===d[0];
-      var n=d[0]==='all'?ALL.filter(function(t){return t.status!=='deleted';}).length:ALL.filter(function(t){return bucket(t)===d[0];}).length;
+      var on=FILTER===d[0], n;
+      if(['today','upcoming','overdue','done'].indexOf(d[0])>=0) n=ALL.filter(function(t){return bucket(t)===d[0];}).length;
+      else if(d[0]==='all') n=ALL.filter(function(t){return t.status!=='deleted';}).length;
+      else n=typeCount(d[0]);
       return '<button class="tchip'+(on?' on':'')+'" data-f="'+d[0]+'">'+d[1]+' <span style="opacity:.7">'+n+'</span></button>';
     }).join('');
     document.querySelectorAll('#taskChips .tchip').forEach(function(b){ b.onclick=function(){ FILTER=b.getAttribute('data-f'); paintChips(); paintList(); }; });
@@ -50,13 +63,25 @@
   function paintList(){
     paintChips();
     var box=document.getElementById('taskList');
-    var list=combined().filter(function(t){ if(t.status==='deleted') return false; return FILTER==='all'?true:bucket(t)===FILTER; });
+    var src=(FILTER==='others')?DELEG:combined();
+    var list=src.filter(function(t){ if(t.status==='deleted') return false;
+      switch(FILTER){
+        case 'all': case 'others': return true;
+        case 'today': case 'upcoming': case 'overdue': case 'done': return bucket(t)===FILTER;
+        case 'me': return t.source==='assigned';
+        case 'recurring': return t.source==='recurring';
+        case 'calendar': return t.isCal;
+        case 'process': return t.source==='process';
+      }
+      return true;
+    });
     list.sort(function(a,b){ return (a.dueDate||'9999')+(a.dueTime||'')>(b.dueDate||'9999')+(b.dueTime||'')?1:-1; });
     if(!list.length){ box.innerHTML='<div class="empty">No tasks here. Tap “+ Add task”.</div>'; return; }
     box.innerHTML=list.map(function(t){
       var done=t.status==='done', cl=pc(t), cldone=cl.filter(function(x){return x.done;}).length;
       var over=bucket(t)==='overdue';
-      var tag=t.isCal?'<span style="background:#ECEAFB;color:#5046b8;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">📅 Meeting / Calendar</span>'
+      var tag=t.isDeleg?'<span style="background:#fff4e8;color:#c47f00;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">→ Assigned to '+esc(t.assigneeName||'')+'</span>'
+              :t.isCal?'<span style="background:#ECEAFB;color:#5046b8;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">📅 Meeting / Calendar</span>'
               :(t.source==='recurring'?'<span style="background:#ECEAFB;color:#5046b8;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">🔁 Recurring</span>'
               :(t.source==='process'?'<span style="background:#eafaf3;color:#1aa37a;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">📁 CRM stage</span>'
               :(t.source==='assigned'?'<span style="background:#eef2ff;color:#4253c5;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">Assigned by '+esc(t.assignedByName||'manager')+'</span>':'')));
@@ -77,7 +102,7 @@
     box.querySelectorAll('[data-tog]').forEach(function(b){ b.onclick=function(ev){ ev.stopPropagation(); toggleDone(b.getAttribute('data-tog')); }; });
   }
   function pend(t){ return t._pending?' <span class="badge pending">syncing</span>':''; }
-  function byId(id){ return combined().filter(function(t){return String(t.taskId)===String(id);})[0]; }
+  function byId(id){ return combined().concat(DELEG).filter(function(t){return String(t.taskId)===String(id);})[0]; }
 
   function toggleDone(id){ var t=byId(id); if(!t) return;
     if(t.isCal){ var nc=t.status==='done'?'pending':'done'; t.status=(nc==='done'?'done':'open'); t._pending=true; paintList();

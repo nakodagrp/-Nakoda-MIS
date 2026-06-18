@@ -240,6 +240,7 @@
 
     cachedTasks:function(){ return kvGet('tasks'); },
     listMyTasks:function(){ return call('listMyTasks',{token:getToken()}).then(function(r){ if(r.ok) kvSet('tasks',r.tasks); return r; }).catch(function(){ return kvGet('tasks').then(function(t){ return {ok:true,tasks:t||[],offline:true}; }); }); },
+    listAssignedByMe:function(){ return call('listAssignedByMe',{token:getToken()}).then(function(r){ if(r.ok) kvSet('tasks_deleg',r.tasks); return r; }).catch(function(){ return kvGet('tasks_deleg').then(function(t){ return {ok:true,tasks:t||[],offline:true}; }); }); },
     refreshTasks:function(){ return API.listMyTasks().catch(function(){}); },
     createTask:function(data){ var id='TSK-'+uuid(); var assigning=!!(data&&data.assignedToEmpId); var d=Object.assign({source:assigning?'assigned':'self'},data,{taskId:id}); var f=function(){ return queueTask('createTask',{data:d}, assigning?null:function(){ return addTaskCache(Object.assign({},d,{status:'open',_pending:true})); }).then(function(r){ r.taskId=id; return r; }); }; if(navigator.onLine) return call('createTask',{token:getToken(),data:d}).then(function(r){ if(r.ok){ API.refreshTasks(); } return r; }).catch(f); return f(); },
     cachedAssignable:function(){ return kvGet('assignable'); },
