@@ -42,9 +42,9 @@
     if(key==='others') return DELEG.filter(function(t){return t.status!=='deleted';}).length;
     return combined().filter(function(t){ if(t.status==='deleted') return false;
       if(key==='me') return t.source==='assigned';
-      if(key==='recurring') return t.source==='recurring';
+      if(key==='recurring') return t.source==='recurring' && t.status!=='done';
       if(key==='calendar') return t.isCal;
-      if(key==='process') return t.source==='process';
+      if(key==='process') return t.source==='process' && t.status!=='done';
       return false; }).length;
   }
   function paintChips(){
@@ -69,9 +69,9 @@
         case 'all': case 'others': return true;
         case 'today': case 'upcoming': case 'overdue': case 'done': return bucket(t)===FILTER;
         case 'me': return t.source==='assigned';
-        case 'recurring': return t.source==='recurring';
+        case 'recurring': return t.source==='recurring' && t.status!=='done';
         case 'calendar': return t.isCal;
-        case 'process': return t.source==='process';
+        case 'process': return t.source==='process' && t.status!=='done';
       }
       return true;
     });
