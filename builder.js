@@ -62,12 +62,25 @@
   }
 
   function openSettings(p){
+    /* split a comma-separated roster into a clean array */
+    function selOf(csv){ return String(csv||'').split(',').map(function(x){return x.trim();}).filter(Boolean); }
+    /* master role list from metadata, unioned with any roles already saved on this process
+       (so nothing is silently dropped if a custom role isn't in the master list) */
+    var base=((S.meta&&S.meta.roles)||[]).map(function(r){ return r.Role||r; });
+    var saved=selOf(p.startRoles).concat(selOf(p.viewRoles)); if(p.ownerRole) saved.push(p.ownerRole);
+    var roles=base.slice();
+    saved.forEach(function(n){ if(roles.indexOf(n)<0) roles.push(n); });
+    /* render a tap-to-select chip checklist, pre-ticking the saved roles */
+    function chips(id,csv){ var on=selOf(csv); return '<div class="rolechips" id="'+id+'">'+roles.map(function(n){ return '<span class="rc'+(on.indexOf(n)>=0?' on':'')+'" data-r="'+esc(n)+'">'+esc(n)+'</span>'; }).join('')+'</div>'; }
+    var ownerOpts=roles.map(function(n){ return '<option'+(n===p.ownerRole?' selected':'')+'>'+esc(n)+'</option>'; }).join('');
     var body='<div class="grid2"><div class="field full"><label>Process name</label><input id="seName" class="in" value="'+esc(p.name)+'"></div>'+
-      '<div class="field full"><label>Owner role (shown on monitor)</label><input id="seOwner" class="in" value="'+esc(p.ownerRole||'')+'"></div>'+
-      '<div class="field full"><label>Who can start &amp; edit leads (roles, comma-separated)</label><input id="seStart" class="in" value="'+esc(p.startRoles||'')+'"></div>'+
-      '<div class="field full"><label>Who can view (roles, comma-separated)</label><input id="seView" class="in" value="'+esc(p.viewRoles||'')+'"></div></div><div id="seMsg"></div>';
+      '<div class="field full"><label>Owner role (shown on monitor)</label><select id="seOwner" class="in">'+ownerOpts+'</select></div>'+
+      '<div class="field full"><label>Who can start &amp; edit leads <span class="muted">(tap to select)</span></label>'+chips('seStart',p.startRoles)+'</div>'+
+      '<div class="field full"><label>Who can view <span class="muted">(tap to select)</span></label>'+chips('seView',p.viewRoles)+'</div></div><div id="seMsg"></div>';
     openModal('Process settings', body, '<button class="btn" id="seSave">Save</button>');
-    $id('seSave').onclick=function(){ this.disabled=true; API.saveProcess({processId:p.processId,name:$id('seName').value.trim(),ownerRole:$id('seOwner').value.trim(),startRoles:$id('seStart').value.trim(),viewRoles:$id('seView').value.trim()}).then(function(r){ if(r&&r.ok){ closeModal(); toast('Saved'); openProcEditor(p.processId); } else $id('seMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; }); };
+    document.querySelectorAll('#seStart .rc, #seView .rc').forEach(function(c){ c.onclick=function(){ c.classList.toggle('on'); }; });
+    function collect(id){ return [].slice.call(document.querySelectorAll('#'+id+' .rc.on')).map(function(c){ return c.getAttribute('data-r'); }).join(','); }
+    $id('seSave').onclick=function(){ this.disabled=true; API.saveProcess({processId:p.processId,name:$id('seName').value.trim(),ownerRole:$id('seOwner').value,startRoles:collect('seStart'),viewRoles:collect('seView')}).then(function(r){ if(r&&r.ok){ closeModal(); toast('Saved'); openProcEditor(p.processId); } else $id('seMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; }); };
   }
 
   /* ---------- stage editor ---------- */

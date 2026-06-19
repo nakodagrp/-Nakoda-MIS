@@ -259,6 +259,11 @@ function priceMap(arr){ var m={}; (arr||[]).forEach(function(p){ m[p.typeId+'|'+
 function fmtMoney(n){ return Math.round(n||0).toLocaleString('en-IN'); }
 function todayD(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function dd10(v){ return String(v||'').slice(0,10); }
+/* "To chase" only counts items overdue within the last CHASE_WINDOW_DAYS so the KPI
+   stays actionable instead of accumulating every stale task/event since launch.
+   Change this one number to widen/narrow the window. */
+var CHASE_WINDOW_DAYS=60;
+function daysAgoD(n){ var d=new Date(); d.setDate(d.getDate()-n); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function toMinD(t){ if(!t) return 0; var p=String(t).split(':'); return (+p[0])*60+(+(p[1]||0)); }
 function e0(){ return {}; }
 function isMonitorRole(){ var u=S.user||{}; return (S.perms&&S.perms.level==='SUPER')||u.Role==='Operations Manager'||u.Role==='Process Coordinator'; }
@@ -284,9 +289,9 @@ function loadDashboard(){
   });
   if(isMonitorRole()){
     Promise.all([API.listAllTasks().catch(e0),API.listAllCalendar().catch(e0)]).then(function(a){
-      var tdy=todayD(), nowMin=new Date().getHours()*60+new Date().getMinutes();
-      DASH.chaseT=((a[0]&&a[0].ok)?a[0].tasks:[]||[]).filter(function(t){ var d=dd10(t.dueDate); return t.status!=='done' && d && d<tdy; }).length;
-      DASH.chaseC=((a[1]&&a[1].ok)?a[1].entries:[]||[]).filter(function(c){ var s=String(c.status); if(s==='done'||s==='deleted') return false; var d=dd10(c.date); return d && (d<tdy || (d===tdy && c.endTime && toMinD(c.endTime)<nowMin)); }).length;
+      var tdy=todayD(), nowMin=new Date().getHours()*60+new Date().getMinutes(), floor=daysAgoD(CHASE_WINDOW_DAYS);
+      DASH.chaseT=((a[0]&&a[0].ok)?a[0].tasks:[]||[]).filter(function(t){ var d=dd10(t.dueDate); return t.status!=='done' && d && d<tdy && d>=floor; }).length;
+      DASH.chaseC=((a[1]&&a[1].ok)?a[1].entries:[]||[]).filter(function(c){ var s=String(c.status); if(s==='done'||s==='deleted') return false; var d=dd10(c.date); return d && d>=floor && (d<tdy || (d===tdy && c.endTime && toMinD(c.endTime)<nowMin)); }).length;
       renderDashboard();
     });
   }
