@@ -206,7 +206,7 @@
     var canPick=S.perms&&S.perms.canViewAll, branches=(S.meta&&S.meta.branches)||[];
     var brOpts='<option value="">All branches</option>'+branches.map(function(b){return '<option value="'+esc(b.BranchID)+'">'+esc(b.BranchName)+'</option>';}).join('');
     v.innerHTML='<div class="page-head"><h1>Process Flow Monitor</h1></div>'+
-      '<div class="seg tm-seg" id="tmSeg"><div data-v="tasks" class="on">Tasks &amp; Schedule</div><div data-v="proc">Processes (stage by stage)</div></div>'+
+      '<div class="seg tm-seg" id="tmSeg"><div data-v="tasks" class="on">Tasks &amp; Schedule</div><div data-v="proc">Processes (stage by stage)</div><div data-v="score">Activity scorecard</div></div>'+
       '<div id="tmMain">'+
         '<div style="color:#888;font-size:13px;margin:10px 0 12px">Everyone’s overdue tasks &amp; missed scheduled items — call or message the person.</div>'+
         '<div class="tm-filters" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'+
@@ -217,11 +217,13 @@
         '<div id="tmFilt" class="tmfilt"></div>'+
         '<div class="section-label">Overdue — follow up</div><div id="tmList"></div>'+
       '</div>'+
-      '<div id="tmProc" class="hidden"></div>';
-    var procLoaded=false;
-    document.querySelectorAll('#tmSeg div').forEach(function(d){ d.onclick=function(){ document.querySelectorAll('#tmSeg div').forEach(function(z){z.classList.remove('on');}); d.classList.add('on'); var pv=d.getAttribute('data-v')==='proc';
-      document.getElementById('tmMain').classList.toggle('hidden',pv); document.getElementById('tmProc').classList.toggle('hidden',!pv);
-      if(pv && !procLoaded && window.renderProcessGridInto){ procLoaded=true; window.renderProcessGridInto(document.getElementById('tmProc')); } }; });
+      '<div id="tmProc" class="hidden"></div>'+
+      '<div id="tmScore" class="hidden"></div>';
+    var procLoaded=false, scoreLoaded=false;
+    document.querySelectorAll('#tmSeg div').forEach(function(d){ d.onclick=function(){ document.querySelectorAll('#tmSeg div').forEach(function(z){z.classList.remove('on');}); d.classList.add('on'); var v=d.getAttribute('data-v');
+      document.getElementById('tmMain').classList.toggle('hidden',v!=='tasks'); document.getElementById('tmProc').classList.toggle('hidden',v!=='proc'); document.getElementById('tmScore').classList.toggle('hidden',v!=='score');
+      if(v==='proc' && !procLoaded && window.renderProcessGridInto){ procLoaded=true; window.renderProcessGridInto(document.getElementById('tmProc')); }
+      if(v==='score' && !scoreLoaded){ scoreLoaded=true; renderScorecard(document.getElementById('tmScore')); } }; });
     if(canPick){ var sel=document.getElementById('tmBranch'); if(sel) sel.addEventListener('change',function(){ EMP=''; var e=document.getElementById('tmEmp'); if(e) e.value=''; paint(); }); }
     var esel=document.getElementById('tmEmp'); if(esel) esel.addEventListener('change',function(){ EMP=this.value; paint(); });
 
@@ -278,6 +280,35 @@
             (ph?('<a href="tel:'+ph+'" class="tm-call">📞 <span>Call</span></a><a href="https://wa.me/91'+ph+'?text='+msg+'" target="_blank" class="tm-wa">💬 <span>WhatsApp</span></a>'):'<span style="font-size:10px;color:#aaa">No phone</span>')+
           '</div></div>';
       }).join('');
+    }
+    function renderScorecard(box){
+      var d0=new Date(); d0.setDate(d0.getDate()-30);
+      var from=d0.getFullYear()+'-'+String(d0.getMonth()+1).padStart(2,'0')+'-'+String(d0.getDate()).padStart(2,'0');
+      box.innerHTML='<div style="color:#888;font-size:13px;margin:10px 0 12px">Calls &amp; meetings each person logged across all CRM pipelines, in the chosen period.</div>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">'+
+          '<label style="font-size:12px;color:#666">From <input type="date" id="scFrom" class="greet-select" value="'+from+'"></label>'+
+          '<label style="font-size:12px;color:#666">To <input type="date" id="scTo" class="greet-select" value="'+todayStr()+'"></label>'+
+          '<button class="btn ghost sm" id="scGo">Apply</button>'+
+        '</div><div id="scBody"><div class="center-load"><span class="loader dark"></span> Loading…</div></div>';
+      function load(){
+        var f=(document.getElementById('scFrom')||{}).value||'', t=(document.getElementById('scTo')||{}).value||'';
+        document.getElementById('scBody').innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>';
+        API.activityScorecard(f,t).then(function(r){
+          var b=document.getElementById('scBody'); if(!b) return;
+          if(!r||!r.ok){ b.innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; return; }
+          var rows=r.rows||[]; if(!rows.length){ b.innerHTML='<div class="empty">No activity logged in this period.</div>'; return; }
+          var tc=0,tm=0,tt=0; rows.forEach(function(x){ tc+=x.calls; tm+=x.meetings; tt+=x.total; });
+          b.innerHTML='<div class="kpis">'+
+              '<div class="kpi" style="background:#fdecec"><div class="n" style="color:#C0392B">'+tc+'</div><div class="l">Calls</div></div>'+
+              '<div class="kpi" style="background:#eef6ff"><div class="n" style="color:#2563c9">'+tm+'</div><div class="l">Meetings</div></div>'+
+              '<div class="kpi" style="background:#f1effc"><div class="n" style="color:#6f63d6">'+tt+'</div><div class="l">Total touches</div></div></div>'+
+            '<table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:13px">'+
+              '<thead><tr style="text-align:left;color:#888;border-bottom:1px solid #eee"><th style="padding:7px">Person</th><th>Branch</th><th style="text-align:center">Calls</th><th style="text-align:center">Meetings</th><th style="text-align:center">Other</th><th style="text-align:center">Total</th></tr></thead><tbody>'+
+              rows.map(function(x){ return '<tr style="border-bottom:1px solid #f3f3f3"><td style="padding:7px"><b>'+esc(x.name)+'</b><div style="font-size:11px;color:#999">'+esc(x.role)+'</div></td><td>'+esc(tbn(x.branch))+'</td><td style="text-align:center">'+x.calls+'</td><td style="text-align:center">'+x.meetings+'</td><td style="text-align:center">'+x.other+'</td><td style="text-align:center"><b>'+x.total+'</b></td></tr>'; }).join('')+
+              '</tbody></table>';
+        });
+      }
+      var g=document.getElementById('scGo'); if(g) g.onclick=load; load();
     }
     Promise.all([API.cachedAllTasks(),API.cachedAllCalendar()]).then(function(a){ if(a[0]) ALLT=a[0]; if(a[1]) ALLC=a[1]; if((a[0]&&a[0].length)||(a[1]&&a[1].length)) paint(); else document.getElementById('tmList').innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>'; });
     API.listAllTasks().then(function(r){ if(r.ok){ ALLT=r.tasks||[]; paint(); } });
