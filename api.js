@@ -269,6 +269,7 @@
     processMonitor:function(pid,filter){ return call('processMonitor',{token:getToken(),processId:pid,filter:filter||{}}).then(function(r){ if(r.ok) kvSet('procmon_'+pid,r); return r; }).catch(function(){ return kvGet('procmon_'+pid).then(function(x){ return x||{ok:true,rows:[],stages:[],offline:true}; }); }); },
     saveProcess:function(d){ return call('saveProcess',{token:getToken(),data:d}).then(function(r){ if(r.ok) API.listProcesses(); return r; }); },
     activityScorecard:function(from,to){ return call('activityScorecard',{token:getToken(),fromDate:from||'',toDate:to||''}); },
+    staffPerformance:function(from,to,branch){ return call('staffPerformance',{token:getToken(),fromDate:from||'',toDate:to||'',branch:branch||''}); },
     saveStage:function(d){ return call('saveStage',{token:getToken(),data:d}); },
     deleteStage:function(id){ return call('deleteStage',{token:getToken(),stageId:id}); },
     reorderStages:function(pid,order){ return call('reorderStages',{token:getToken(),processId:pid,order:order}); },
