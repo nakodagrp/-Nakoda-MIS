@@ -1,6 +1,7 @@
-/* Nakoda MIS — My Tasks (self source for now). Loads after app.js; reuses globals. */
+/* Nakoda MIS — My Tasks. EA/admin can switch the 'Viewing' owner to see a Director's tasks. Loads after app.js; reuses globals. */
 (function(){
   var TASKS=[], CALITEMS=[], DELEG=[], FILTER='today';
+  var VIEW_OWNER=null, OWNER_NAME='', TARGETS=[];   // EA/admin can view another person's (e.g. Director's) tasks
   var PRI={High:'#C0392B',Normal:'#1A8AC2',Low:'#9aa0a6'};
   function meId(){ return S.user&&S.user.EmpID; }
   function calToItem(e){ return { taskId:'CAL::'+e.entryId, calId:e.entryId, isCal:true, source:'calendar', title:e.title, dueDate:e.date, dueTime:e.startTime, endTime:e.endTime, priority:'', status:(String(e.status)==='done'?'done':'open'), checklist:(e.checklist||'[]') }; }
@@ -24,19 +25,54 @@
     return 'today';
   }
 
+  function canViewOthers(){ return (typeof S!=='undefined' && S.perms && S.perms.level==='SUPER') || (S.user && S.user.Role==='Executive Assistant'); }
+  function curOwner(){ return VIEW_OWNER||meId(); }
+  function isSelfView(){ return String(curOwner())===String(meId()); }
+
   function renderMyTasks(){
     var v=document.getElementById('page-tasks');
-    v.innerHTML='<div class="page-head"><h1>My Tasks</h1><div class="spacer"></div><button class="btn" id="addTaskBtn">+ Add task</button></div>'+
+    var ttl=isSelfView()?'My Tasks':(esc(OWNER_NAME||'Director')+'’s Tasks');
+    v.innerHTML='<div class="page-head"><h1 id="tkHead">'+ttl+'</h1><div class="spacer"></div>'+
+      '<span id="tkOwnerWrap"></span>'+
+      (isSelfView()?'<button class="btn" id="addTaskBtn">+ Add task</button>':'')+'</div>'+
       '<div id="taskChips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px"></div>'+
       '<div id="taskList"></div>';
-    document.getElementById('addTaskBtn').onclick=function(){ openTaskForm(null); };
+    var ab=document.getElementById('addTaskBtn'); if(ab) ab.onclick=function(){ openTaskForm(null); };
     paintChips();
-    API.cachedTasks().then(function(t){ if(t&&t.length){ TASKS=t; paintList(); } else { document.getElementById('taskList').innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>'; } });
-    API.listMyTasks().then(function(r){ if(r.ok){ TASKS=r.tasks||[]; paintList(); } });
-    var mid=meId();
-    API.cachedCalendar(mid).then(function(e){ if(e){ CALITEMS=e.filter(function(x){return String(x.status)!=='deleted';}).map(calToItem); paintList(); } });
-    API.listCalendar(mid).then(function(r){ if(r&&r.ok){ CALITEMS=(r.entries||[]).map(calToItem); paintList(); } });
-    API.listAssignedByMe().then(function(r){ if(r&&r.ok){ DELEG=(r.tasks||[]).map(function(t){ t.isDeleg=true; return t; }); paintList(); } });
+    if(canViewOthers()) buildOwnerSwitch();
+    loadData();
+  }
+  function buildOwnerSwitch(){
+    API.calendarTargets().then(function(r){
+      if(!(r&&r.ok)) return; TARGETS=r.targets||[];
+      if(TARGETS.length<2) return;                 // only self in the list — nobody to switch to
+      var wrap=document.getElementById('tkOwnerWrap'); if(!wrap) return;
+      var cur=String(curOwner());
+      wrap.innerHTML='<select id="tkOwner" class="cal-owner" style="margin-right:8px">'+TARGETS.map(function(t){ return '<option value="'+esc(t.EmpID)+'"'+(String(t.EmpID)===cur?' selected':'')+'>'+esc(t.FullName)+'</option>'; }).join('')+'</select>';
+      document.getElementById('tkOwner').onchange=function(){
+        var id=this.value, t=TARGETS.filter(function(x){return String(x.EmpID)===String(id);})[0];
+        VIEW_OWNER=(String(id)===String(meId()))?null:id;
+        OWNER_NAME=(t?t.FullName:'').replace(/\s*\(.*\)$/,'');
+        FILTER='all';                              // a Director's tasks may not be due "today" — show everything by default
+        renderMyTasks();
+      };
+    });
+  }
+  function loadData(){
+    var owner=curOwner(), self=isSelfView(); DELEG=[];
+    if(self){
+      API.cachedTasks().then(function(t){ if(t&&t.length){ TASKS=t; paintList(); } else { var b=document.getElementById('taskList'); if(b) b.innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>'; } });
+      API.listMyTasks().then(function(r){ if(r.ok){ TASKS=r.tasks||[]; paintList(); } });
+      API.cachedCalendar(owner).then(function(e){ if(e){ CALITEMS=e.filter(function(x){return String(x.status)!=='deleted';}).map(calToItem); paintList(); } });
+      API.listCalendar(owner).then(function(r){ if(r&&r.ok){ CALITEMS=(r.entries||[]).map(calToItem); paintList(); } });
+      API.listAssignedByMe().then(function(r){ if(r&&r.ok){ DELEG=(r.tasks||[]).map(function(t){ t.isDeleg=true; return t; }); paintList(); } });
+    } else {
+      TASKS=[]; CALITEMS=[]; var b=document.getElementById('taskList'); if(b) b.innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>';
+      API.cachedTasksFor(owner).then(function(t){ if(t&&t.length){ TASKS=t; paintList(); } });
+      API.listTasksFor(owner).then(function(r){ if(r&&r.ok){ TASKS=r.tasks||[]; paintList(); } });
+      API.cachedCalendar(owner).then(function(e){ if(e){ CALITEMS=e.filter(function(x){return String(x.status)!=='deleted';}).map(calToItem); paintList(); } });
+      API.listCalendar(owner).then(function(r){ if(r&&r.ok){ CALITEMS=(r.entries||[]).map(calToItem); paintList(); } });
+    }
   }
   function typeCount(key){
     if(key==='others') return DELEG.filter(function(t){return t.status!=='deleted';}).length;
@@ -107,8 +143,8 @@
 
   function toggleDone(id){ var t=byId(id); if(!t) return;
     if(t.isCal){ var nc=t.status==='done'?'pending':'done'; t.status=(nc==='done'?'done':'open'); t._pending=true; paintList();
-      API.updateCalEntry(t.calId,{status:nc},meId()).then(function(){ API.cachedCalendar(meId()).then(function(e){ if(e){ CALITEMS=e.filter(function(x){return String(x.status)!=='deleted';}).map(calToItem); paintList(); } }); }); return; }
-    var ns=t.status==='done'?'open':'done'; t.status=ns; t._pending=true; paintList(); API.setTaskStatus(id,ns).then(function(){ API.cachedTasks().then(function(c){ if(c){TASKS=c; paintList();} }); }); }
+      API.updateCalEntry(t.calId,{status:nc},curOwner()).then(function(){ API.cachedCalendar(curOwner()).then(function(e){ if(e){ CALITEMS=e.filter(function(x){return String(x.status)!=='deleted';}).map(calToItem); paintList(); } }); }); return; }
+    var ns=t.status==='done'?'open':'done'; t.status=ns; t._pending=true; paintList(); API.setTaskStatus(id,ns).then(function(){ loadData(); }); }
 
   function dailyPanelHtml(e){
     function m(n){ return '₹'+Math.round(Number(n)||0).toLocaleString('en-IN'); }
