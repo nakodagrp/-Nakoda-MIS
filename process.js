@@ -63,7 +63,7 @@
   /* ---------- start a lead ---------- */
   function openStartForm(pid,DEF,after){
     var start=(DEF.stages||[]).filter(function(s){return s.nodeType==='start';})[0]||DEF.stages[0];
-    API.cachedEmployees().then(function(emps){ emps=emps||[];
+    API.branchAssignees(S.user&&S.user.Branch).then(function(resp){ var emps=(resp&&resp.employees)||[];
       var brs=(S.meta&&S.meta.branches)||[];
       var body='<div class="grid2">'+
         '<div class="field"><label>Name *</label><input id="psName" class="in" placeholder="e.g. Dr. Shah"></div>'+
@@ -74,6 +74,8 @@
         '<div class="field"><label>First task date</label><input id="psDate" class="in" type="date"></div>'+
         '</div><div id="psMsg"></div>';
       openModal('Add to '+DEF.process.name, body, '<button class="btn" id="psSave">Save & start</button>');
+      var psBr=document.getElementById('psBranch');
+      if(psBr) psBr.onchange=function(){ API.branchAssignees(psBr.value).then(function(rr){ var es=(rr&&rr.employees)||[]; var a=document.getElementById('psAssignee'); if(a) a.innerHTML=empOpts(es, S.user&&S.user.EmpID); }); };
       document.getElementById('psSave').onclick=function(){
         var name=document.getElementById('psName').value.trim(); if(!name){ document.getElementById('psMsg').innerHTML='<div class="msg error">Name is required.</div>'; return; }
         var data={ leadName:name, leadMobile:document.getElementById('psMobile').value.trim(), branchId:document.getElementById('psBranch').value,
@@ -100,7 +102,7 @@
     return base.concat(extras);
   }
   function renderInstance(r, iid, after){
-    API.cachedEmployees().then(function(emps){ emps=emps||[];
+    API.branchAssignees(r&&r.instance&&r.instance.branchId).then(function(resp){ var emps=(resp&&resp.employees)||[];
       var st=r.stage||{}, acts=actsFor(st, r.steps);
       var moveOpts=(r.edges||[]).map(function(e){ return '<option value="'+esc(e.toStageId)+'">→ '+esc(e.toName)+(e.label?(' ('+esc(e.label)+')'):'')+'</option>'; }).join('');
       moveOpts+='<option value="STAY">Stay — '+esc(st.name||'')+' (revisit)</option>';
