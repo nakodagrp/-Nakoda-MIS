@@ -119,15 +119,17 @@
     /* Mobile-only ◀ ▶ buttons scroll the week grid sideways via JS — reliable even where touch-swipe
        scrolling of the grid fails in the device WebView. Hidden on desktop. */
     var hs='<div class="cw-hscroll"><button type="button" class="cw-sl" data-dir="-1">◀ Earlier</button><button type="button" class="cw-sl" data-dir="1">Later ▶</button></div>';
-    return hs+'<div class="cw-grid cw-week">'+head+body+'</div>';
+    return '<div class="cal-weekwrap">'+hs+'<div class="cw-grid cw-week">'+head+body+'</div>'+tasksPanel('Pending tasks')+'</div>';
+  }
+  function tasksPanel(heading){
+    var pend=pendingTasks();
+    return '<div class="cal-tasks"><div class="cal-tk-h">'+(heading||'Pending tasks')+' ('+pend.length+')</div>'+
+      (pend.length?pend.map(function(t){ return '<div class="cal-tk"><span class="dot '+(String(t.priority||'').toLowerCase())+'"></span>'+esc(t.title)+(t.dueDate?'<span class="tm">'+esc(t.dueDate)+(t.dueTime?(' '+esc(t.dueTime)):'')+'</span>':(t.dueTime?'<span class="tm">'+esc(t.dueTime)+'</span>':''))+'</div>'; }).join('')
+        :'<div class="cal-tk muted">No pending tasks — nice and clear.</div>')+'</div>';
   }
   function buildDay(){
     var grid='<div class="cw-grid cw-day"><div class="cw-body">'+axisHtml()+'<div class="cw-cols cw-1">'+dayCol(CAL.anchor)+'</div></div></div>';
-    var pend=pendingTasks();
-    var panel='<div class="cal-tasks"><div class="cal-tk-h">Today’s pending tasks ('+pend.length+')</div>'+
-      (pend.length?pend.map(function(t){ return '<div class="cal-tk"><span class="dot '+(String(t.priority||'').toLowerCase())+'"></span>'+esc(t.title)+(t.dueTime?'<span class="tm">'+esc(t.dueTime)+'</span>':'')+'</div>'; }).join('')
-        :'<div class="cal-tk muted">No pending tasks — nice and clear.</div>')+'</div>';
-    return '<div class="cal-daywrap">'+grid+panel+'</div>';
+    return '<div class="cal-daywrap">'+grid+tasksPanel('Today’s pending tasks')+'</div>';
   }
 
   function bindGrid(){
