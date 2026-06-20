@@ -171,6 +171,8 @@ function applyPerms(){
   document.querySelectorAll('[data-page="taskmon"]').forEach(function(n){ n.classList.toggle('hidden',!canMon); });
   var canPerf=canMon||S.perms.level==='BRANCH_MGR';   // monitors see all branches; branch managers see their own
   document.querySelectorAll('[data-page="staffperf"]').forEach(function(n){ n.classList.toggle('hidden',!canPerf); });
+  var canMkt=(S.perms.level==='SUPER')||S.perms.level==='BRANCH_MGR'||(S.user && ['Operations Manager','Marketing Manager','Director'].indexOf(S.user.Role)>=0);
+  document.querySelectorAll('[data-page="marketing"]').forEach(function(n){ n.classList.toggle('hidden',!canMkt); });
   var canRec=S.perms.canManageRecurring||(S.perms.level==='SUPER')||(S.user && S.user.Role==='Executive Assistant');
   document.querySelectorAll('[data-page="recurring"]').forEach(function(n){ n.classList.toggle('hidden',!canRec); });
   var canBuild=(S.perms.level==='SUPER')||(S.user && S.user.Role==='Executive Assistant');
@@ -200,7 +202,7 @@ var currentPage='dashboard';
 function go(page){
   currentPage=page;
   document.querySelectorAll('.nav-item').forEach(function(n){ n.classList.toggle('active', n.getAttribute('data-page')===page); });
-  ['dashboard','tasks','calendar','attendance','leave','field','policy','training','assets','fixedassets','inventory','payroll','accounts','recurring','crm','builder','taskmon','staffperf','employees','profile','branches','cards','cardstatus','suggest','mdinbox'].forEach(function(p){ $('page-'+p).classList.toggle('hidden',p!==page); });
+  ['dashboard','tasks','calendar','attendance','leave','field','policy','training','assets','fixedassets','inventory','payroll','accounts','recurring','crm','builder','taskmon','staffperf','marketing','employees','profile','branches','cards','cardstatus','suggest','mdinbox'].forEach(function(p){ $('page-'+p).classList.toggle('hidden',p!==page); });
   if(page==='dashboard') loadDashboard();
   if(page==='tasks' && window.renderMyTasks) window.renderMyTasks();
   if(page==='calendar' && window.renderCalendar) window.renderCalendar();
@@ -221,6 +223,7 @@ function go(page){
   if(page==='builder' && window.renderBuilder) window.renderBuilder();
   if(page==='taskmon' && window.renderTaskMonitor) window.renderTaskMonitor();
   if(page==='staffperf' && window.renderStaffPerf) window.renderStaffPerf();
+  if(page==='marketing' && window.renderMarketing) window.renderMarketing();
   if(page==='employees') loadEmployees();
   if(page==='profile') loadProfile();
   if(page==='branches' && window.renderBranches) window.renderBranches();
@@ -230,7 +233,7 @@ function go(page){
 }
 
 /* ---------- mobile bottom navigation + "More" sheet ---------- */
-var NAVDEF=[['dashboard','▦','Home'],['tasks','✓','Tasks'],['calendar','📅','Calendar'],['attendance','🕒','Attend'],['crm','📁','CRM'],['builder','🔧','Builder'],['recurring','🔁','Recurring'],['taskmon','📋','Monitor'],['staffperf','📈','Performance'],['employees','👥','Staff'],['leave','🌴','Leave'],['field','🚗','Field'],['policy','📋','Policy'],['training','🎓','Training'],['assets','🗂','Information'],['fixedassets','🛠','Asset Mgmt'],['inventory','📦','Inventory'],['payroll','💰','Payroll'],['accounts','📊','Accounts'],['cards','🏷','Cards'],['cardstatus','✅','Status'],['suggest','✉','Suggest'],['mdinbox','📨','MD Inbox'],['branches','🏢','Branches'],['profile','⚙','Profile']];
+var NAVDEF=[['dashboard','▦','Home'],['tasks','✓','Tasks'],['calendar','📅','Calendar'],['attendance','🕒','Attend'],['crm','📁','CRM'],['builder','🔧','Builder'],['recurring','🔁','Recurring'],['taskmon','📋','Monitor'],['staffperf','📈','Performance'],['marketing','📣','Marketing'],['employees','👥','Staff'],['leave','🌴','Leave'],['field','🚗','Field'],['policy','📋','Policy'],['training','🎓','Training'],['assets','🗂','Information'],['fixedassets','🛠','Asset Mgmt'],['inventory','📦','Inventory'],['payroll','💰','Payroll'],['accounts','📊','Accounts'],['cards','🏷','Cards'],['cardstatus','✅','Status'],['suggest','✉','Suggest'],['mdinbox','📨','MD Inbox'],['branches','🏢','Branches'],['profile','⚙','Profile']];
 function visibleNav(){ return NAVDEF.filter(function(d){ var el=document.querySelector('.nav-item[data-page="'+d[0]+'"]'); return el && !el.classList.contains('hidden'); }); }
 function navBtn(d){ return '<button data-page="'+d[0]+'"><span class="ic">'+d[1]+'</span><span>'+d[2]+'</span></button>'; }
 function buildMobileBottomNav(){
@@ -647,7 +650,15 @@ function loadProfile(){
   API.getEmployee(S.user.EmpID).then(function(r){
     if(!r.ok){ toast(r.error,true); return; }
     var e=r.employee;
-    $('profileCard').innerHTML='<div class="grid2">'+
+    $('profileCard').innerHTML=
+      '<div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">'+
+        '<div id="pPhotoWrap" style="width:72px;height:72px;border-radius:50%;overflow:hidden;background:#f0f0f0;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;">'+
+          (e.PhotoURL?'<img src="'+esc(e.PhotoURL)+'" style="width:100%;height:100%;object-fit:cover;" alt="">':'<span style="font-size:26px;color:#bbb;">'+esc((e.FullName||'?').slice(0,1).toUpperCase())+'</span>')+
+        '</div>'+
+        '<div><input type="file" id="pPhotoFile" accept="image/*" style="display:none;"><button class="btn ghost sm" id="pPhotoBtn">📷 Upload photo</button>'+
+        '<div style="font-size:11px;color:var(--muted);margin-top:5px;">Appears on the Star performers board.</div></div>'+
+      '</div>'+
+      '<div class="grid2">'+
       '<div class="field"><label>Employee ID</label><div>'+esc(e.EmpID)+'</div></div>'+
       '<div class="field"><label>Login ID</label><div>'+esc(e.LoginID)+'</div></div>'+
       '<div class="field"><label>Name</label><div>'+esc(e.FullName)+'</div></div>'+
@@ -663,6 +674,22 @@ function loadProfile(){
       '<button class="btn ghost" id="changePwBtn">Change password</button>'+
       '<button class="btn ghost" id="updBtn" title="Clear cache and load the latest version">↻ Check for updates</button></div>';
     $('updBtn').addEventListener('click', forceUpdate);
+    $('pPhotoBtn').addEventListener('click', function(){ $('pPhotoFile').click(); });
+    $('pPhotoFile').addEventListener('change', function(){
+      var f=this.files&&this.files[0]; if(!f) return;
+      var rd=new FileReader(); rd.onload=function(){
+        var img=new Image(); img.onload=function(){
+          var sz=256, c=document.createElement('canvas'); c.width=sz; c.height=sz;
+          var s=Math.min(img.width,img.height), sx=(img.width-s)/2, sy=(img.height-s)/2;
+          c.getContext('2d').drawImage(img,sx,sy,s,s,0,0,sz,sz);
+          var data=c.toDataURL('image/jpeg',0.7);
+          var b=$('pPhotoBtn'); b.disabled=true; b.innerHTML='<span class="loader"></span> Uploading…';
+          API.savePhoto(data).then(function(r){ b.disabled=false; b.textContent='📷 Upload photo';
+            if(r&&r.ok){ toast('Photo updated'); $('pPhotoWrap').innerHTML='<img src="'+data+'" style="width:100%;height:100%;object-fit:cover;" alt="">'; }
+            else toast((r&&r.error)||'Upload failed',true); });
+        }; img.src=rd.result;
+      }; rd.readAsDataURL(f);
+    });
     $('saveProfileBtn').addEventListener('click', function(){
       var data={Phone:val('p_Phone'),Email:val('p_Email'),Address:val('p_Address'),EmergencyName:val('p_EmergencyName'),EmergencyPhone:val('p_EmergencyPhone')};
       var b=$('saveProfileBtn'); b.disabled=true; b.innerHTML='<span class="loader"></span> Saving…';

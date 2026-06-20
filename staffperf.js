@@ -35,16 +35,26 @@
   function panel(inner){ return '<div style="border:1px solid #eee;border-radius:12px;background:#fff;padding:9px 11px;margin:2px 0 12px;">'+inner+'</div>'; }
   function paintStar(){
     var host=SB.host; if(!host) return;
-    var list=SB.rows.filter(function(d){ return SB.scope==='all' || String(d.branch)===String(myBranch()); })
-      .sort(function(a,b){ return b[SB.mode]-a[SB.mode]; }).slice(0,25);
+    var full=SB.rows.filter(function(d){ return SB.scope==='all' || String(d.branch)===String(myBranch()); })
+      .sort(function(a,b){ var d=b[SB.mode]-a[SB.mode]; return d!==0?d:((a.rkey||0)-(b.rkey||0)); });
+    var top=full.slice(0,5), myIdx=-1;
+    for(var i=0;i<full.length;i++){ if(full[i].emp===meId()){ myIdx=i; break; } }
     var head='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">'+
-      '<span style="font-size:13px;font-weight:700;color:#222;">Star performers</span>'+
-      '<span style="font-size:10px;color:#999;">where you stand</span><div style="flex:1;"></div>'+
+      '<span style="font-size:13px;font-weight:700;color:#222;">Star performers</span><div style="flex:1;"></div>'+
       seg('scope',[['all','All'],['mine','My branch']],SB.scope)+
       seg('mode',[['dedication','Dedication'],['performance','Performance']],SB.mode)+'</div>';
-    host.innerHTML=panel(head+
-      '<div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch;">'+
-      (list.length?list.map(function(d){return card(d,SB.mode);}).join(''):'<div class="muted" style="font-size:12px;">No scores yet this month.</div>')+'</div>');
+    var strip='<div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch;">'+
+      (top.length?top.map(function(d){return card(d,SB.mode);}).join(''):'<div class="muted" style="font-size:12px;">No scores yet this month.</div>')+'</div>';
+    var stand='';
+    if(myIdx>=0){ var me=full[myIdx], sc=me[SB.mode];
+      stand='<div style="margin-top:8px;display:flex;align-items:center;gap:8px;background:#f5f6fa;border-radius:9px;padding:6px 10px;">'+
+        '<span style="font-size:11px;color:#666;">Where you stand</span>'+
+        '<span style="font-size:13px;font-weight:700;color:#185FA5;">#'+(myIdx+1)+'</span>'+
+        '<span style="font-size:11px;color:#999;">of '+full.length+'</span><div style="flex:1;"></div>'+
+        '<span style="font-size:11px;color:#666;">'+(SB.mode==='dedication'?'Dedication':'Performance')+'</span>'+
+        '<span style="font-size:14px;font-weight:700;color:'+(sc>=70?'#1f9d57':'#e0a800')+';">'+sc+'</span></div>';
+    }
+    host.innerHTML=panel(head+strip+stand);
     host.querySelectorAll('[data-seg]').forEach(function(b){ b.onclick=function(){
       var g=b.getAttribute('data-seg'), val=b.getAttribute('data-v');
       if(g==='scope') SB.scope=val; else SB.mode=val; paintStar();
