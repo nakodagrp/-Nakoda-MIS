@@ -34,28 +34,58 @@
 
   /* ---------- pipeline board ---------- */
   function openPipeline(pid){
-    var v=document.getElementById('page-crm'); var DEF=null;
+    var v=document.getElementById('page-crm'); var DEF=null; var BOARDVIEW='running';
     v.innerHTML='<div class="page-head"><button class="btn ghost sm" id="crmBack">‹ CRM</button> <h1 style="font-size:18px;margin:0 0 0 8px" id="crmTtl">Pipeline</h1><div class="spacer"></div>'+
       '<button class="btn ghost sm" id="crmMon">📋 Monitor</button> <button class="btn" id="crmAdd" style="display:none">+ Add</button></div>'+
+      '<div class="seg" id="crmView" style="margin:0 0 12px"><button data-v="running" class="on">Open</button><button data-v="closed_won">Won</button><button data-v="closed_lost">Lost</button><button data-v="all">All</button></div>'+
       '<div id="crmBoard"></div>';
     document.getElementById('crmBack').onclick=renderCRM;
     document.getElementById('crmMon').onclick=function(){ openMonitor(pid); };
     document.getElementById('crmAdd').onclick=function(){ if(DEF) openStartForm(pid,DEF,load); };
+    document.querySelectorAll('#crmView button').forEach(function(b){ b.onclick=function(){
+      BOARDVIEW=b.getAttribute('data-v');
+      document.querySelectorAll('#crmView button').forEach(function(z){ z.classList.toggle('on', z===b); });
+      load();
+    }; });
+    function bindLeads(){ document.querySelectorAll('.crm-lead').forEach(function(el){ el.onclick=function(){ openInstance(el.getAttribute('data-iid'), load); }; }); }
     function paintBoard(r){
+      if(BOARDVIEW!=='running'){ paintClosed(r); return; }
       var stages=(r.stages||[]).filter(function(s){ return s.nodeType!=='start'; });
-      var byStage={}; (r.instances||[]).forEach(function(i){ (byStage[i.currentStageId]=byStage[i.currentStageId]||[]).push(i); });
+      var byStage={}; (r.instances||[]).forEach(function(i){ if(String(i.status||'running')==='running') (byStage[i.currentStageId]=byStage[i.currentStageId]||[]).push(i); });
       document.getElementById('crmBoard').innerHTML='<div class="crm-cols">'+stages.map(function(s){
         var leads=byStage[s.stageId]||[];
         return '<div class="crm-col"><h4>'+esc(s.name)+' <i>'+leads.length+'</i></h4>'+
           leads.map(function(i){ return '<div class="crm-lead'+(i.late?' late':(i.dueToday?' due':''))+'" data-iid="'+esc(i.instanceId)+'"><b>'+esc(i.leadName)+'</b><div class="cl-m">'+esc(i.assigneeName||'')+(i.dueDate?(' · '+(i.late?'overdue':i.dueDate)):'')+'</div></div>'; }).join('')+
           '</div>';
       }).join('')+'</div>';
-      document.querySelectorAll('.crm-lead').forEach(function(el){ el.onclick=function(){ openInstance(el.getAttribute('data-iid'), load); }; });
+      bindLeads();
+    }
+    function paintClosed(r){
+      var snm={}; (r.stages||[]).forEach(function(s){ snm[s.stageId]=s.name; });
+      var rows=(r.instances||[]).slice();
+      if(BOARDVIEW==='closed_won') rows=rows.filter(function(i){ return String(i.status)==='closed_won'; });
+      else if(BOARDVIEW==='closed_lost') rows=rows.filter(function(i){ return String(i.status)==='closed_lost'; });
+      // rank: open first, then won, then lost; closed sorted by close date desc
+      function rank(i){ var st=String(i.status); return st==='running'?0:(st==='closed_won'?1:2); }
+      rows.sort(function(a,b){ var ra=rank(a),rb=rank(b); if(ra!==rb) return ra-rb; return String(b.closedAt||'').localeCompare(String(a.closedAt||'')); });
+      var box=document.getElementById('crmBoard');
+      if(!rows.length){ box.innerHTML='<div class="empty">No '+(BOARDVIEW==='closed_won'?'won':BOARDVIEW==='closed_lost'?'lost':'closed')+' leads yet.</div>'; return; }
+      box.innerHTML='<div class="crm-closed">'+rows.map(function(i){
+        var st=String(i.status), won=st==='closed_won', lost=st==='closed_lost';
+        var badge = won?'<span style="border-radius:12px;font-size:10px;padding:1px 8px;font-weight:700;background:#eafaf3;color:#1aa37a">✓ Won</span>'
+                  : lost?'<span style="border-radius:12px;font-size:10px;padding:1px 8px;font-weight:700;background:#fdecec;color:#C0392B">✕ Lost</span>'
+                  : '<span style="border-radius:12px;font-size:10px;padding:1px 8px;font-weight:700;background:#eef2ff;color:#4253c5">● Open</span>';
+        var meta = (won||lost) ? (i.closeReason?(' · '+esc(i.closeReason)):'')+(i.closedAt?(' · '+esc(i.closedAt)):'')
+                               : (snm[i.currentStageId]?(' · '+esc(snm[i.currentStageId])):'')+(i.dueDate?(' · '+(i.late?'overdue':esc(i.dueDate))):'');
+        return '<div class="crm-lead" data-iid="'+esc(i.instanceId)+'" style="margin-bottom:8px"><b>'+esc(i.leadName)+'</b> '+badge+
+          '<div class="cl-m">'+esc(i.assigneeName||'')+meta+'</div></div>';
+      }).join('')+'</div>';
+      bindLeads();
     }
     function load(){
-      API.cachedInstances(pid).then(function(a){ if(a) paintBoard(a); });
+      API.cachedInstances(pid,BOARDVIEW).then(function(a){ if(a) paintBoard(a); });
       API.getProcess(pid).then(function(d){ if(d&&d.ok){ DEF=d; document.getElementById('crmTtl').textContent=d.process.name; document.getElementById('crmAdd').style.display=d.canStart?'':'none'; } });
-      API.listInstances(pid).then(function(r){ if(r&&r.ok) paintBoard(r); });
+      API.listInstances(pid,BOARDVIEW).then(function(r){ if(r&&r.ok) paintBoard(r); });
     }
     load();
   }
@@ -92,7 +122,7 @@
       var shown=false;
       if(cached && cached.ok){ renderInstance(cached, iid, after); shown=true; }
       else openModal('Lead','<div class="center-load"><span class="loader dark"></span> Loading…</div>','');
-      API.getInstance(iid).then(function(r){ if(r&&r.ok){ if(!shown) renderInstance(r, iid, after); } else if(!shown){ closeModal(); toast((r&&r.error)||'Could not open',true); } });
+      API.getInstance(iid).then(function(r){ if(r&&r.ok){ renderInstance(r, iid, after); } else if(!shown){ closeModal(); toast((r&&r.error)||'Could not open',true); } });
     });
   }
   function actsFor(st, steps){
