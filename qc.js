@@ -14,6 +14,7 @@
     v.innerHTML='<div class="page-head"><h1>Quality control</h1></div>'+
       '<div class="seg" id="qcSeg" style="margin-bottom:14px;">'+
         '<div data-v="entry" class="'+(TAB==='entry'?'on':'')+'">Entry</div>'+
+        '<div data-v="repeat" class="'+(TAB==='repeat'?'on':'')+'">Repeat</div>'+
         '<div data-v="verify" class="'+(TAB==='verify'?'on':'')+'">Verify</div>'+
         '<div data-v="lj" class="'+(TAB==='lj'?'on':'')+'">LJ chart</div>'+
         '<div data-v="materials" class="'+(TAB==='materials'?'on':'')+'">Materials</div>'+
@@ -21,7 +22,29 @@
     v.querySelectorAll('#qcSeg div').forEach(function(d){ d.onclick=function(){ v.querySelectorAll('#qcSeg div').forEach(function(z){z.classList.remove('on');}); d.classList.add('on'); TAB=d.getAttribute('data-v'); paint(); }; });
     loadMats(paint);
   };
-  function paint(){ var b=$id('qcBody'); if(!b) return; if(TAB==='entry') entry(b); else if(TAB==='verify') verify(b); else if(TAB==='lj') lj(b); else materials(b); }
+  function paint(){ var b=$id('qcBody'); if(!b) return; if(TAB==='entry') entry(b); else if(TAB==='repeat') repeat(b); else if(TAB==='verify') verify(b); else if(TAB==='lj') lj(b); else materials(b); }
+
+  /* ---------- Repeat test (deducts per-test consumables) ---------- */
+  function repeat(b){
+    var brs=(window.S&&S.meta&&S.meta.branches)||[], canPick=window.S&&S.perms&&S.perms.canViewAll;
+    var brOpts=brs.map(function(x){return '<option value="'+esc(x.BranchID)+'">'+esc(x.BranchName)+'</option>';}).join('');
+    b.innerHTML='<div class="card"><div class="section-label" style="margin-top:0">Log repeat test</div><div class="grid2">'+
+        (canPick?'<div class="field"><label>Branch</label><select id="rpBr" class="in">'+brOpts+'</select></div>':'')+
+        '<div class="field"><label>Test</label><input id="rpTest" class="in" placeholder="e.g. CBC"></div>'+
+        '<div class="field"><label>Repeats</label><input id="rpQty" class="in" type="number" value="1"></div>'+
+        '<div class="field"><label>Reason</label><select id="rpReason" class="in"><option>Sample issue</option><option>Instrument error</option><option>Verification</option><option>Critical value recheck</option></select></div>'+
+      '</div><div style="margin-top:10px"><div class="muted" style="font-size:11px;margin-bottom:4px">Will deduct (per-test consumables × repeats):</div><div id="rpPrev" class="muted" style="font-size:12px">Loading…</div></div>'+
+      '<button class="btn" id="rpSave" style="margin-top:10px">Save — deduct stock</button><div id="rpMsg"></div></div>';
+    var ITEMS=[];
+    function prev(){ var q=+$id('rpQty').value||1, per=ITEMS.filter(function(i){return i.mapBasis==='test';});
+      $id('rpPrev').innerHTML=per.length?per.map(function(i){ return esc(i.name)+' −'+((Number(i.perUse)||0)*q)+(i.unit?(' '+esc(i.unit)):''); }).join(' · '):'No per-test consumables configured in inventory.'; }
+    API.qcInvItems().then(function(r){ ITEMS=(r&&r.ok)?(r.rows||[]):[]; prev(); });
+    $id('rpQty').addEventListener('input',prev);
+    $id('rpSave').onclick=function(){ var t=$id('rpTest').value.trim(); if(!t){ $id('rpMsg').innerHTML='<div class="msg error">Enter the test.</div>'; return; }
+      var bt=this; bt.disabled=true;
+      API.logRepeat({test:t,qty:+$id('rpQty').value||1,reason:$id('rpReason').value,branchId:(canPick&&$id('rpBr'))?$id('rpBr').value:''}).then(function(r){ bt.disabled=false;
+        if(r&&r.ok){ toast('Repeat logged · '+r.items+' items deducted'); $id('rpTest').value=''; } else $id('rpMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; }); };
+  }
 
   /* ---------- Materials ---------- */
   function materials(b){

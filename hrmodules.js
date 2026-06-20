@@ -5,7 +5,7 @@
   function todayS(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
   function money(n){ return Math.round(Number(n)||0).toLocaleString('en-IN'); }
   function lvl(){ return (S.perms&&S.perms.level)||''; }
-  function canLeaveApprove(){ return lvl()==='BRANCH_MGR'||lvl()==='HR_ADMIN'||lvl()==='SUPER'; }
+  function canLeaveApprove(){ return lvl()==='BRANCH_MGR'||lvl()==='HR_ADMIN'||lvl()==='SUPER'||(S.user&&['Operations Manager','Executive Assistant'].indexOf(S.user.Role)>=0); }
   function canClaimApprove(){ return lvl()==='BRANCH_MGR'||lvl()==='HR_ADMIN'||lvl()==='SUPER'||(S.user&&S.user.Role==='Operations Manager'); }
   function payAllowed(){ return lvl()==='SUPER'||lvl()==='HR_ADMIN'; }
   function lstat(s){ s=String(s||''); var c=s==='approved'?'#1a7f37':s==='rejected'?'#DA1017':'#c47f00'; return '<span style="font-size:10px;font-weight:700;color:'+c+'">'+s.toUpperCase()+'</span>'; }

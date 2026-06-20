@@ -48,6 +48,7 @@
       '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">'+
         '<input type="date" id="mkFrom" class="in" style="max-width:150px" value="'+monthFrom()+'">'+
         '<input type="date" id="mkTo" class="in" style="max-width:150px" value="'+todayD()+'">'+
+        (canPick()?'<select id="mkBr" class="in" style="max-width:150px"><option value="">All branches</option>'+brOpts+'</select>':'')+
         '<div class="seg" id="mkView" style="margin:0"><div data-v="branch" class="on">By branch</div><div data-v="source">By source</div></div>'+
         '<button class="btn ghost sm" id="mkGo">Apply</button>'+
       '</div><div id="mkDash"></div>';
@@ -66,7 +67,7 @@
     $id('mkGo').onclick=loadDash;
     function loadDash(){
       $id('mkDash').innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>';
-      API.listCampaigns($id('mkFrom').value,$id('mkTo').value).then(function(r){
+      API.listCampaigns($id('mkFrom').value,$id('mkTo').value,(canPick()&&$id('mkBr'))?$id('mkBr').value:'').then(function(r){
         var box=$id('mkDash'); if(!box) return;
         if(!r||!r.ok){ box.innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; return; }
         var rows=r.rows||[]; if(!rows.length){ box.innerHTML='<div class="empty">No campaigns in this period.</div>'; return; }
