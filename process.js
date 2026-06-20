@@ -95,7 +95,7 @@
   }
   function actsFor(st, steps){
     var advN=(steps||[]).filter(function(s){ return s.activityType && s.activityType!=='Created'; }).length;
-    var base = advN===0 ? ['New call','New meeting'] : ['Recurring call','Recurring meeting','Follow-up call','Follow-up visit'];
+    var base = advN===0 ? ['New call','New meeting'] : ['Follow-up call','Follow-up meeting'];
     var extras = String(st.activityOptions||'').split(',').filter(Boolean).filter(function(a){ return !/call|meeting|visit/i.test(a); });
     return base.concat(extras);
   }

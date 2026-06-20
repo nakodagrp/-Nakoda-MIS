@@ -83,23 +83,50 @@
     $id('seSave').onclick=function(){ this.disabled=true; API.saveProcess({processId:p.processId,name:$id('seName').value.trim(),ownerRole:$id('seOwner').value,startRoles:collect('seStart'),viewRoles:collect('seView')}).then(function(r){ if(r&&r.ok){ closeModal(); toast('Saved'); openProcEditor(p.processId); } else $id('seMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; }); };
   }
 
+  /* ---------- reusable chip "checklist" picker (tap to toggle, + add your own) ---------- */
+  function pickHtml(id, opts, current){
+    var cur=(current||[]).slice(), all=(opts||[]).slice();
+    cur.forEach(function(v){ if(all.indexOf(v)<0) all.push(v); });
+    var chips=all.map(function(v){ return '<span class="rc'+(cur.indexOf(v)>=0?' on':'')+'" data-v="'+esc(v)+'">'+esc(v)+'</span>'; }).join('');
+    return '<div class="rolechips" id="'+id+'">'+chips+'</div>'+
+      '<div style="display:flex;gap:6px;margin-top:7px">'+
+      '<input class="in" id="'+id+'_new" placeholder="Add your own…" style="max-width:240px">'+
+      '<button class="btn ghost sm" id="'+id+'_add" type="button">+ Add</button></div>';
+  }
+  function wirePick(id){
+    function bind(c){ c.onclick=function(){ c.classList.toggle('on'); }; }
+    document.querySelectorAll('#'+id+' .rc').forEach(bind);
+    var addb=$id(id+'_add'), inp=$id(id+'_new');
+    function add(){ var v=(inp.value||'').trim(); if(!v) return;
+      var ex=[].slice.call(document.querySelectorAll('#'+id+' .rc')).filter(function(c){ return c.getAttribute('data-v').toLowerCase()===v.toLowerCase(); })[0];
+      if(ex){ ex.classList.add('on'); } else { var sp=document.createElement('span'); sp.className='rc on'; sp.setAttribute('data-v',v); sp.textContent=v; bind(sp); $id(id).appendChild(sp); }
+      inp.value=''; inp.focus();
+    }
+    if(addb) addb.onclick=add;
+    if(inp) inp.onkeydown=function(e){ if(e.key==='Enter'){ e.preventDefault(); add(); } };
+  }
+  function pickVal(id){ return [].slice.call(document.querySelectorAll('#'+id+' .rc.on')).map(function(c){ return c.getAttribute('data-v'); }); }
+
   /* ---------- stage editor ---------- */
   function openStageEd(pid, s, def){
     s=s||{}; var fields=(s.fields||[]);
     var ckField=fields.filter(function(f){return f.fieldType==='checklist';})[0];
     var ckItems=ckField?String(ckField.options||'').split(',').filter(Boolean):[];
     var otherFields=fields.filter(function(f){return f.fieldType!=='checklist';});
+    var actSel=String(s.activityOptions||'').split(',').map(function(x){return x.trim();}).filter(Boolean);
+    var ACT_SUGGEST=['WhatsApp','Email','Walk-in','SMS','Reminder'], CK_SUGGEST=[];
     var body='<div class="grid2">'+
       '<div class="field"><label>Stage name *</label><input id="stName" class="in" value="'+esc(s.name||'')+'"></div>'+
       '<div class="field"><label>Timer (TAT days)</label><input id="stTat" class="in" type="number" value="'+(Number(s.tatDays)||0)+'"></div>'+
-      '<div class="field full"><label>Extra activity options (comma-separated; New/Recurring call & meeting are automatic)</label><input id="stActs" class="in" value="'+esc(s.activityOptions||'')+'"></div>'+
+      '<div class="field full"><label>Extra activity options <span class="muted">(tap to select; New/Follow-up call &amp; meeting are automatic)</span></label>'+pickHtml('stActs',ACT_SUGGEST,actSel)+'</div>'+
       '<div class="field"><label class="tg"><input type="checkbox" id="stClose" class="ce-cl-box"'+(s.allowClose?' checked':'')+'> Allow close here</label></div>'+
       '<div class="field"><label class="tg"><input type="checkbox" id="stRecur" class="ce-cl-box"'+(s.recurring?' checked':'')+'> Recurring stage</label></div>'+
-      '<div class="field full"><label>Checklist items (one per line)</label><textarea id="stCk" class="in" rows="4">'+esc(ckItems.join('\n'))+'</textarea></div>'+
+      '<div class="field full"><label>Checklist items <span class="muted">(tap to select or add your own)</span></label>'+pickHtml('stCk',CK_SUGGEST,ckItems)+'</div>'+
       '</div>'+
       (s.stageId?('<label class="fl2">Form fields</label><div id="stFields">'+fieldsList(otherFields)+'</div><button class="btn ghost sm" id="stAddF">+ Add field</button>'):'<div class="note" style="background:#f1effc;border-radius:9px;padding:9px;font-size:11.5px;color:#5046b8">Save the stage first, then add custom form fields.</div>')+
       '<div id="stMsg"></div>';
     openModal(s.stageId?'Edit stage':'Add stage', body, '<button class="btn" id="stSave">Save stage</button>');
+    wirePick('stActs'); wirePick('stCk');
     if(s.stageId){
       var binF=function(){ document.querySelectorAll('#stFields [data-fe]').forEach(function(b){ b.onclick=function(){ var f=otherFields.filter(function(x){return x.fieldId===b.getAttribute('data-fe');})[0]; openFieldEd(s.stageId,f,pid); }; });
         document.querySelectorAll('#stFields [data-fd]').forEach(function(b){ b.onclick=function(){ if(!confirm('Delete field?')) return; API.deleteField(b.getAttribute('data-fd')).then(function(){ toast('Deleted'); openProcEditor(pid); closeModal(); }); }; }); };
@@ -108,9 +135,9 @@
     }
     $id('stSave').onclick=function(){ var n=$id('stName').value.trim(); if(!n){ $id('stMsg').innerHTML='<div class="msg error">Name required.</div>'; return; }
       this.disabled=true;
-      API.saveStage({stageId:s.stageId,processId:pid,name:n,tatDays:Number($id('stTat').value)||0,activityOptions:$id('stActs').value.trim(),allowClose:$id('stClose').checked,recurring:$id('stRecur').checked}).then(function(r){
+      API.saveStage({stageId:s.stageId,processId:pid,name:n,tatDays:Number($id('stTat').value)||0,activityOptions:pickVal('stActs').join(','),allowClose:$id('stClose').checked,recurring:$id('stRecur').checked}).then(function(r){
         if(!r||!r.ok){ $id('stMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; return; }
-        var sid=r.stageId; var items=$id('stCk').value.split('\n').map(function(x){return x.trim();}).filter(Boolean).join(',');
+        var sid=r.stageId; var items=pickVal('stCk').join(',');
         var saveCk = (ckField || items) ? API.saveField({fieldId:(ckField?ckField.fieldId:null),stageId:sid,label:(ckField?ckField.label:'Checklist'),fieldType:'checklist',options:items}) : Promise.resolve();
         Promise.resolve(saveCk).then(function(){ closeModal(); toast('Stage saved'); openProcEditor(pid); });
       });

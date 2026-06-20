@@ -109,4 +109,30 @@
       API.startNurture({contact:nm,phone:$id('nuPhone').value.trim(),steps:steps}).then(function(r){ b.disabled=false;
         if(r&&r.ok){ toast(r.tasks+' tasks created'); $id('nuName').value='';$id('nuPhone').value=''; } else $id('nuMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; }); };
   }
+
+  /* ---------- Marketing section on the main dashboard ---------- */
+  window.renderMktDash=function(host,branch){
+    if(!host) return;
+    var perm=window.S&&S.perms, role=(window.S&&S.user&&S.user.Role)||'';
+    var ok=perm&&(perm.canViewAll||perm.level==='BRANCH_MGR'||['Operations Manager','Marketing Manager','Director'].indexOf(role)>=0);
+    if(!ok){ host.innerHTML=''; return; }
+    API.listCampaigns(monthFrom(),todayD(),branch||'').then(function(r){
+      if(!r||!r.ok){ host.innerHTML=''; return; }
+      var rows=r.rows||[]; if(!rows.length){ host.innerHTML=''; return; }
+      var VIEW='source';
+      function draw(){
+        var key=VIEW==='branch'?'branchName':'source', agg={}, T={amt:0,ld:0,cu:0};
+        rows.forEach(function(x){ var k=x[key]||'—'; var a=agg[k]||(agg[k]={k:k,amt:0,ld:0,cu:0}); a.amt+=x.amount;a.ld+=x.leads;a.cu+=x.customers; T.amt+=x.amount;T.ld+=x.leads;T.cu+=x.customers; });
+        var list=Object.keys(agg).map(function(k){return agg[k];}).sort(function(a,b){return b.amt-a.amt;});
+        host.innerHTML='<div class="section-label" style="display:flex;align-items:center;gap:8px">By branch · marketing this month<div style="flex:1"></div>'+
+          '<span class="mkDT" data-v="branch" style="cursor:pointer;font-size:11px;font-weight:600;color:'+(VIEW==='branch'?'#DA1017':'#999')+'">Branch</span><span style="color:#ccc">·</span>'+
+          '<span class="mkDT" data-v="source" style="cursor:pointer;font-size:11px;font-weight:600;color:'+(VIEW==='source'?'#DA1017':'#999')+'">Source</span></div>'+
+          '<div class="card"><div class="table-wrap swipe"><table><thead><tr><th>'+(VIEW==='branch'?'Branch':'Source')+'</th><th>Spend</th><th>Leads</th><th>CPL</th><th>Customers</th><th>CAC</th><th>Conv %</th></tr></thead><tbody>'+
+          list.map(function(x){ return '<tr><td><b>'+esc(x.k)+'</b></td><td>'+money(x.amt)+'</td><td>'+x.ld+'</td><td>'+money(x.ld?x.amt/x.ld:0)+'</td><td>'+x.cu+'</td><td>'+money(x.cu?x.amt/x.cu:0)+'</td><td>'+(x.ld?Math.round(x.cu/x.ld*100):0)+'%</td></tr>'; }).join('')+
+          '</tbody></table></div></div>';
+        host.querySelectorAll('.mkDT').forEach(function(t){ t.onclick=function(){ VIEW=t.getAttribute('data-v'); draw(); }; });
+      }
+      draw();
+    }).catch(function(){ host.innerHTML=''; });
+  };
 })();

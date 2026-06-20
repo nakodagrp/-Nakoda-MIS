@@ -281,6 +281,7 @@
     verifyQcRun:function(id,action,note){ return call('verifyQcRun',{token:getToken(),runId:id,action:action,note:note||''}); },
     qcInvItems:function(){ return call('qcInvItems',{token:getToken()}); },
     logRepeat:function(d){ return call('logRepeat',{token:getToken(),data:d}); },
+    financeDashboard:function(ym,branch){ return call('financeDashboard',{token:getToken(),ym:ym||'',branch:branch||''}); },
     saveStage:function(d){ return call('saveStage',{token:getToken(),data:d}); },
     deleteStage:function(id){ return call('deleteStage',{token:getToken(),stageId:id}); },
     reorderStages:function(pid,order){ return call('reorderStages',{token:getToken(),processId:pid,order:order}); },

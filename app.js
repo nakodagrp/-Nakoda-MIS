@@ -414,11 +414,15 @@ function renderDashboard(){
   var byType={}; activeCards.forEach(function(c){ byType[c.typeId]=(byType[c.typeId]||0)+1; });
   var tk=Object.keys(byType);
   if(tk.length){
-    html+='<div class="section-label">Active cards by type</div><div class="card"><div class="table-wrap"><table><thead><tr><th>Type</th><th>Count</th></tr></thead><tbody>'+
+    html+='<div class="section-label">Active cards by type</div><div class="card"><div class="table-wrap swipe"><table><thead><tr><th>Type</th><th>Count</th></tr></thead><tbody>'+
       tk.sort(function(a,b){return byType[b]-byType[a];}).map(function(t){return '<tr><td><b>'+esc(t)+'</b></td><td>'+byType[t]+'</td></tr>';}).join('')+'</tbody></table></div></div>';
   }
+  html+='<div id="finDash"></div><div id="mktDash"></div>';
   $('dashExtra').innerHTML=html;
   if(window.renderStarBlock){ try{ window.renderStarBlock(document.getElementById('starBlock')); }catch(_){} }
+  var dashBr=(S.perms&&S.perms.canViewAll)?(($('dashBranch')||{}).value||''):'';
+  if(window.renderFinDash){ try{ window.renderFinDash(document.getElementById('finDash'), dashBr); }catch(_){} }
+  if(window.renderMktDash){ try{ window.renderMktDash(document.getElementById('mktDash'), dashBr); }catch(_){} }
   var recent=emp.slice().sort(function(a,b){return a.EmpID<b.EmpID?1:-1;}).slice(0,6);
   var tb=$('recentTable').querySelector('tbody'); var rhtml='';
   if(!recent.length){ rhtml='<tr><td class="empty">No staff yet.</td></tr>'; }
