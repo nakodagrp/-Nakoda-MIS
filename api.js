@@ -279,6 +279,7 @@
     saveQcRun:function(d){ return call('saveQcRun',{token:getToken(),data:d}); },
     listQcRuns:function(f){ return call('listQcRuns',{token:getToken(),filter:f||{}}); },
     verifyQcRun:function(id,action,note){ return call('verifyQcRun',{token:getToken(),runId:id,action:action,note:note||''}); },
+    qcInvItems:function(){ return call('qcInvItems',{token:getToken()}); },
     saveStage:function(d){ return call('saveStage',{token:getToken(),data:d}); },
     deleteStage:function(id){ return call('deleteStage',{token:getToken(),stageId:id}); },
     reorderStages:function(pid,order){ return call('reorderStages',{token:getToken(),processId:pid,order:order}); },

@@ -9,6 +9,10 @@
   function money(n){ return '₹'+(Math.round(n||0)).toLocaleString('en-IN'); }
   function branches(){ return (window.S&&S.meta&&S.meta.branches)||[]; }
   function canPick(){ return window.S&&S.perms&&S.perms.canViewAll; }
+  function sources(){ var base=['Meta Ads','Google Ads','Reference','Camp','Walk-in','Other'], cs=[];
+    try{ cs=JSON.parse(localStorage.getItem('mktSources')||'[]'); }catch(e){}
+    cs.forEach(function(c){ if(base.indexOf(c)<0) base.push(c); }); return base; }
+  function addSource(s){ s=String(s||'').trim(); if(!s) return; try{ var cs=JSON.parse(localStorage.getItem('mktSources')||'[]'); if(cs.indexOf(s)<0){ cs.push(s); localStorage.setItem('mktSources',JSON.stringify(cs)); } }catch(e){} }
   var TAB='campaign';
 
   window.renderMarketing=function(){
@@ -24,11 +28,12 @@
   /* ---------- Campaign ---------- */
   function campaign(){
     var brOpts=branches().map(function(b){return '<option value="'+esc(b.BranchID)+'">'+esc(b.BranchName)+'</option>';}).join('');
-    var srcs=['Meta Ads','Google Ads','Reference','Camp','Walk-in','Other'];
+    var srcs=sources();
     $id('mkBody').innerHTML=
       '<div class="card" style="margin-bottom:14px;"><div class="section-label" style="margin-top:0">Add campaign spend</div><div class="grid2">'+
         (canPick()?'<div class="field"><label>Branch</label><select id="cAmpBr" class="in">'+brOpts+'</select></div>':'')+
-        '<div class="field"><label>Source</label><select id="cAmpSrc" class="in">'+srcs.map(function(s){return '<option>'+s+'</option>';}).join('')+'</select></div>'+
+        '<div class="field"><label>Source</label><select id="cAmpSrc" class="in">'+srcs.map(function(s){return '<option>'+esc(s)+'</option>';}).join('')+'<option value="__new__">➕ Add new source…</option></select>'+
+          '<input id="cAmpNewSrc" class="in" placeholder="New source name" style="display:none;margin-top:6px"></div>'+
         '<div class="field"><label>Amount spent ₹</label><input id="cAmpAmt" class="in" type="number" value="0"></div>'+
         '<div class="field"><label>No. of leads</label><input id="cAmpLeads" class="in" type="number" value="0"></div>'+
         '<div class="field"><label>Leads → customers</label><input id="cAmpCust" class="in" type="number" value="0"></div>'+
@@ -49,9 +54,13 @@
     function calc(){ var a=+$id('cAmpAmt').value||0,l=+$id('cAmpLeads').value||0,c=+$id('cAmpCust').value||0;
       $id('cAmpCpl').textContent=money(l?a/l:0); $id('cAmpCac').textContent=money(c?a/c:0); $id('cAmpConv').textContent=(l?Math.round(c/l*100):0)+'%'; }
     ['cAmpAmt','cAmpLeads','cAmpCust'].forEach(function(id){ $id(id).addEventListener('input',calc); }); calc();
-    $id('cAmpSave').onclick=function(){ var b=this; b.disabled=true;
-      API.saveCampaign({branchId:(canPick()&&$id('cAmpBr'))?$id('cAmpBr').value:'',source:$id('cAmpSrc').value,amount:+$id('cAmpAmt').value||0,leads:+$id('cAmpLeads').value||0,customers:+$id('cAmpCust').value||0,notes:$id('cAmpNotes').value,date:todayD()})
-        .then(function(r){ b.disabled=false; if(r&&r.ok){ toast('Campaign saved'); $id('cAmpAmt').value=0;$id('cAmpLeads').value=0;$id('cAmpCust').value=0;$id('cAmpNotes').value='';calc(); loadDash(); } else $id('cAmpMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; }); };
+    $id('cAmpSrc').addEventListener('change',function(){ $id('cAmpNewSrc').style.display=(this.value==='__new__')?'':'none'; if(this.value==='__new__') $id('cAmpNewSrc').focus(); });
+    $id('cAmpSave').onclick=function(){ var b=this;
+      var src=$id('cAmpSrc').value;
+      if(src==='__new__'){ src=($id('cAmpNewSrc').value||'').trim(); if(!src){ $id('cAmpMsg').innerHTML='<div class="msg error">Enter the new source name.</div>'; return; } addSource(src); }
+      b.disabled=true;
+      API.saveCampaign({branchId:(canPick()&&$id('cAmpBr'))?$id('cAmpBr').value:'',source:src,amount:+$id('cAmpAmt').value||0,leads:+$id('cAmpLeads').value||0,customers:+$id('cAmpCust').value||0,notes:$id('cAmpNotes').value,date:todayD()})
+        .then(function(r){ b.disabled=false; if(r&&r.ok){ toast('Campaign saved'); campaign($id('mkBody')); } else $id('cAmpMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; }); };
     var VIEW='branch';
     $id('mkView').querySelectorAll('div').forEach(function(d){ d.onclick=function(){ $id('mkView').querySelectorAll('div').forEach(function(z){z.classList.remove('on');}); d.classList.add('on'); VIEW=d.getAttribute('data-v'); loadDash(); }; });
     $id('mkGo').onclick=loadDash;

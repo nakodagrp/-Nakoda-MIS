@@ -32,7 +32,10 @@
         '<div class="field"><label>Level</label><select id="qmLevel" class="in"><option>L1</option><option>L2</option><option>L3</option></select></div>'+
         '<div class="field"><label>Expiry</label><input id="qmExp" class="in" type="date"></div>'+
       '</div><div style="margin-top:8px"><div style="display:grid;grid-template-columns:1fr 70px 80px 80px 30px;gap:6px;font-size:10.5px;color:var(--muted);"><div>Analyte</div><div>Unit</div><div style="text-align:center">Mean</div><div style="text-align:center">SD</div><div></div></div><div id="qmAn"></div>'+
-      '<button class="btn ghost sm" id="qmAdd" style="margin-top:8px">+ Add analyte</button> <button class="btn" id="qmSave">Save lot</button><div id="qmMsg"></div></div></div>'+
+      '<button class="btn ghost sm" id="qmAdd" style="margin-top:8px">+ Add analyte</button>'+
+      '<div style="margin-top:12px"><div class="muted" style="font-size:11px;margin-bottom:4px">Consumables used per accepted run (deducts stock)</div><div id="qmCons"></div>'+
+        '<div style="display:flex;gap:6px;margin-top:6px"><select id="qmItem" class="in" style="max-width:200px"><option>Loading…</option></select><input id="qmQty" class="in" type="number" value="1" style="max-width:80px"><button class="btn ghost sm" id="qmAddItem">+ Add</button></div></div>'+
+      '<div style="margin-top:12px"><button class="btn" id="qmSave">Save lot</button></div><div id="qmMsg"></div></div></div>'+
       '<div class="card"><div class="section-label" style="margin-top:0">Materials</div>'+listHtml+'</div>';
     var AN=[['Glucose','mg/dL',100,3],['Cholesterol','mg/dL',200,6]];
     function drawAn(){ $id('qmAn').innerHTML=AN.map(function(a,i){ return '<div style="display:grid;grid-template-columns:1fr 70px 80px 80px 30px;gap:6px;align-items:center;padding:3px 0;">'+
@@ -44,10 +47,16 @@
       $id('qmAn').querySelectorAll('.qmDel').forEach(function(x){ x.onclick=function(){ AN.splice(+x.getAttribute('data-i'),1); drawAn(); }; }); }
     drawAn();
     $id('qmAdd').onclick=function(){ AN.push(['','',0,0]); drawAn(); };
+    var CONS=[], ITEMS=[];
+    function drawCons(){ $id('qmCons').innerHTML=CONS.length?CONS.map(function(c,i){ var it=ITEMS.filter(function(x){return x.itemId===c.itemId;})[0]; return '<span style="display:inline-flex;align-items:center;gap:5px;background:#f1f1f1;border-radius:14px;padding:3px 10px;margin:3px 4px 0 0;font-size:11.5px;">'+esc(it?it.name:c.itemId)+' ×'+c.qty+' <span class="qmDelC" data-i="'+i+'" style="cursor:pointer;color:#A32D2D">✕</span></span>'; }).join(''):'<span class="muted" style="font-size:11px">None</span>';
+      $id('qmCons').querySelectorAll('.qmDelC').forEach(function(x){ x.onclick=function(){ CONS.splice(+x.getAttribute('data-i'),1); drawCons(); }; }); }
+    drawCons();
+    API.qcInvItems().then(function(r){ ITEMS=(r&&r.ok)?(r.rows||[]):[]; var sel=$id('qmItem'); if(sel) sel.innerHTML=ITEMS.length?ITEMS.map(function(it){return '<option value="'+esc(it.itemId)+'">'+esc(it.name)+(it.unit?(' ('+esc(it.unit)+')'):'')+'</option>';}).join(''):'<option value="">No items</option>'; });
+    $id('qmAddItem').onclick=function(){ var iid=$id('qmItem').value, q=+$id('qmQty').value||1; if(!iid) return; CONS.push({itemId:iid,qty:q}); drawCons(); };
     $id('qmSave').onclick=function(){
       var an=AN.map(function(a,i){ function g(j){ var el=$id('qmAn').querySelector('[data-an="'+i+'-'+j+'"]'); return el?el.value:''; } return {analyte:g(0),unit:g(1),mean:+g(2)||0,sd:+g(3)||0}; }).filter(function(a){ return a.analyte; });
       var bt=this; bt.disabled=true;
-      API.saveQcMaterial({name:$id('qmName').value,lot:$id('qmLot').value,level:$id('qmLevel').value,expiry:$id('qmExp').value,analytes:an}).then(function(r){ bt.disabled=false;
+      API.saveQcMaterial({name:$id('qmName').value,lot:$id('qmLot').value,level:$id('qmLevel').value,expiry:$id('qmExp').value,analytes:an,items:CONS}).then(function(r){ bt.disabled=false;
         if(r&&r.ok){ toast('Lot saved'); loadMats(function(){ materials($id('qcBody')); }); } else $id('qmMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; }); };
   }
 
