@@ -620,4 +620,12 @@ html,body{overflow-x:hidden}
   table td:empty{display:none}
   .table-wrap{overflow:visible}
   th{position:static}
+  /* opt-in: keep a wide table as a real table that swipes sideways (pinned first column) */
+  .table-wrap.swipe{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .table-wrap.swipe table{display:table;width:max-content;min-width:100%}
+  .table-wrap.swipe thead{display:table-header-group}
+  .table-wrap.swipe tr{display:table-row;border:none;margin:0;background:none;border-radius:0;width:auto}
+  .table-wrap.swipe td,.table-wrap.swipe th{display:table-cell;width:auto;text-align:left;white-space:nowrap;padding:8px 12px}
+  .table-wrap.swipe td:before{content:none}
+  .table-wrap.swipe td:first-child,.table-wrap.swipe th:first-child{position:sticky;left:0;background:#fff;z-index:1}
 }

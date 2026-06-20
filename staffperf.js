@@ -23,27 +23,28 @@
     }).join('')+'</div>';
   }
   function card(d,mode){
-    var s=d[mode], me=(meId()&&meId()===d.emp);
-    var av = d.photo ? '<img src="'+esc(d.photo)+'" style="width:100%;height:100%;object-fit:cover;" alt="">'
-                     : '<span style="font-size:26px;font-weight:700;color:#fff;">'+esc(ini(d.name))+'</span>';
-    return '<div style="flex:0 0 112px;border-radius:12px;overflow:hidden;border:'+(me?'2px solid #185FA5':'1px solid #e6e6e6')+';">'+
-      '<div style="position:relative;height:84px;background:'+colorFor(d.name)+';display:flex;align-items:center;justify-content:center;">'+av+
-        '<span style="position:absolute;top:5px;left:5px;background:rgba(0,0,0,.45);color:#fff;font-size:12px;font-weight:700;padding:1px 7px;border-radius:9px;">'+s+'</span>'+
-        (me?'<span style="position:absolute;top:5px;right:5px;background:#fff;color:#185FA5;font-size:8px;font-weight:700;padding:1px 5px;border-radius:9px;">YOU</span>':'')+
-      '</div>'+
-      '<div style="padding:5px 7px;background:#fff;"><div style="font-size:11px;font-weight:600;color:#222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(d.name)+'</div><div style="font-size:9px;color:#999;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(d.role)+'</div></div>'+
+    var s=d[mode], me=(meId()&&meId()===d.emp), bdr=(s>=70?'#1f9d57':'#e0a800');
+    var av = d.photo ? '<img src="'+esc(d.photo)+'" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;" alt="">'
+                     : '<div style="position:absolute;inset:0;background:'+colorFor(d.name)+';display:flex;align-items:center;justify-content:center;"><span style="font-size:24px;font-weight:700;color:#fff;">'+esc(ini(d.name))+'</span></div>';
+    return '<div style="flex:0 0 92px;position:relative;height:100px;border-radius:11px;overflow:hidden;border:2px solid '+bdr+';">'+av+
+      '<span style="position:absolute;top:3px;left:6px;color:#DA1017;font-weight:700;font-size:13px;text-shadow:0 1px 2px rgba(255,255,255,.75);">'+s+'</span>'+
+      (me?'<span style="position:absolute;top:3px;right:4px;background:#185FA5;color:#fff;font-size:8px;font-weight:700;padding:1px 5px;border-radius:8px;">YOU</span>':'')+
+      '<div style="position:absolute;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);padding:3px 6px;"><span style="display:block;color:#fff;font-size:10px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(d.name)+'</span></div>'+
     '</div>';
   }
+  function panel(inner){ return '<div style="border:1px solid #eee;border-radius:12px;background:#fff;padding:9px 11px;margin:2px 0 12px;">'+inner+'</div>'; }
   function paintStar(){
     var host=SB.host; if(!host) return;
     var list=SB.rows.filter(function(d){ return SB.scope==='all' || String(d.branch)===String(myBranch()); })
-      .sort(function(a,b){ return b[SB.mode]-a[SB.mode]; }).slice(0,10);
-    var toggles='<div style="display:flex;gap:8px;flex-wrap:wrap;margin:0 0 9px;">'+
+      .sort(function(a,b){ return b[SB.mode]-a[SB.mode]; }).slice(0,25);
+    var head='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">'+
+      '<span style="font-size:13px;font-weight:700;color:#222;">Star performers</span>'+
+      '<span style="font-size:10px;color:#999;">where you stand</span><div style="flex:1;"></div>'+
       seg('scope',[['all','All'],['mine','My branch']],SB.scope)+
       seg('mode',[['dedication','Dedication'],['performance','Performance']],SB.mode)+'</div>';
-    host.innerHTML='<div class="section-label">Star performers</div>'+toggles+
-      '<div style="display:flex;gap:9px;overflow-x:auto;padding-bottom:8px;-webkit-overflow-scrolling:touch;">'+
-      (list.length?list.map(function(d){return card(d,SB.mode);}).join(''):'<div class="muted" style="font-size:12px;">No scores yet this month.</div>')+'</div>';
+    host.innerHTML=panel(head+
+      '<div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch;">'+
+      (list.length?list.map(function(d){return card(d,SB.mode);}).join(''):'<div class="muted" style="font-size:12px;">No scores yet this month.</div>')+'</div>');
     host.querySelectorAll('[data-seg]').forEach(function(b){ b.onclick=function(){
       var g=b.getAttribute('data-seg'), val=b.getAttribute('data-v');
       if(g==='scope') SB.scope=val; else SB.mode=val; paintStar();
@@ -51,7 +52,7 @@
   }
   window.renderStarBlock=function(host){
     if(!host) return; SB.host=host;
-    host.innerHTML='<div class="section-label">Star performers</div><div class="muted" style="font-size:12px;">Loading…</div>';
+    host.innerHTML=panel('<span style="font-size:13px;font-weight:700;color:#222;">Star performers</span> <span class="muted" style="font-size:11px;">Loading…</span>');
     API.staffPerformance(monthFrom(),todayD(),'').then(function(r){
       if(r&&r.ok){ SB.rows=r.rows||[]; paintStar(); } else host.innerHTML='';
     }).catch(function(){ host.innerHTML=''; });

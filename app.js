@@ -357,7 +357,7 @@ function renderDashboard(){
   calToday.slice(0,5).forEach(function(c){ items+='<div class="dash-att" onclick="go(\'calendar\')"><span class="dot" style="background:'+(String(c.status)==='done'?'#1a7f37':'#7F77DD')+'"></span><span class="t">'+(c.startTime?esc(c.startTime)+' · ':'')+esc(c.title)+'</span><span class="r">calendar ›</span></div>'; });
   if(!items) items='<div class="dash-att muted"><span class="t">Nothing pending today. 🎉</span></div>';
   att+='<div class="section-label">Needs attention today</div>'+items;
-  var html='<div id="starBlock"></div>'+att;
+  var html=att;
   /* Department health board (role-wise) — replaces the old module launcher + CRM pipelines list.
      Driven by the process pipelines the backend returns for this user's scope. Counts (open/due/overdue)
      are live; on-time % is an approximation = (open-overdue)/open; ₹ shown only where derivable. */
@@ -402,7 +402,7 @@ function renderDashboard(){
       return {name:branchName(bid),staff:be,cards:bc.length,rev:brev,cash:dd.cash,bank:dd.bank,other:dd.other,biz:biz,pat:dd.pat,test:dd.test,
         avg:(dd.pat>0?Math.round(biz/dd.pat):0), rTest:(dd.test>0?Math.round(biz/dd.test):0), rStaff:(be>0?Math.round(biz/be):0)};
     }).sort(function(a,b){return b.biz-a.biz;});
-    html+='<div class="section-label">By branch · business this month</div><div class="card"><div class="table-wrap"><table><thead><tr><th>Branch</th><th>Business (MTD)</th><th>Cash</th><th>Bank / UPI</th><th>Other</th><th>Patients</th><th>Avg / patient</th><th>Tests</th><th>Rev / test</th><th>No. of cards</th><th>Card business</th><th>Staff</th><th>Rev / staff</th></tr></thead><tbody>'+
+    html+='<div class="section-label">By branch · business this month</div><div class="card"><div class="table-wrap swipe"><table><thead><tr><th>Branch</th><th>Business (MTD)</th><th>Cash</th><th>Bank / UPI</th><th>Other</th><th>Patients</th><th>Avg / patient</th><th>Tests</th><th>Rev / test</th><th>No. of cards</th><th>Card business</th><th>Staff</th><th>Rev / staff</th></tr></thead><tbody>'+
       rows.map(function(r){return '<tr><td><b>'+esc(r.name)+'</b></td><td>₹'+fmtMoney(r.biz)+'</td><td>₹'+fmtMoney(r.cash)+'</td><td>₹'+fmtMoney(r.bank)+'</td><td>₹'+fmtMoney(r.other)+'</td><td>'+r.pat+'</td><td>₹'+fmtMoney(r.avg)+'</td><td>'+r.test+'</td><td>₹'+fmtMoney(r.rTest)+'</td><td>'+r.cards+'</td><td>₹'+fmtMoney(r.rev)+'</td><td>'+r.staff+'</td><td>₹'+fmtMoney(r.rStaff)+'</td></tr>';}).join('')+'</tbody></table></div></div>';
   }
   var byType={}; activeCards.forEach(function(c){ byType[c.typeId]=(byType[c.typeId]||0)+1; });
