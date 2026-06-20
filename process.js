@@ -106,6 +106,9 @@
       var st=r.stage||{}, acts=actsFor(st, r.steps);
       var moveOpts=(r.edges||[]).map(function(e){ return '<option value="'+esc(e.toStageId)+'">→ '+esc(e.toName)+(e.label?(' ('+esc(e.label)+')'):'')+'</option>'; }).join('');
       moveOpts+='<option value="STAY">Stay — '+esc(st.name||'')+' (revisit)</option>';
+      moveOpts+='<option value="STAY_NR">⏸ Not responding (stay)</option>'+
+               '<option value="STAY_FU">↻ Follow up (stay)</option>'+
+               '<option value="STAY_PR">★ Prospect (stay)</option>';
       if(st.allowClose){ moveOpts+='<option value="CLOSE_WON">✓ Close — Won</option><option value="CLOSE_LOST">✕ Close — Lost</option>'; }
       var mouBtn=(String(r.instance.processId)==='P_DOCTOR')?'<button class="btn ghost sm" id="avMou" style="margin-bottom:8px">⤓ Download MOU</button>':'';
       var body='<div style="font-size:12.5px;color:#666;margin-bottom:8px"><b>'+esc(r.instance.leadName)+'</b>'+(r.instance.leadMobile?(' · '+esc(r.instance.leadMobile)):'')+' · stage: '+esc(st.name||'')+'</div>'+mouBtn+
