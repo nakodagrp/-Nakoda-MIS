@@ -175,6 +175,8 @@ function applyPerms(){
   document.querySelectorAll('[data-page="marketing"]').forEach(function(n){ n.classList.toggle('hidden',!canMkt); });
   var canQc=(S.perms.level==='SUPER')||S.perms.level==='BRANCH_MGR'||(S.user && ['QC Manager','Pathologist','Lab Technician','Operations Manager','Director'].indexOf(S.user.Role)>=0);
   document.querySelectorAll('[data-page="qc"]').forEach(function(n){ n.classList.toggle('hidden',!canQc); });
+  var canKpi=(S.perms.level==='SUPER')||(S.user && ['HR','Director','Operations Manager'].indexOf(S.user.Role)>=0);
+  document.querySelectorAll('[data-page="kpiadmin"]').forEach(function(n){ n.classList.toggle('hidden',!canKpi); });
   var canRec=S.perms.canManageRecurring||(S.perms.level==='SUPER')||(S.user && S.user.Role==='Executive Assistant');
   document.querySelectorAll('[data-page="recurring"]').forEach(function(n){ n.classList.toggle('hidden',!canRec); });
   var canBuild=(S.perms.level==='SUPER')||(S.user && S.user.Role==='Executive Assistant');
@@ -204,7 +206,7 @@ var currentPage='dashboard';
 function go(page){
   currentPage=page;
   document.querySelectorAll('.nav-item').forEach(function(n){ n.classList.toggle('active', n.getAttribute('data-page')===page); });
-  ['dashboard','tasks','calendar','attendance','leave','field','policy','training','assets','fixedassets','inventory','payroll','accounts','recurring','crm','builder','taskmon','staffperf','marketing','qc','employees','profile','branches','cards','cardstatus','suggest','mdinbox'].forEach(function(p){ $('page-'+p).classList.toggle('hidden',p!==page); });
+  ['dashboard','tasks','calendar','attendance','leave','field','policy','training','assets','fixedassets','inventory','payroll','accounts','recurring','crm','builder','taskmon','staffperf','marketing','qc','kpiadmin','employees','profile','branches','cards','cardstatus','suggest','mdinbox'].forEach(function(p){ $('page-'+p).classList.toggle('hidden',p!==page); });
   if(page==='dashboard') loadDashboard();
   if(page==='tasks' && window.renderMyTasks) window.renderMyTasks();
   if(page==='calendar' && window.renderCalendar) window.renderCalendar();
@@ -227,6 +229,7 @@ function go(page){
   if(page==='staffperf' && window.renderStaffPerf) window.renderStaffPerf();
   if(page==='marketing' && window.renderMarketing) window.renderMarketing();
   if(page==='qc' && window.renderQc) window.renderQc();
+  if(page==='kpiadmin' && window.renderKpiAdmin) window.renderKpiAdmin();
   if(page==='employees') loadEmployees();
   if(page==='profile') loadProfile();
   if(page==='branches' && window.renderBranches) window.renderBranches();
@@ -236,7 +239,7 @@ function go(page){
 }
 
 /* ---------- mobile bottom navigation + "More" sheet ---------- */
-var NAVDEF=[['dashboard','▦','Home'],['tasks','✓','Tasks'],['calendar','📅','Calendar'],['attendance','🕒','Attend'],['crm','📁','CRM'],['builder','🔧','Builder'],['recurring','🔁','Recurring'],['taskmon','📋','Monitor'],['staffperf','📈','Performance'],['marketing','📣','Marketing'],['qc','🧪','QC'],['employees','👥','Staff'],['leave','🌴','Leave'],['field','🚗','Field'],['policy','📋','Policy'],['training','🎓','Training'],['assets','🗂','Information'],['fixedassets','🛠','Asset Mgmt'],['inventory','📦','Inventory'],['payroll','💰','Payroll'],['accounts','📊','Accounts'],['cards','🏷','Cards'],['cardstatus','✅','Status'],['suggest','✉','Suggest'],['mdinbox','📨','MD Inbox'],['branches','🏢','Branches'],['profile','⚙','Profile']];
+var NAVDEF=[['dashboard','▦','Home'],['tasks','✓','Tasks'],['calendar','📅','Calendar'],['attendance','🕒','Attend'],['crm','📁','CRM'],['builder','🔧','Builder'],['recurring','🔁','Recurring'],['taskmon','📋','Monitor'],['staffperf','📈','Performance'],['marketing','📣','Marketing'],['qc','🧪','QC'],['kpiadmin','🎯','KPI'],['employees','👥','Staff'],['leave','🌴','Leave'],['field','🚗','Field'],['policy','📋','Policy'],['training','🎓','Training'],['assets','🗂','Information'],['fixedassets','🛠','Asset Mgmt'],['inventory','📦','Inventory'],['payroll','💰','Payroll'],['accounts','📊','Accounts'],['cards','🏷','Cards'],['cardstatus','✅','Status'],['suggest','✉','Suggest'],['mdinbox','📨','MD Inbox'],['branches','🏢','Branches'],['profile','⚙','Profile']];
 function visibleNav(){ return NAVDEF.filter(function(d){ var el=document.querySelector('.nav-item[data-page="'+d[0]+'"]'); return el && !el.classList.contains('hidden'); }); }
 function navBtn(d){ return '<button data-page="'+d[0]+'"><span class="ic">'+d[1]+'</span><span>'+d[2]+'</span></button>'; }
 function buildMobileBottomNav(){
@@ -420,6 +423,7 @@ function renderDashboard(){
   html+='<div id="finDash"></div><div id="mktDash"></div>';
   $('dashExtra').innerHTML=html;
   if(window.renderStarBlock){ try{ window.renderStarBlock(document.getElementById('starBlock')); }catch(_){} }
+  if(window.renderQuickLog){ try{ window.renderQuickLog(document.getElementById('quickLog')); }catch(_){} }
   var dashBr=(S.perms&&S.perms.canViewAll)?(($('dashBranch')||{}).value||''):'';
   if(window.renderFinDash){ try{ window.renderFinDash(document.getElementById('finDash'), dashBr); }catch(_){} }
   if(window.renderMktDash){ try{ window.renderMktDash(document.getElementById('mktDash'), dashBr); }catch(_){} }
@@ -653,6 +657,22 @@ function showCredentials(title, loginId, pw){
 function copyCred(id,pw){ var t='Nakoda MIS login\nLogin ID: '+id+'\nPassword: '+pw; try{ navigator.clipboard.writeText(t); toast('Copied'); }catch(e){ toast('Copy not available',true); } }
 
 /* profile */
+function openVisitingCard(e){
+  var c=document.createElement('canvas'); c.width=640; c.height=360; var x=c.getContext('2d');
+  x.fillStyle='#ffffff'; x.fillRect(0,0,640,360);
+  x.fillStyle='#DA1017'; x.fillRect(0,0,640,8);
+  x.fillStyle='#999'; x.font='12px sans-serif'; x.fillText('NAKODA DIAGNOSTICS',36,54);
+  x.fillStyle='#222'; x.font='bold 30px sans-serif'; x.fillText(String(e.FullName||''),36,98);
+  x.fillStyle='#DA1017'; x.font='16px sans-serif'; x.fillText(String(e.Role||''),36,126);
+  x.fillStyle='#333'; x.font='15px sans-serif';
+  var y=174; [(e.Phone?('Phone: '+e.Phone):''),(e.Email?('Email: '+e.Email):''),('Branch: '+(branchName(e.Branch)||''))].forEach(function(l){ if(l){ x.fillText(l,36,y); y+=30; } });
+  x.strokeStyle='#ccc'; x.strokeRect(478,150,116,116); x.fillStyle='#bbb'; x.font='11px sans-serif'; x.fillText('Scan to save',498,286);
+  x.fillStyle='#f3f3f3'; x.fillRect(0,330,640,30); x.fillStyle='#666'; x.font='12px sans-serif'; x.fillText('For You, At Your Doorstep  ·  nakodadiagnostics.in',36,350);
+  var data=c.toDataURL('image/png');
+  var txt=encodeURIComponent(String(e.FullName||'')+'\n'+String(e.Role||'')+' · Nakoda Diagnostics\nPhone: '+(e.Phone||'')+'\nEmail: '+(e.Email||'')+'\nBranch: '+(branchName(e.Branch)||'')+'\nFor You, At Your Doorstep · nakodadiagnostics.in');
+  var body='<img src="'+data+'" alt="card" style="width:100%;border-radius:10px;border:1px solid var(--line)"><div style="display:flex;gap:8px;margin-top:12px"><a class="btn" href="https://wa.me/?text='+txt+'" target="_blank" style="border-color:#1D7E47;color:#1D7E47">Share on WhatsApp</a><a class="btn ghost" href="'+data+'" download="nakoda-visiting-card.png">Download PNG</a></div>';
+  openModal('My visiting card', body, '');
+}
 function loadProfile(){
   API.getEmployee(S.user.EmpID).then(function(r){
     if(!r.ok){ toast(r.error,true); return; }
@@ -679,8 +699,22 @@ function loadProfile(){
     '</div><div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">'+
       '<button class="btn" id="saveProfileBtn">Save my details</button>'+
       '<button class="btn ghost" id="changePwBtn">Change password</button>'+
-      '<button class="btn ghost" id="updBtn" title="Clear cache and load the latest version">↻ Check for updates</button></div>';
+      '<button class="btn ghost" id="updBtn" title="Clear cache and load the latest version">↻ Check for updates</button></div>'+
+      '<div class="card" style="margin-top:14px"><div class="section-label" style="margin-top:0">My responsibility</div><div style="font-size:13px;white-space:pre-wrap;color:#444">'+(e.KRA?esc(e.KRA):'<span class="muted">No responsibilities set yet — ask HR to fill your KRA.</span>')+'</div></div>'+
+      '<div class="card" style="margin-top:14px"><div class="section-label" style="margin-top:0">My key performance index · this month</div><div id="myKpi"><div class="muted" style="font-size:12px">Loading…</div></div></div>'+
+      '<div style="margin-top:14px"><button class="btn" id="vcBtn">🪪 Create visiting card</button></div>';
     $('updBtn').addEventListener('click', forceUpdate);
+    var vcb=$('vcBtn'); if(vcb) vcb.addEventListener('click', function(){ openVisitingCard(e); });
+    (function(){ var d=new Date(), mf=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01';
+      API.staffPerformance(mf, todayD(), '').then(function(r){ var box=$('myKpi'); if(!box) return;
+        if(!r||!r.ok){ box.innerHTML='<div class="muted" style="font-size:12px">—</div>'; return; }
+        var me=(r.rows||[]).filter(function(x){return String(x.emp)===String(S.user.EmpID);})[0];
+        if(!me){ box.innerHTML='<div class="muted" style="font-size:12px">No activity yet this month.</div>'; return; }
+        function bar(lbl,v){ var c=v>=85?'#1a7f37':v>=70?'#b08900':'#DA1017'; return '<div style="display:flex;align-items:center;gap:8px;margin:6px 0"><span style="width:90px;font-size:12px;color:#555">'+lbl+'</span><div style="flex:1;height:7px;border-radius:4px;background:#eee;overflow:hidden"><div style="width:'+v+'%;height:100%;background:'+c+'"></div></div><b style="color:'+c+';font-size:12px;min-width:30px">'+v+'%</b></div>'; }
+        box.innerHTML=bar('Dedication',me.dedication)+bar('Performance',me.performance)+
+          '<div style="font-size:12px;color:#555;margin-top:8px">Attendance '+me.attPct+'% · Tasks '+me.tasksDone+'/'+me.tasksTotal+' · Calls '+me.calls+' · Meetings '+me.meetings+' · Output '+me.output+' · On-time '+me.onTimePct+'%</div>';
+      }).catch(function(){ var box=$('myKpi'); if(box) box.innerHTML='<div class="muted" style="font-size:12px">—</div>'; });
+    })();
     $('pPhotoBtn').addEventListener('click', function(){ $('pPhotoFile').click(); });
     $('pPhotoFile').addEventListener('change', function(){
       var f=this.files&&this.files[0]; if(!f) return;
