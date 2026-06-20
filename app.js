@@ -414,11 +414,19 @@ function renderDashboard(){
     html+='<div class="section-label">By branch · business this month</div><div class="card"><div class="table-wrap swipe"><table><thead><tr><th>Branch</th><th>Business (MTD)</th><th>Cash</th><th>Bank / UPI</th><th>Other</th><th>Patients</th><th>Avg / patient</th><th>Tests</th><th>Rev / test</th><th>No. of cards</th><th>Card business</th><th>Staff</th><th>Rev / staff</th></tr></thead><tbody>'+
       rows.map(function(r){return '<tr><td><b>'+esc(r.name)+'</b></td><td>₹'+fmtMoney(r.biz)+'</td><td>₹'+fmtMoney(r.cash)+'</td><td>₹'+fmtMoney(r.bank)+'</td><td>₹'+fmtMoney(r.other)+'</td><td>'+r.pat+'</td><td>₹'+fmtMoney(r.avg)+'</td><td>'+r.test+'</td><td>₹'+fmtMoney(r.rTest)+'</td><td>'+r.cards+'</td><td>₹'+fmtMoney(r.rev)+'</td><td>'+r.staff+'</td><td>₹'+fmtMoney(r.rStaff)+'</td></tr>';}).join('')+'</tbody></table></div></div>';
   }
-  var byType={}; activeCards.forEach(function(c){ byType[c.typeId]=(byType[c.typeId]||0)+1; });
-  var tk=Object.keys(byType);
-  if(tk.length){
-    html+='<div class="section-label">Active cards by type</div><div class="card"><div class="table-wrap swipe"><table><thead><tr><th>Type</th><th>Count</th></tr></thead><tbody>'+
-      tk.sort(function(a,b){return byType[b]-byType[a];}).map(function(t){return '<tr><td><b>'+esc(t)+'</b></td><td>'+byType[t]+'</td></tr>';}).join('')+'</tbody></table></div></div>';
+  var types={}, byBT={}, brOrder=[];
+  activeCards.forEach(function(c){ var ty=String(c.typeId||'—'); types[ty]=1; var b=String(c.branchId||''); if(!byBT[b]){ byBT[b]={}; brOrder.push(b); } byBT[b][ty]=(byBT[b][ty]||0)+1; });
+  var typeList=Object.keys(types).sort();
+  if(typeList.length){
+    var colTot={}; typeList.forEach(function(t){colTot[t]=0;}); var grand=0;
+    var bodyRows=brOrder.sort(function(a,b){ var ta=0,tb=0; typeList.forEach(function(t){ta+=(byBT[a][t]||0);tb+=(byBT[b][t]||0);}); return tb-ta; }).map(function(b){
+      var row=byBT[b], tot=0;
+      var cells=typeList.map(function(t){ var n=row[t]||0; tot+=n; colTot[t]+=n; return '<td>'+n+'</td>'; }).join('');
+      grand+=tot;
+      return '<tr><td><b>'+esc(branchName(b))+'</b></td>'+cells+'<td><b>'+tot+'</b></td></tr>';
+    }).join('');
+    var totRow='<tr><td><b>Total</b></td>'+typeList.map(function(t){return '<td><b>'+colTot[t]+'</b></td>';}).join('')+'<td><b>'+grand+'</b></td></tr>';
+    html+='<div class="section-label">Active cards · by branch &amp; type</div><div class="card"><div class="table-wrap swipe"><table><thead><tr><th>Branch</th>'+typeList.map(function(t){return '<th>'+esc(t)+'</th>';}).join('')+'<th>Total</th></tr></thead><tbody>'+bodyRows+totRow+'</tbody></table></div></div>';
   }
   html+='<div id="finDash"></div><div id="mktDash"></div>';
   $('dashExtra').innerHTML=html;
