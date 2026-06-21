@@ -7,8 +7,23 @@
     if(f.fieldType==='number') return '<input id="'+id+'" class="in" type="number">';
     if(f.fieldType==='date') return '<input id="'+id+'" class="in" type="date">';
     if(f.fieldType==='checklist') return '<div id="'+id+'" class="proc-ck">'+String(f.options||'').split(',').filter(Boolean).map(function(o){ return '<label><input type="checkbox" value="'+esc(o.trim())+'"> '+esc(o.trim())+'</label>'; }).join('')+'</div>';
+    if(f.fieldType==='file') return '<input type="hidden" id="'+id+'"><input type="file" id="'+id+'_f" class="in" accept="image/*,application/pdf"><span id="'+id+'_st" style="font-size:12px;color:#888;display:block;margin-top:4px"></span>';
     return '<input id="'+id+'" class="in">';
   }
+  // Wire any file fields in a just-rendered form: on pick, upload to Drive and stash the URL in the hidden holder.
+  function wireFileInputs(fields,pfx){ (fields||[]).forEach(function(f){ if(f.fieldType!=='file') return;
+    var inp=document.getElementById(pfx+f.fieldId+'_f'); if(!inp) return;
+    inp.onchange=function(){ var file=inp.files&&inp.files[0]; if(!file) return;
+      if(file.size>8*1024*1024){ toast('File too large (max 8MB)',true); inp.value=''; return; }
+      var st=document.getElementById(pfx+f.fieldId+'_st'); if(st) st.textContent='Uploading…';
+      var fr=new FileReader(); fr.onload=function(){ var s=fr.result,i=s.indexOf(',');
+        API.uploadFile({base64:s.slice(i+1),mimeType:file.type,fileName:file.name,subPath:'ProcessFiles'}).then(function(r){
+          if(r&&r.ok){ var h=document.getElementById(pfx+f.fieldId); if(h) h.value=r.url; if(st) st.innerHTML='Attached \u2713 <a href="'+esc(r.url)+'" target="_blank">view</a>'; }
+          else { if(st) st.textContent=(r&&r.error)||'Upload failed'; }
+        },function(){ if(st) st.textContent='Uploading a file needs internet.'; });
+      }; fr.readAsDataURL(file);
+    };
+  }); }
   function fieldsHtml(fields,pfx){ return (fields||[]).map(function(f){ return '<div class="field full"><label>'+esc(f.label)+(f.required?' *':'')+'</label>'+inputFor(f,pfx)+'</div>'; }).join(''); }
   function collectFields(fields,pfx){ var o={}; (fields||[]).forEach(function(f){ var el=document.getElementById(pfx+f.fieldId); if(!el) return; if(f.fieldType==='checklist'){ o[f.label]=[].slice.call(el.querySelectorAll('input:checked')).map(function(c){return c.value;}); } else { o[f.label]=el.value; } }); return o; }
 
@@ -111,6 +126,7 @@
         '<div class="field"><label>First task date</label><input id="psDate" class="in" type="date"></div>'+
         '</div><div id="psMsg"></div>';
       openModal('Add to '+DEF.process.name, body, '<button class="btn" id="psSave">Save & start</button>');
+      wireFileInputs(start.fields,'ps_');
       var psBr=document.getElementById('psBranch');
       if(psBr) psBr.onchange=function(){ API.branchAssignees(psBr.value, isRecruit?'HR':'').then(function(rr){ var es=(rr&&rr.employees)||[]; var a=document.getElementById('psAssignee'); if(a) a.innerHTML=empOpts(es, hrOf(es, S.user&&S.user.EmpID)); }); };
       document.getElementById('psSave').onclick=function(){
@@ -140,7 +156,8 @@
     return base.concat(extras);
   }
   function renderInstance(r, iid, after){
-    API.branchAssignees(r&&r.instance&&r.instance.branchId).then(function(resp){ var emps=(resp&&resp.employees)||[];
+    var isRecruit=/recruit/i.test((r&&r.processName)||'');
+    API.branchAssignees(r&&r.instance&&r.instance.branchId, isRecruit?'HR':'').then(function(resp){ var emps=(resp&&resp.employees)||[];
       var st=r.stage||{}, acts=actsFor(st, r.steps);
       var moveOpts=(r.edges||[]).map(function(e){ return '<option value="'+esc(e.toStageId)+'">→ '+esc(e.toName)+(e.label?(' ('+esc(e.label)+')'):'')+'</option>'; }).join('');
       moveOpts+='<option value="STAY">Stay — '+esc(st.name||'')+' (revisit)</option>';
@@ -156,7 +173,7 @@
       // details block shows the full record at EVERY stage — not only what was entered at creation.
       (r.steps||[]).forEach(function(s){ var fd={}; try{ fd=JSON.parse(s.formDataJson||'{}')||{}; }catch(e){} Object.keys(fd).forEach(function(k){ var v=fd[k]; var empty=(v==null)||(v instanceof Array && !v.length)||(String(v).trim()===''); if(!empty) dj[k]=v; }); });
       var djKeys=Object.keys(dj).filter(function(k){ var v=dj[k]; return v!=null && String(v).trim()!=='' && !(v instanceof Array && !v.length); });
-      var detailHtml=djKeys.length?('<div style="background:#faf6f6;border:1px solid #eee;border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:12.5px">'+djKeys.map(function(k){ var v=dj[k]; if(v instanceof Array) v=v.join(', '); return '<div><span style="color:#888">'+esc(k)+':</span> <b>'+esc(String(v))+'</b></div>'; }).join('')+'</div>'):'';
+      var detailHtml=djKeys.length?('<div style="background:#faf6f6;border:1px solid #eee;border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:12.5px">'+djKeys.map(function(k){ var v=dj[k]; if(v instanceof Array) v=v.join(', '); var sv=String(v); var disp=/^https?:\/\//.test(sv)?('<a href="'+esc(sv)+'" target="_blank">View</a>'):('<b>'+esc(sv)+'</b>'); return '<div><span style="color:#888">'+esc(k)+':</span> '+disp+'</div>'; }).join('')+'</div>'):'';
       var body='<div style="font-size:12.5px;color:#666;margin-bottom:8px"><b>'+esc(r.instance.leadName)+'</b>'+(r.instance.leadMobile?(' · '+esc(r.instance.leadMobile)):'')+' · stage: '+esc(st.name||'')+'</div>'+mouBtn+detailHtml+
         '<div class="grid2">'+
         '<div class="field full"><label>Activity</label><select id="avAct" class="in">'+acts.map(function(a){return '<option>'+esc(a)+'</option>';}).join('')+'</select></div>'+
@@ -167,6 +184,7 @@
         '<div class="field full" id="avCloseWrap" style="display:none"><label>Close reason</label><input id="avReason" class="in"></div>'+
         '</div>'+timelineHtml(r.steps)+'<div id="avMsg"></div>';
       openModal(st.name||'Work lead', body, '<button class="btn" id="avSave">Submit & advance</button>');
+      wireFileInputs(r.fields,'av_');
       function onMove(){ var v=document.getElementById('avMove').value, close=(v==='CLOSE_WON'||v==='CLOSE_LOST');
         document.getElementById('avCloseWrap').style.display=close?'':'none';
         document.getElementById('avAssWrap').style.display=close?'none':'';
