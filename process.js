@@ -93,19 +93,25 @@
   /* ---------- start a lead ---------- */
   function openStartForm(pid,DEF,after){
     var start=(DEF.stages||[]).filter(function(s){return s.nodeType==='start';})[0]||DEF.stages[0];
-    API.branchAssignees(S.user&&S.user.Branch).then(function(resp){ var emps=(resp&&resp.employees)||[];
+    var isRecruit=/recruit/i.test((DEF.process&&DEF.process.name)||'');
+    function hrOf(list,fallback){ if(!isRecruit) return fallback; var h=(list||[]).filter(function(e){ return String(e.Role||'').toLowerCase().indexOf('hr')>=0; })[0]; return h?h.EmpID:fallback; }
+    API.branchAssignees(S.user&&S.user.Branch, isRecruit?'HR':'').then(function(resp){ var emps=(resp&&resp.employees)||[];
       var brs=(S.meta&&S.meta.branches)||[];
+      // Recruitment only: pre-fill Name/Mobile from the logged-in user and default the first task to HR.
+      var defAssignee=hrOf(emps, S.user&&S.user.EmpID);
+      var defName=isRecruit?esc((S.user&&S.user.FullName)||''):'';
+      var defMobile=isRecruit?esc((S.user&&(S.user.Phone||S.user.Mobile))||''):'';
       var body='<div class="grid2">'+
-        '<div class="field"><label>Name *</label><input id="psName" class="in" placeholder="e.g. Dr. Shah"></div>'+
-        '<div class="field"><label>Mobile</label><input id="psMobile" class="in"></div>'+
+        '<div class="field"><label>Name *</label><input id="psName" class="in" placeholder="e.g. Dr. Shah" value="'+defName+'"></div>'+
+        '<div class="field"><label>Mobile</label><input id="psMobile" class="in" value="'+defMobile+'"></div>'+
         '<div class="field"><label>Serving branch</label><select id="psBranch" class="in">'+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'"'+(String(b.BranchID)===String(S.user&&S.user.Branch)?' selected':'')+'>'+esc(b.BranchName)+'</option>';}).join('')+'</select></div>'+
-        '<div class="field"><label>Assign first task to</label><select id="psAssignee" class="in">'+empOpts(emps,S.user&&S.user.EmpID)+'</select></div>'+
+        '<div class="field"><label>Assign first task to</label><select id="psAssignee" class="in">'+empOpts(emps,defAssignee)+'</select></div>'+
         fieldsHtml(start.fields,'ps_')+
         '<div class="field"><label>First task date</label><input id="psDate" class="in" type="date"></div>'+
         '</div><div id="psMsg"></div>';
       openModal('Add to '+DEF.process.name, body, '<button class="btn" id="psSave">Save & start</button>');
       var psBr=document.getElementById('psBranch');
-      if(psBr) psBr.onchange=function(){ API.branchAssignees(psBr.value).then(function(rr){ var es=(rr&&rr.employees)||[]; var a=document.getElementById('psAssignee'); if(a) a.innerHTML=empOpts(es, S.user&&S.user.EmpID); }); };
+      if(psBr) psBr.onchange=function(){ API.branchAssignees(psBr.value, isRecruit?'HR':'').then(function(rr){ var es=(rr&&rr.employees)||[]; var a=document.getElementById('psAssignee'); if(a) a.innerHTML=empOpts(es, hrOf(es, S.user&&S.user.EmpID)); }); };
       document.getElementById('psSave').onclick=function(){
         var name=document.getElementById('psName').value.trim(); if(!name){ document.getElementById('psMsg').innerHTML='<div class="msg error">Name is required.</div>'; return; }
         var data={ leadName:name, leadMobile:document.getElementById('psMobile').value.trim(), branchId:document.getElementById('psBranch').value,
@@ -122,7 +128,7 @@
       var shown=false;
       if(cached && cached.ok){ renderInstance(cached, iid, after); shown=true; }
       else openModal('Lead','<div class="center-load"><span class="loader dark"></span> Loading…</div>','');
-      API.getInstance(iid).then(function(r){ if(r&&r.ok){ renderInstance(r, iid, after); } else if(!shown){ closeModal(); toast((r&&r.error)||'Could not open',true); } });
+      API.getInstance(iid).then(function(r){ if(r&&r.ok){ if(!shown) renderInstance(r, iid, after); } else if(!shown){ closeModal(); toast((r&&r.error)||'Could not open',true); } });
     });
   }
   function actsFor(st, steps){

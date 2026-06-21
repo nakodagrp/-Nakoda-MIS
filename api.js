@@ -259,8 +259,8 @@
     cachedProcesses:function(){ return kvGet('processes'); },
     listProcesses:function(){ return call('listProcesses',{token:getToken()}).then(function(r){ if(r.ok) kvSet('processes',r.processes); return r; }).catch(function(){ return kvGet('processes').then(function(x){ return {ok:true,processes:x||[],offline:true}; }); }); },
     getProcess:function(pid){ return call('getProcess',{token:getToken(),processId:pid}).then(function(r){ if(r.ok) kvSet('procdef_'+pid,r); return r; }).catch(function(){ return kvGet('procdef_'+pid).then(function(x){ return x||{ok:false,offline:true}; }); }); },
-    cachedInstances:function(pid){ return kvGet('inst_'+pid); },
-    listInstances:function(pid){ return call('listInstances',{token:getToken(),processId:pid}).then(function(r){ if(r.ok) kvSet('inst_'+pid,r); return r; }).catch(function(){ return kvGet('inst_'+pid).then(function(x){ return x||{ok:true,instances:[],stages:[],offline:true}; }); }); },
+    cachedInstances:function(pid,status){ return kvGet('inst_'+pid+'_'+(status||'running')); },
+    listInstances:function(pid,status){ var sf=status||'running', k='inst_'+pid+'_'+sf; return call('listInstances',{token:getToken(),processId:pid,status:sf}).then(function(r){ if(r.ok) kvSet(k,r); return r; }).catch(function(){ return kvGet(k).then(function(x){ return x||{ok:true,instances:[],stages:[],offline:true}; }); }); },
     cachedInstance:function(iid){ return kvGet('inst1_'+iid); },
     getInstance:function(iid){ return call('getInstance',{token:getToken(),instanceId:iid}).then(function(r){ if(r&&r.ok) kvSet('inst1_'+iid,r); return r; }).catch(function(){ return kvGet('inst1_'+iid).then(function(x){ return x||{ok:false,offline:true}; }); }); },
     startInstance:function(pid,data){ var f=function(){ return queueGeneric('startInstance',{processId:pid,data:data}); }; if(navigator.onLine) return call('startInstance',{token:getToken(),processId:pid,data:data}).catch(f); return f(); },
@@ -372,7 +372,7 @@
     listAllCalendar:function(){ return call('listAllCalendar',{token:getToken()}).then(function(r){ if(r.ok) kvSet('allcal',r.entries); return r; }).catch(function(){ return kvGet('allcal').then(function(e){ return {ok:true,entries:e||[],offline:true}; }); }); },
     cachedTasksFor:function(owner){ return kvGet('tasksfor_'+owner); },
     listTasksFor:function(owner){ return call('listTasksFor',{token:getToken(),ownerEmpId:owner}).then(function(r){ if(r.ok) kvSet('tasksfor_'+owner,r.tasks); return r; }).catch(function(){ return kvGet('tasksfor_'+owner).then(function(t){ return {ok:true,tasks:t||[],offline:true}; }); }); },
-    branchAssignees:function(branchId){ var k='brassign_'+(branchId||'me'); return call('branchAssignees',{token:getToken(),branchId:branchId||''}).then(function(r){ if(r&&r.ok) kvSet(k,r.employees); return r; }).catch(function(){ return kvGet(k).then(function(v){ return {ok:true,employees:v||[],offline:true}; }); }); },
+    branchAssignees:function(branchId,includeRole){ var k='brassign_'+(branchId||'me')+(includeRole?('_'+includeRole):''); return call('branchAssignees',{token:getToken(),branchId:branchId||'',includeRole:includeRole||''}).then(function(r){ if(r&&r.ok) kvSet(k,r.employees); return r; }).catch(function(){ return kvGet(k).then(function(v){ return {ok:true,employees:v||[],offline:true}; }); }); },
 
     /* fire-and-forget cache refresh */
     refreshEmployees:function(){ return API.listEmployees().catch(function(){}); },
