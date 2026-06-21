@@ -152,6 +152,9 @@
       // Read-only summary of everything already captured on this lead (e.g. the position the BM requested),
       // so whoever works the task can see prior entries instead of only blank inputs.
       var dj={}; try{ dj=JSON.parse(r.instance.dataJson||'{}')||{}; }catch(e){}
+      // Merge in everything captured at each prior step (Process_Steps formData), in order, so the
+      // details block shows the full record at EVERY stage — not only what was entered at creation.
+      (r.steps||[]).forEach(function(s){ var fd={}; try{ fd=JSON.parse(s.formDataJson||'{}')||{}; }catch(e){} Object.keys(fd).forEach(function(k){ var v=fd[k]; var empty=(v==null)||(v instanceof Array && !v.length)||(String(v).trim()===''); if(!empty) dj[k]=v; }); });
       var djKeys=Object.keys(dj).filter(function(k){ var v=dj[k]; return v!=null && String(v).trim()!=='' && !(v instanceof Array && !v.length); });
       var detailHtml=djKeys.length?('<div style="background:#faf6f6;border:1px solid #eee;border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:12.5px">'+djKeys.map(function(k){ var v=dj[k]; if(v instanceof Array) v=v.join(', '); return '<div><span style="color:#888">'+esc(k)+':</span> <b>'+esc(String(v))+'</b></div>'; }).join('')+'</div>'):'';
       var body='<div style="font-size:12.5px;color:#666;margin-bottom:8px"><b>'+esc(r.instance.leadName)+'</b>'+(r.instance.leadMobile?(' · '+esc(r.instance.leadMobile)):'')+' · stage: '+esc(st.name||'')+'</div>'+mouBtn+detailHtml+
