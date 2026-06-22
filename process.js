@@ -52,7 +52,7 @@
     var v=document.getElementById('page-crm'); var DEF=null; var BOARDVIEW='running';
     v.innerHTML='<div class="page-head"><button class="btn ghost sm" id="crmBack">‹ CRM</button> <h1 style="font-size:18px;margin:0 0 0 8px" id="crmTtl">Pipeline</h1><div class="spacer"></div>'+
       '<button class="btn ghost sm" id="crmMon">📋 Monitor</button> <button class="btn" id="crmAdd" style="display:none">+ Add</button></div>'+
-      '<div class="seg" id="crmView" style="margin:0 0 12px"><button data-v="running" class="on">Open</button><button data-v="closed_won">Won</button><button data-v="closed_lost">Lost</button><button data-v="all">All</button></div>'+
+      '<div class="seg" id="crmView" style="margin:0 0 12px"><button data-v="running" class="on">Open</button><button data-v="closed_won">Won</button><button data-v="closed_lost">Lost</button><button data-v="not_responding">\u23f8 Not responding</button><button data-v="all">All</button></div>'+
       '<div id="crmBoard"></div>';
     document.getElementById('crmBack').onclick=renderCRM;
     document.getElementById('crmMon').onclick=function(){ openMonitor(pid); };
@@ -84,12 +84,12 @@
       function rank(i){ var st=String(i.status); return st==='running'?0:(st==='closed_won'?1:2); }
       rows.sort(function(a,b){ var ra=rank(a),rb=rank(b); if(ra!==rb) return ra-rb; return String(b.closedAt||'').localeCompare(String(a.closedAt||'')); });
       var box=document.getElementById('crmBoard');
-      if(!rows.length){ box.innerHTML='<div class="empty">No '+(BOARDVIEW==='closed_won'?'won':BOARDVIEW==='closed_lost'?'lost':'closed')+' leads yet.</div>'; return; }
+      if(!rows.length){ box.innerHTML='<div class="empty">No '+(BOARDVIEW==='closed_won'?'won':BOARDVIEW==='closed_lost'?'lost':BOARDVIEW==='not_responding'?'not-responding':'closed')+' leads yet.</div>'; return; }
       box.innerHTML='<div class="crm-closed">'+rows.map(function(i){
         var st=String(i.status), won=st==='closed_won', lost=st==='closed_lost';
         var badge = won?'<span style="border-radius:12px;font-size:10px;padding:1px 8px;font-weight:700;background:#eafaf3;color:#1aa37a">✓ Won</span>'
                   : lost?'<span style="border-radius:12px;font-size:10px;padding:1px 8px;font-weight:700;background:#fdecec;color:#C0392B">✕ Lost</span>'
-                  : '<span style="border-radius:12px;font-size:10px;padding:1px 8px;font-weight:700;background:#eef2ff;color:#4253c5">● Open</span>';
+                  : (BOARDVIEW==='not_responding'?'<span style="border-radius:12px;font-size:10px;padding:1px 8px;font-weight:700;background:#fff4e8;color:#c47f00">\u23f8 Not responding</span>':'<span style="border-radius:12px;font-size:10px;padding:1px 8px;font-weight:700;background:#eef2ff;color:#4253c5">● Open</span>');
         var meta = (won||lost) ? (i.closeReason?(' · '+esc(i.closeReason)):'')+(i.closedAt?(' · '+esc(i.closedAt)):'')
                                : (snm[i.currentStageId]?(' · '+esc(snm[i.currentStageId])):'')+(i.dueDate?(' · '+(i.late?'overdue':esc(i.dueDate))):'');
         return '<div class="crm-lead" data-iid="'+esc(i.instanceId)+'" style="margin-bottom:8px"><b>'+esc(i.leadName)+'</b> '+badge+
