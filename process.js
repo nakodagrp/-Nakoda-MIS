@@ -138,6 +138,7 @@
       wireFileInputs(start.fields,'ps_');
       var psBr=document.getElementById('psBranch');
       if(psBr) psBr.onchange=function(){ API.branchAssignees(psBr.value, wantHR?'HR':'').then(function(rr){ var es=(rr&&rr.employees)||[]; var a=document.getElementById('psAssignee'); if(a) a.innerHTML=empOpts(es, hrOf(es, S.user&&S.user.EmpID)); }); };
+      var psMv=document.getElementById('psMove'); if(psMv) psMv.onchange=function(){ var pd=document.getElementById('psDate'); if(pd&&pd.parentNode) pd.parentNode.style.display=(psMv.value==='STAY_NR')?'none':''; };
       document.getElementById('psSave').onclick=function(){
         var name=document.getElementById('psName').value.trim(); if(!name){ document.getElementById('psMsg').innerHTML='<div class="msg error">'+(isRecruit?'Position is required.':'Name is required.')+'</div>'; return; }
         var pmob=document.getElementById('psMobile');
@@ -195,10 +196,10 @@
         '</div>'+timelineHtml(r.steps)+'<div id="avMsg"></div>';
       openModal(st.name||'Work lead', body, '<button class="btn" id="avSave">Submit & advance</button>');
       wireFileInputs(r.fields,'av_');
-      function onMove(){ var v=document.getElementById('avMove').value, close=(v==='CLOSE_WON'||v==='CLOSE_LOST');
+      function onMove(){ var v=document.getElementById('avMove').value, close=(v==='CLOSE_WON'||v==='CLOSE_LOST'), nr=(v==='STAY_NR');
         document.getElementById('avCloseWrap').style.display=close?'':'none';
-        document.getElementById('avAssWrap').style.display=close?'none':'';
-        document.getElementById('avDateWrap').style.display=close?'none':''; }
+        document.getElementById('avAssWrap').style.display=(close||nr)?'none':'';
+        document.getElementById('avDateWrap').style.display=(close||nr)?'none':''; }
       document.getElementById('avMove').onchange=onMove; onMove();
       var mb=document.getElementById('avMou'); if(mb) mb.onclick=function(){ buildMou(r); };
       document.getElementById('avSave').onclick=function(){
