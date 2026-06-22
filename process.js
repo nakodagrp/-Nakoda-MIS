@@ -123,6 +123,7 @@
         '<div class="field"><label>Serving branch</label><select id="psBranch" class="in">'+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'"'+(String(b.BranchID)===String(S.user&&S.user.Branch)?' selected':'')+'>'+esc(b.BranchName)+'</option>';}).join('')+'</select></div>'+
         '<div class="field"><label>Assign first task to</label><select id="psAssignee" class="in">'+empOpts(emps,defAssignee)+'</select></div>'+
         fieldsHtml(start.fields,'ps_')+
+        '<div class="field"><label>Lead date</label><input id="psLeadDate" class="in" type="date"></div>'+
         '<div class="field"><label>First task date</label><input id="psDate" class="in" type="date"></div>'+
         '</div><div id="psMsg"></div>';
       openModal('Add to '+DEF.process.name, body, '<button class="btn" id="psSave">Save & start</button>');
@@ -133,7 +134,7 @@
         var name=document.getElementById('psName').value.trim(); if(!name){ document.getElementById('psMsg').innerHTML='<div class="msg error">'+(isRecruit?'Position is required.':'Name is required.')+'</div>'; return; }
         var pmob=document.getElementById('psMobile');
         var data={ leadName:name, leadMobile:pmob?pmob.value.trim():'', branchId:document.getElementById('psBranch').value,
-          assigneeEmpId:document.getElementById('psAssignee').value, dataJson:collectFields(start.fields,'ps_'), nextDate:document.getElementById('psDate').value };
+          assigneeEmpId:document.getElementById('psAssignee').value, dataJson:collectFields(start.fields,'ps_'), leadDate:(document.getElementById('psLeadDate')||{}).value||'', nextDate:document.getElementById('psDate').value };
         this.disabled=true; this.textContent='Saving…';
         API.startInstance(pid,data).then(function(r){ if(r&&(r.ok||r.offline)){ closeModal(); toast(r.offline?'Saved offline — will sync':'Added to pipeline'); if(after) after(); } else { document.getElementById('psMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; } });
       };
