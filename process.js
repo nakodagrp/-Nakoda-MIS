@@ -109,12 +109,13 @@
   function openStartForm(pid,DEF,after){
     var start=(DEF.stages||[]).filter(function(s){return s.nodeType==='start';})[0]||DEF.stages[0];
     var isRecruit=/recruit/i.test((DEF.process&&DEF.process.name)||'');
+    var wantHR=isRecruit||String((DEF.process&&DEF.process.ownerRole)||'').toUpperCase().indexOf('HR')>=0;
     function hrOf(list,fallback){ if(!isRecruit) return fallback; var h=(list||[]).filter(function(e){ return String(e.Role||'').toLowerCase().indexOf('hr')>=0; })[0]; return h?h.EmpID:fallback; }
-    API.branchAssignees(S.user&&S.user.Branch, isRecruit?'HR':'').then(function(resp){ var emps=(resp&&resp.employees)||[];
+    API.branchAssignees(S.user&&S.user.Branch, wantHR?'HR':'').then(function(resp){ var emps=(resp&&resp.employees)||[];
       var brs=(S.meta&&S.meta.branches)||[];
       var _fe=(DEF.edges||[]).filter(function(e){return String(e.fromStageId)===String(start.stageId);})[0];
       var _defTarget=_fe?_fe.toStageId:((DEF.stages[1]||start).stageId);
-      var moveOpts=(DEF.stages||[]).map(function(s){ return '<option value="'+esc(s.stageId)+'"'+(String(s.stageId)===String(_defTarget)?' selected':'')+'>'+esc(s.name)+'</option>'; }).join('')+'<option value="CLOSE_WON">\u2713 Close \u2014 Won</option><option value="CLOSE_LOST">\u2715 Close \u2014 Lost</option>';
+      var moveOpts=(DEF.stages||[]).map(function(s){ return '<option value="'+esc(s.stageId)+'"'+(String(s.stageId)===String(_defTarget)?' selected':'')+'>'+esc(s.name)+'</option>'; }).join('')+'<option value="STAY_NR">\u23f8 Not responding</option><option value="STAY_FU">\u21bb Follow up</option><option value="STAY_PR">\u2605 Prospect</option><option value="CLOSE_WON">\u2713 Close \u2014 Won</option><option value="CLOSE_LOST">\u2715 Close \u2014 Lost</option>';
       var _ax=String(start.activityOptions||'').split(',').filter(Boolean).filter(function(a){ return !/call|meeting|visit/i.test(a); });
       var actOpts=['New call','Follow-up call','New meeting','Follow-up meeting'].concat(_ax).map(function(a){ return '<option>'+esc(a)+'</option>'; }).join('');
       // Recruitment only: the lead's title IS the position (no candidate/mobile yet); first task goes to HR.
@@ -136,7 +137,7 @@
       openModal('Add to '+DEF.process.name, body, '<button class="btn" id="psSave">Save & start</button>');
       wireFileInputs(start.fields,'ps_');
       var psBr=document.getElementById('psBranch');
-      if(psBr) psBr.onchange=function(){ API.branchAssignees(psBr.value, isRecruit?'HR':'').then(function(rr){ var es=(rr&&rr.employees)||[]; var a=document.getElementById('psAssignee'); if(a) a.innerHTML=empOpts(es, hrOf(es, S.user&&S.user.EmpID)); }); };
+      if(psBr) psBr.onchange=function(){ API.branchAssignees(psBr.value, wantHR?'HR':'').then(function(rr){ var es=(rr&&rr.employees)||[]; var a=document.getElementById('psAssignee'); if(a) a.innerHTML=empOpts(es, hrOf(es, S.user&&S.user.EmpID)); }); };
       document.getElementById('psSave').onclick=function(){
         var name=document.getElementById('psName').value.trim(); if(!name){ document.getElementById('psMsg').innerHTML='<div class="msg error">'+(isRecruit?'Position is required.':'Name is required.')+'</div>'; return; }
         var pmob=document.getElementById('psMobile');
@@ -165,7 +166,8 @@
   }
   function renderInstance(r, iid, after){
     var isRecruit=/recruit/i.test((r&&r.processName)||'');
-    API.branchAssignees(r&&r.instance&&r.instance.branchId, isRecruit?'HR':'').then(function(resp){ var emps=(resp&&resp.employees)||[];
+    var wantHR=isRecruit||String((r&&r.processOwnerRole)||'').toUpperCase().indexOf('HR')>=0;
+    API.branchAssignees(r&&r.instance&&r.instance.branchId, wantHR?'HR':'').then(function(resp){ var emps=(resp&&resp.employees)||[];
       var st=r.stage||{}, acts=actsFor(st, r.steps);
       var moveOpts=(r.edges||[]).map(function(e){ return '<option value="'+esc(e.toStageId)+'">→ '+esc(e.toName)+(e.label?(' ('+esc(e.label)+')'):'')+'</option>'; }).join('');
       moveOpts+='<option value="STAY">Stay — '+esc(st.name||'')+' (revisit)</option>';
