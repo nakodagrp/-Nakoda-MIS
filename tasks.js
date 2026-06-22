@@ -122,7 +122,7 @@
               :(t.source==='training'?'<span style="background:#eafaf3;color:#1aa37a;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">🎓 Training</span>'
               :(t.source==='process'?'<span style="background:#eafaf3;color:#1aa37a;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">📁 CRM stage</span>'
               :(t.source==='assigned'?'<span style="background:#eef2ff;color:#4253c5;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">Assigned by '+esc(t.assignedByName||'manager')+'</span>':''))));
-      return '<div class="tcard'+(done?' tdone':'')+'" data-id="'+esc(t.taskId)+'" data-iid="'+esc(t.instanceId||'')+'" data-src="'+esc(t.source||'')+'">'+
+      return '<div class="tcard'+(done?' tdone':'')+'" data-id="'+esc(t.taskId)+'">'+
         '<span class="tbox'+(done?' on':'')+'" data-tog="'+esc(t.taskId)+'"></span>'+
         '<div class="tbody">'+
           '<div class="ttitle">'+esc(t.title)+pend(t)+'</div>'+
@@ -132,10 +132,9 @@
             (cl.length?(' · ☑ '+cldone+'/'+cl.length):'')+'</div>'+
         '</div></div>';
     }).join('');
-    box.querySelectorAll('.tcard').forEach(function(el){ el.onclick=function(ev){ if(ev.target.getAttribute('data-tog')) return;
-      var id=el.getAttribute('data-id'), src=el.getAttribute('data-src'), iid=el.getAttribute('data-iid');
-      if(id.indexOf('CAL::')===0){ var tk=byId(id); if(window.openCalendarEntryById && tk) window.openCalendarEntryById(tk.calId, function(){ if(window.renderMyTasks) window.renderMyTasks(); }); return; }
-      if(src==='process' && iid && window.openProcessInstance){ window.openProcessInstance(iid, function(){ if(window.renderMyTasks) window.renderMyTasks(); }); return; }
+    box.querySelectorAll('.tcard').forEach(function(el){ el.onclick=function(ev){ if(ev.target.getAttribute('data-tog')) return; var id=el.getAttribute('data-id'); var tk=byId(id);
+      if(id.indexOf('CAL::')===0){ if(window.openCalendarEntryById && tk) window.openCalendarEntryById(tk.calId, function(){ if(window.renderMyTasks) window.renderMyTasks(); }); return; }
+      if(tk && tk.source==='process' && tk.instanceId && window.openProcessInstance){ window.openProcessInstance(tk.instanceId, function(){ if(window.renderMyTasks) window.renderMyTasks(); }); return; }
       openTaskDetail(id); }; });
     box.querySelectorAll('[data-tog]').forEach(function(b){ b.onclick=function(ev){ ev.stopPropagation(); toggleDone(b.getAttribute('data-tog')); }; });
   }
@@ -145,7 +144,7 @@
   function toggleDone(id){ var t=byId(id); if(!t) return;
     if(t.isCal){ var nc=t.status==='done'?'pending':'done'; t.status=(nc==='done'?'done':'open'); t._pending=true; paintList();
       API.updateCalEntry(t.calId,{status:nc},curOwner()).then(function(){ API.cachedCalendar(curOwner()).then(function(e){ if(e){ CALITEMS=e.filter(function(x){return String(x.status)!=='deleted';}).map(calToItem); paintList(); } }); }); return; }
-    var ns=t.status==='done'?'open':'done'; t.status=ns; t._pending=true; paintList(); API.setTaskStatus(id,ns).then(function(){ loadData(); }); }
+    var ns=t.status==='done'?'open':'done'; t.status=ns; t._pending=true; paintList(); API.setTaskStatus(id,ns).then(function(){ return API.listMyTasks(); }).then(function(r){ if(r&&r.ok) TASKS=r.tasks||[]; paintList(); }); }
 
   function dailyPanelHtml(e){
     function m(n){ return '₹'+Math.round(Number(n)||0).toLocaleString('en-IN'); }
@@ -191,7 +190,7 @@
         API.verifyDaily(t.instanceId).then(function(r){ if(r&&r.ok){ closeModal(); toast('Verified & completed'); if(window.renderMyTasks) window.renderMyTasks(); else paintList(); } else { toast((r&&r.error)||'Could not verify',true); btn.disabled=false; } });
         return;
       }
-      var ns=t.status==='done'?'open':'done'; t.status=ns; t._pending=true; API.setTaskStatus(t.taskId,ns).then(function(){ API.cachedTasks().then(function(c){ if(c)TASKS=c; }); }); closeModal(); paintList(); toast(ns==='done'?'Task completed':'Task reopened');
+      var ns=t.status==='done'?'open':'done'; t.status=ns; t._pending=true; closeModal(); paintList(); toast(ns==='done'?'Task completed':'Task reopened'); API.setTaskStatus(t.taskId,ns).then(function(){ return API.listMyTasks(); }).then(function(r){ if(r&&r.ok) TASKS=r.tasks||[]; paintList(); });
     };
   }
 
