@@ -115,6 +115,8 @@
       var _fe=(DEF.edges||[]).filter(function(e){return String(e.fromStageId)===String(start.stageId);})[0];
       var _defTarget=_fe?_fe.toStageId:((DEF.stages[1]||start).stageId);
       var moveOpts=(DEF.stages||[]).map(function(s){ return '<option value="'+esc(s.stageId)+'"'+(String(s.stageId)===String(_defTarget)?' selected':'')+'>'+esc(s.name)+'</option>'; }).join('')+'<option value="CLOSE_WON">\u2713 Close \u2014 Won</option><option value="CLOSE_LOST">\u2715 Close \u2014 Lost</option>';
+      var _ax=String(start.activityOptions||'').split(',').filter(Boolean).filter(function(a){ return !/call|meeting|visit/i.test(a); });
+      var actOpts=['New call','Follow-up call','New meeting','Follow-up meeting'].concat(_ax).map(function(a){ return '<option>'+esc(a)+'</option>'; }).join('');
       // Recruitment only: the lead's title IS the position (no candidate/mobile yet); first task goes to HR.
       var defAssignee=hrOf(emps, S.user&&S.user.EmpID);
       var nameLabel=isRecruit?'Position required *':'Name *';
@@ -128,6 +130,7 @@
         fieldsHtml(start.fields,'ps_')+
         '<div class="field"><label>Lead date</label><input id="psLeadDate" class="in" type="date"></div>'+
         '<div class="field"><label>First task date</label><input id="psDate" class="in" type="date"></div>'+
+        '<div class="field"><label>Activity</label><select id="psAct" class="in">'+actOpts+'</select></div>'+
         '<div class="field"><label>Move to *</label><select id="psMove" class="in">'+moveOpts+'</select></div>'+
         '</div><div id="psMsg"></div>';
       openModal('Add to '+DEF.process.name, body, '<button class="btn" id="psSave">Save & start</button>');
@@ -138,7 +141,7 @@
         var name=document.getElementById('psName').value.trim(); if(!name){ document.getElementById('psMsg').innerHTML='<div class="msg error">'+(isRecruit?'Position is required.':'Name is required.')+'</div>'; return; }
         var pmob=document.getElementById('psMobile');
         var data={ leadName:name, leadMobile:pmob?pmob.value.trim():'', branchId:document.getElementById('psBranch').value,
-          assigneeEmpId:document.getElementById('psAssignee').value, dataJson:collectFields(start.fields,'ps_'), leadDate:(document.getElementById('psLeadDate')||{}).value||'', startStageId:(document.getElementById('psMove')||{}).value||'', nextDate:document.getElementById('psDate').value };
+          assigneeEmpId:document.getElementById('psAssignee').value, dataJson:collectFields(start.fields,'ps_'), leadDate:(document.getElementById('psLeadDate')||{}).value||'', startStageId:(document.getElementById('psMove')||{}).value||'', activityType:(document.getElementById('psAct')||{}).value||'', nextDate:document.getElementById('psDate').value };
         this.disabled=true; this.textContent='Saving…';
         API.startInstance(pid,data).then(function(r){ if(r&&(r.ok||r.offline)){ closeModal(); toast(r.offline?'Saved offline — will sync':'Added to pipeline'); if(after) after(); } else { document.getElementById('psMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; } });
       };
