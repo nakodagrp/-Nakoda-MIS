@@ -573,7 +573,7 @@ function openEmpModal(empId){
       '<div class="section-title full">Work &amp; pay</div>'+
       fld('Duty start','f_DutyStart',e.DutyStart,'time')+fld('Duty end','f_DutyEnd',e.DutyEnd,'time')+
       fld('Basic salary (₹)','f_BasicSalary',e.BasicSalary,'number')+
-      sel('Attendance mode','f_AttendanceMode',['Selfie + Geo','Selfie + Geo (double check)','Geo only (office)'],e.AttendanceMode)+
+      sel('Attendance mode','f_AttendanceMode',['Selfie + Geo — field staff','Geo only — office staff','Selfie + Geo — both required'],e.AttendanceMode)+
       sel('Sunday type','f_SundayType',['Type 1 — no Sundays','Type 2 — alternate Sundays'],e.SundayType)+
       sel('Pay / visit type','f_PayType',['Fixed salary','Per km','Per visit'],e.PayType)+
       fld('Per-km rate (₹)','f_PerKmRate',e.PerKmRate,'number')+fld('Per-visit rate (₹)','f_PerVisitRate',e.PerVisitRate,'number')+

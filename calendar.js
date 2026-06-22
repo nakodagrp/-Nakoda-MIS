@@ -168,12 +168,13 @@
         '<div class="field full"><label>Notes</label><textarea id="ceNotes" rows="2" placeholder="Optional">'+esc(e.notes||'')+'</textarea></div>'+
         '<div class="field full"><label>Checklist (sub-steps)</label><div id="ceClist">'+ceClRows()+'</div><button type="button" class="btn ghost sm" id="ceAddCl" style="margin-top:6px">+ Add sub-step</button></div>'+
         '<div class="field full" id="ceBusy"></div>'+
-        (ed?'<div class="field full"><div class="ce-stat">Status: <b class="'+(done?'st-done':'st-pend')+'">'+(done?'Completed':'Pending')+'</b></div></div>':'')+
+        (ed?'<div class="field full"><div class="ce-stat">Status: <b class="'+(done?'st-done':'st-pend')+'">'+(done?'Completed':(String(e.status)==='notdone'?'Not done':'Pending'))+'</b></div></div>':'')+
       '</div>'+
       '<div id="ceMsg"></div>';
     var foot='';
     if(ed && CAL.canManage){
       foot+='<button class="btn ghost sm" id="ceDel" style="color:var(--red)">Delete</button>'+
+            '<button class="btn ghost sm" id="ceNotDone">Mark not done</button>'+
             '<button class="btn ghost sm" id="ceToggle">'+(done?'Reopen':'Mark done')+'</button>';
     }
     foot+=(CAL.canManage?'<button class="btn" id="ceSave">'+(ed?'Save':'Add')+'</button>':'<span class="muted">View only</span>');
@@ -203,6 +204,7 @@
     };
     if(ed && CAL.canManage){
       document.getElementById('ceToggle').onclick=function(){ syncCe(); API.updateCalEntry(e.entryId,{status:done?'pending':'done',checklist:JSON.stringify(ceCl.filter(function(x){return x.text;}))},CAL.owner).then(function(r){ if(r&&(r.ok||r.offline)){ closeModal(); toast(done?'Reopened':'Completed'); after(); } }); };
+      var _nd=document.getElementById('ceNotDone'); if(_nd) _nd.onclick=function(){ syncCe(); API.updateCalEntry(e.entryId,{status:'notdone'},CAL.owner).then(function(r){ if(r&&(r.ok||r.offline)){ closeModal(); toast('Marked not done'); after(); } }); };
       document.getElementById('ceDel').onclick=function(){ if(!confirm('Delete this entry?')) return; API.updateCalEntry(e.entryId,{status:'deleted'},CAL.owner).then(function(r){ if(r&&(r.ok||r.offline)){ closeModal(); toast('Deleted'); after(); } }); };
     }
   }

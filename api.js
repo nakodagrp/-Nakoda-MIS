@@ -269,7 +269,7 @@
     processMonitor:function(pid,filter){ return call('processMonitor',{token:getToken(),processId:pid,filter:filter||{}}).then(function(r){ if(r.ok) kvSet('procmon_'+pid,r); return r; }).catch(function(){ return kvGet('procmon_'+pid).then(function(x){ return x||{ok:true,rows:[],stages:[],offline:true}; }); }); },
     saveProcess:function(d){ return call('saveProcess',{token:getToken(),data:d}).then(function(r){ if(r.ok) API.listProcesses(); return r; }); },
     activityScorecard:function(from,to){ return call('activityScorecard',{token:getToken(),fromDate:from||'',toDate:to||''}); },
-    staffPerformance:function(from,to,branch){ return call('staffPerformance',{token:getToken(),fromDate:from||'',toDate:to||'',branch:branch||''}); },
+    staffPerformance:function(from,to,branch){ var k='staffperf_'+(from||'')+'_'+(to||'')+'_'+(branch||''); return call('staffPerformance',{token:getToken(),fromDate:from||'',toDate:to||'',branch:branch||''}).then(function(r){ if(r&&r.ok) kvSet(k,r.rows); return r; }).catch(function(){ return kvGet(k).then(function(v){ return v?{ok:true,rows:v,offline:true}:{ok:false,offline:true}; }); }); },
     savePhoto:function(dataUri){ return call('savePhoto',{token:getToken(),dataUri:dataUri}); },
     saveCampaign:function(d){ return call('saveCampaign',{token:getToken(),data:d}); },
     listCampaigns:function(from,to,branch){ return call('listCampaigns',{token:getToken(),fromDate:from||'',toDate:to||'',branch:branch||''}); },
