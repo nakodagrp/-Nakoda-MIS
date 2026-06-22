@@ -122,9 +122,12 @@
       var defAssignee=hrOf(emps, S.user&&S.user.EmpID);
       var nameLabel=isRecruit?'Position required *':'Name *';
       var namePh=isRecruit?'e.g. Lab Technician':'e.g. Dr. Shah';
-      var mobileField=isRecruit?'':'<div class="field"><label>Mobile</label><input id="psMobile" class="in"></div>';
+      var isGriev=/grievance/i.test((DEF.process&&DEF.process.name)||'');
+      var defName=isGriev?esc((S.user&&S.user.FullName)||''):'';
+      var defMobile=isGriev?esc((S.user&&(S.user.Phone||S.user.Mobile))||''):'';
+      var mobileField=isRecruit?'':'<div class="field"><label>Mobile</label><input id="psMobile" class="in" value="'+defMobile+'"></div>';
       var body='<div class="grid2">'+
-        '<div class="field"><label>'+nameLabel+'</label><input id="psName" class="in" placeholder="'+namePh+'"></div>'+
+        '<div class="field"><label>'+nameLabel+'</label><input id="psName" class="in" placeholder="'+namePh+'" value="'+defName+'"></div>'+
         mobileField+
         '<div class="field"><label>Serving branch</label><select id="psBranch" class="in">'+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'"'+(String(b.BranchID)===String(S.user&&S.user.Branch)?' selected':'')+'>'+esc(b.BranchName)+'</option>';}).join('')+'</select></div>'+
         '<div class="field"><label>Assign first task to</label><select id="psAssignee" class="in">'+empOpts(emps,defAssignee)+'</select></div>'+
