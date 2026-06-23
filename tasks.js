@@ -19,6 +19,7 @@
   }
   function bucket(t){
     if(String(t.status)==='done') return 'done';
+    if(String(t.source)==='nrlead') return 'nr';   // Not-responding follow-ups stay out of Today/Overdue; show under All
     var tdy=todayStr(), ds=dd10(t);
     if(ds && ds<tdy) return 'overdue';
     if(ds && ds>tdy) return 'upcoming';
