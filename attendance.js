@@ -50,13 +50,23 @@
     return '<div class="att-month"><div class="att-mh">This month</div><div class="att-strip">'+cells+'</div><div class="att-legend">P present · ½ half · L leave · A absent</div></div>';
   }
 
+  function captureSelfie(cb){
+    if(!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){ $id('attSelfie').click(); return; }  // fallback to file/camera input
+    var stream=null;
+    openModal('Take selfie','<div style="text-align:center"><video id="camV" autoplay playsinline muted style="width:100%;max-width:320px;border-radius:10px;background:#000"></video><canvas id="camC" style="display:none"></canvas><div style="margin-top:10px"><button class="btn" id="camSnap">\ud83d\udcf8 Capture</button> <button class="btn ghost" id="camCancel">Cancel</button></div></div>','');
+    var v=document.getElementById('camV');
+    navigator.mediaDevices.getUserMedia({video:{facingMode:'user'}}).then(function(st){ stream=st; v.srcObject=st; }).catch(function(){ closeModal(); toast('Camera blocked — pick a photo instead.',true); $id('attSelfie').click(); });
+    function stopCam(){ try{ if(stream) stream.getTracks().forEach(function(t){t.stop();}); }catch(e){} }
+    var snap=document.getElementById('camSnap'); if(snap) snap.onclick=function(){ var c=document.getElementById('camC'); c.width=v.videoWidth||320; c.height=v.videoHeight||240; c.getContext('2d').drawImage(v,0,0,c.width,c.height); var d=c.toDataURL('image/jpeg',0.8),i=d.indexOf(','); stopCam(); closeModal(); cb(d.slice(i+1)); };
+    var cancel=document.getElementById('camCancel'); if(cancel) cancel.onclick=function(){ stopCam(); closeModal(); };
+  }
   function doMark(kind){
     ATT.kind=kind;
     if(!navigator.geolocation){ toast('Location not supported on this device.',true); return; }
     toast('Getting your location…');
     navigator.geolocation.getCurrentPosition(function(pos){
       ATT.coords={lat:pos.coords.latitude, lng:pos.coords.longitude};
-      if(needSelfie()){ $id('attSelfie').click(); } else submitMark(kind,null);
+      if(needSelfie()){ captureSelfie(function(b64){ submitMark(kind,b64); }); } else submitMark(kind,null);
     }, function(){ toast('Please allow location to mark attendance.',true); }, {enableHighAccuracy:true, timeout:12000});
   }
   function submitMark(kind, selfie){
