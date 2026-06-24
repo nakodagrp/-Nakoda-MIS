@@ -4,10 +4,11 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v102';
+var CACHE_VERSION = 'nakoda-mis-v103';
 var SHELL = [
   './',
   './index.html',
+  './manifest.webmanifest',
   './styles.css',
   './config.js',
   './api.js',
@@ -22,6 +23,7 @@ var SHELL = [
   './accounts.js',
   './training.js',
   './assets.js',
+  './inventory.js',
   './recurring.js',
   './process.js',
   './builder.js',
@@ -32,7 +34,6 @@ var SHELL = [
   './kpiadmin.js',
   './qc.js',
   './extras.js',
-  './manifest.webmanifest',
   './icons/login-logo.png',
   './icons/logo-white.png',
   './icons/icon-192.png',
@@ -42,9 +43,10 @@ var SHELL = [
 
 self.addEventListener('install', function(e){
   e.waitUntil(
-    caches.open(CACHE_VERSION).then(function(c){ return c.addAll(SHELL); })
+    caches.open(CACHE_VERSION).then(function(c){
+      return Promise.all(SHELL.map(function(u){ return c.add(u).catch(function(){}); }));
+    })
   );
-  // do NOT skipWaiting automatically — wait for the user to click "Install update"
 });
 
 self.addEventListener('activate', function(e){
@@ -61,11 +63,9 @@ self.addEventListener('message', function(e){
 
 self.addEventListener('fetch', function(e){
   var req = e.request;
-  if (req.method !== 'GET') return;                       // never cache POSTs (the API)
+  if (req.method !== 'GET') return;
   var url = new URL(req.url);
-  if (url.origin !== self.location.origin) return;        // let API / cross-origin pass through to network
-
-  // App shell: cache-first, then refresh in background
+  if (url.origin !== self.location.origin) return;
   e.respondWith(
     caches.match(req).then(function(cached){
       var net = fetch(req).then(function(res){

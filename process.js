@@ -63,7 +63,7 @@
       box.innerHTML=defs.map(function(d){ var on=(BOARDVIEW===d[0]); return '<div class="crm-kpi" data-v="'+d[0]+'" style="cursor:pointer;background:'+d[3]+';border-radius:12px;padding:13px 14px;'+(on?'box-shadow:0 0 0 2px '+d[5]:'')+'"><div style="font-size:12px;color:'+d[4]+'">'+d[1]+'</div><div style="font-size:26px;font-weight:600;color:'+d[5]+'">'+d[2]+'</div></div>'; }).join('');
       box.querySelectorAll('.crm-kpi').forEach(function(el){ el.onclick=function(){ BOARDVIEW=el.getAttribute('data-v'); paintKpis(); load(); }; });
     }
-    function setKpisFrom(allR,nrR){ var insts=(allR&&allR.instances)||[]; var nr=((nrR&&nrR.instances)||[]).length; var won=0,lost=0,run=0; insts.forEach(function(i){ var s=String(i.status); if(s==='closed_won')won++; else if(s==='closed_lost')lost++; else if(s==='running')run++; }); KPI={all:insts.length,won:won,lost:lost,nr:nr,open:Math.max(0,run-nr)}; paintKpis(); }
+    function setKpisFrom(allR,nrR){ var insts=(allR&&allR.instances)||[]; var nr=((nrR&&nrR.instances)||[]).length; var won=0,lost=0,run=0; insts.forEach(function(i){ var s=String(i.status); if(s==='closed_won')won++; else if(s==='closed_lost')lost++; else if(s==='running')run++; }); KPI={all:insts.length,won:won,lost:lost,nr:nr,open:run}; paintKpis(); }   /* Open = every running lead (matches the 'Open' badge in the list); NR is a subset */
     function loadKpis(){
       API.cachedInstances(pid,'all').then(function(ca){ if(ca) API.cachedInstances(pid,'not_responding').then(function(cn){ setKpisFrom(ca,cn); }); });
       API.listInstances(pid,'all').then(function(ra){ if(ra&&ra.ok) API.listInstances(pid,'not_responding').then(function(rn){ setKpisFrom(ra,rn); }); });
