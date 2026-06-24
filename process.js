@@ -52,25 +52,27 @@
     var v=document.getElementById('page-crm'); var DEF=null; var BOARDVIEW='running';
     v.innerHTML='<div class="page-head"><button class="btn ghost sm" id="crmBack">‹ CRM</button> <h1 style="font-size:18px;margin:0 0 0 8px" id="crmTtl">Pipeline</h1><div class="spacer"></div>'+
       '<button class="btn ghost sm" id="crmMon">📋 Monitor</button> <button class="btn" id="crmAdd" style="display:none">+ Add</button></div>'+
-      '<div class="seg" id="crmView" style="margin:0 0 12px"><button data-v="running" class="on">Open</button><button data-v="closed_won">Won</button><button data-v="closed_lost">Lost</button><button data-v="not_responding">\u23f8 Not responding</button><button data-v="all">All</button></div>'+
+      '<div id="crmKpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin:0 0 14px"></div>'+
       '<div id="crmBoard"></div>';
     document.getElementById('crmBack').onclick=renderCRM;
     document.getElementById('crmMon').onclick=function(){ openMonitor(pid); };
     document.getElementById('crmAdd').onclick=function(){ if(DEF) openStartForm(pid,DEF,load); };
-    document.querySelectorAll('#crmView button').forEach(function(b){ b.onclick=function(){
-      BOARDVIEW=b.getAttribute('data-v');
-      document.querySelectorAll('#crmView button').forEach(function(z){ z.classList.toggle('on', z===b); });
-      load();
-    }; });
+    function fmtD(ds){ if(!ds) return ''; var p=String(ds).slice(0,10).split('-'); if(p.length<3) return String(ds); var mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return (+p[2])+' '+(mo[(+p[1])-1]||''); }
+    function paintKpis(k){ k=k||{}; var box=document.getElementById('crmKpis'); if(!box) return;
+      var defs=[['running','Open',(k.open||0),'#fdeaea','#a3271f','#DA1017'],['closed_won','Won',(k.won||0),'#eafaf3','#1a7f37','#1a7f37'],['closed_lost','Lost',(k.lost||0),'#fdecec','#c0392b','#c0392b'],['not_responding','\u23f8 Not responding',(k.nr||0),'#fff4e8','#c47f00','#c47f00'],['all','All',(k.all||0),'#eef0f4','#555','#333']];
+      box.innerHTML=defs.map(function(d){ var on=(BOARDVIEW===d[0]); return '<div class="crm-kpi" data-v="'+d[0]+'" style="cursor:pointer;background:'+d[3]+';border-radius:12px;padding:11px 13px;'+(on?'box-shadow:0 0 0 2px '+d[5]:'')+'"><div style="font-size:11.5px;color:'+d[4]+'">'+d[1]+'</div><div style="font-size:23px;font-weight:600;color:'+d[5]+'">'+d[2]+'</div></div>'; }).join('');
+      box.querySelectorAll('.crm-kpi').forEach(function(el){ el.onclick=function(){ BOARDVIEW=el.getAttribute('data-v'); load(); }; });
+    }
     function bindLeads(){ document.querySelectorAll('.crm-lead').forEach(function(el){ el.onclick=function(){ openInstance(el.getAttribute('data-iid'), load); }; }); }
     function paintBoard(r){
+      paintKpis(r&&r.kpis);
       if(BOARDVIEW!=='running'){ paintClosed(r); return; }
       var stages=(r.stages||[]).filter(function(s){ return s.nodeType!=='start'; });
       var byStage={}; (r.instances||[]).forEach(function(i){ if(String(i.status||'running')==='running') (byStage[i.currentStageId]=byStage[i.currentStageId]||[]).push(i); });
       document.getElementById('crmBoard').innerHTML='<div class="crm-cols">'+stages.map(function(s){
         var leads=byStage[s.stageId]||[];
         return '<div class="crm-col"><h4>'+esc(s.name)+' <i>'+leads.length+'</i></h4>'+
-          leads.map(function(i){ return '<div class="crm-lead'+(i.late?' late':(i.dueToday?' due':''))+'" data-iid="'+esc(i.instanceId)+'"><b>'+esc(i.leadName)+'</b><div class="cl-m">'+esc(i.assigneeName||'')+(i.dueDate?(' · '+(i.late?'overdue':i.dueDate)):'')+'</div></div>'; }).join('')+
+          leads.map(function(i){ return '<div class="crm-lead'+(i.late?' late':(i.dueToday?' due':''))+'" data-iid="'+esc(i.instanceId)+'"><b>'+esc(i.leadName)+'</b><div class="cl-m">'+esc(i.assigneeName||'')+(i.dueDate?(' · '+(i.late?'overdue':fmtD(i.dueDate))):'')+'</div></div>'; }).join('')+
           '</div>';
       }).join('')+'</div>';
       bindLeads();
@@ -90,8 +92,8 @@
         var badge = won?'<span style="border-radius:12px;font-size:10px;padding:1px 8px;font-weight:700;background:#eafaf3;color:#1aa37a">✓ Won</span>'
                   : lost?'<span style="border-radius:12px;font-size:10px;padding:1px 8px;font-weight:700;background:#fdecec;color:#C0392B">✕ Lost</span>'
                   : (BOARDVIEW==='not_responding'?'<span style="border-radius:12px;font-size:10px;padding:1px 8px;font-weight:700;background:#fff4e8;color:#c47f00">\u23f8 Not responding</span>':'<span style="border-radius:12px;font-size:10px;padding:1px 8px;font-weight:700;background:#eef2ff;color:#4253c5">● Open</span>');
-        var meta = (won||lost) ? (i.closeReason?(' · '+esc(i.closeReason)):'')+(i.closedAt?(' · '+esc(i.closedAt)):'')
-                               : (snm[i.currentStageId]?(' · '+esc(snm[i.currentStageId])):'')+(i.dueDate?(' · '+(i.late?'overdue':esc(i.dueDate))):'');
+        var meta = (won||lost) ? (i.closeReason?(' · '+esc(i.closeReason)):'')+(i.closedAt?(' · '+esc(fmtD(i.closedAt))):'')
+                               : (snm[i.currentStageId]?(' · '+esc(snm[i.currentStageId])):'')+(i.dueDate?(' · '+(i.late?'overdue':esc(fmtD(i.dueDate)))):'');
         return '<div class="crm-lead" data-iid="'+esc(i.instanceId)+'" style="margin-bottom:8px"><b>'+esc(i.leadName)+'</b> '+badge+
           '<div class="cl-m">'+esc(i.assigneeName||'')+meta+'</div></div>';
       }).join('')+'</div>';
