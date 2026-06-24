@@ -49,7 +49,7 @@
 
   /* ---------- pipeline board ---------- */
   function openPipeline(pid){
-    var v=document.getElementById('page-crm'); var DEF=null; var BOARDVIEW='running';
+    var v=document.getElementById('page-crm'); var DEF=null; var BOARDVIEW='running'; var KPI={};
     v.innerHTML='<div class="page-head"><button class="btn ghost sm" id="crmBack">‹ CRM</button> <h1 style="font-size:18px;margin:0 0 0 8px" id="crmTtl">Pipeline</h1><div class="spacer"></div>'+
       '<button class="btn ghost sm" id="crmMon">📋 Monitor</button> <button class="btn" id="crmAdd" style="display:none">+ Add</button></div>'+
       '<div id="crmKpis" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin:0 0 14px"></div>'+
@@ -58,14 +58,19 @@
     document.getElementById('crmMon').onclick=function(){ openMonitor(pid); };
     document.getElementById('crmAdd').onclick=function(){ if(DEF) openStartForm(pid,DEF,load); };
     function fmtD(ds){ if(!ds) return ''; var p=String(ds).slice(0,10).split('-'); if(p.length<3) return String(ds); var mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return (+p[2])+' '+(mo[(+p[1])-1]||''); }
-    function paintKpis(k){ k=k||{}; var box=document.getElementById('crmKpis'); if(!box) return;
+    function paintKpis(){ var k=KPI||{}; var box=document.getElementById('crmKpis'); if(!box) return;
       var defs=[['running','Open',(k.open||0),'#fdeaea','#a3271f','#DA1017'],['closed_won','Won',(k.won||0),'#eafaf3','#1a7f37','#1a7f37'],['closed_lost','Lost',(k.lost||0),'#fdecec','#c0392b','#c0392b'],['not_responding','\u23f8 Not responding',(k.nr||0),'#fff4e8','#c47f00','#c47f00'],['all','All',(k.all||0),'#eef0f4','#555','#333']];
       box.innerHTML=defs.map(function(d){ var on=(BOARDVIEW===d[0]); return '<div class="crm-kpi" data-v="'+d[0]+'" style="cursor:pointer;background:'+d[3]+';border-radius:12px;padding:13px 14px;'+(on?'box-shadow:0 0 0 2px '+d[5]:'')+'"><div style="font-size:12px;color:'+d[4]+'">'+d[1]+'</div><div style="font-size:26px;font-weight:600;color:'+d[5]+'">'+d[2]+'</div></div>'; }).join('');
-      box.querySelectorAll('.crm-kpi').forEach(function(el){ el.onclick=function(){ BOARDVIEW=el.getAttribute('data-v'); load(); }; });
+      box.querySelectorAll('.crm-kpi').forEach(function(el){ el.onclick=function(){ BOARDVIEW=el.getAttribute('data-v'); paintKpis(); load(); }; });
+    }
+    function setKpisFrom(allR,nrR){ var insts=(allR&&allR.instances)||[]; var nr=((nrR&&nrR.instances)||[]).length; var won=0,lost=0,run=0; insts.forEach(function(i){ var s=String(i.status); if(s==='closed_won')won++; else if(s==='closed_lost')lost++; else if(s==='running')run++; }); KPI={all:insts.length,won:won,lost:lost,nr:nr,open:Math.max(0,run-nr)}; paintKpis(); }
+    function loadKpis(){
+      API.cachedInstances(pid,'all').then(function(ca){ if(ca) API.cachedInstances(pid,'not_responding').then(function(cn){ setKpisFrom(ca,cn); }); });
+      API.listInstances(pid,'all').then(function(ra){ if(ra&&ra.ok) API.listInstances(pid,'not_responding').then(function(rn){ setKpisFrom(ra,rn); }); });
     }
     function bindLeads(){ document.querySelectorAll('.crm-lead').forEach(function(el){ el.onclick=function(){ openInstance(el.getAttribute('data-iid'), load); }; }); }
     function paintBoard(r){
-      paintKpis(r&&r.kpis);
+      paintKpis();
       if(BOARDVIEW!=='running'){ paintClosed(r); return; }
       var stages=(r.stages||[]).filter(function(s){ return s.nodeType!=='start'; });
       var byStage={}; (r.instances||[]).forEach(function(i){ if(String(i.status||'running')==='running') (byStage[i.currentStageId]=byStage[i.currentStageId]||[]).push(i); });
@@ -100,6 +105,7 @@
       bindLeads();
     }
     function load(){
+      loadKpis();
       API.cachedInstances(pid,BOARDVIEW).then(function(a){ if(a) paintBoard(a); });
       API.getProcess(pid).then(function(d){ if(d&&d.ok){ DEF=d; document.getElementById('crmTtl').textContent=d.process.name; document.getElementById('crmAdd').style.display=d.canStart?'':'none'; } });
       API.listInstances(pid,BOARDVIEW).then(function(r){ if(r&&r.ok) paintBoard(r); });
