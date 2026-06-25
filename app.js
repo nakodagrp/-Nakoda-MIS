@@ -169,7 +169,7 @@ function applyPerms(){
   $('addEmpBtn').classList.toggle('hidden', !S.perms.canCreate);
   var canMon=(S.perms.level==='SUPER')||(S.user && ['Operations Manager','Process Coordinator'].indexOf(S.user.Role)>=0);
   document.querySelectorAll('[data-page="taskmon"]').forEach(function(n){ n.classList.toggle('hidden',!canMon); });
-  var canPerf=canMon||S.perms.level==='BRANCH_MGR';   // monitors see all branches; branch managers see their own
+  var canPerf=canMon||S.perms.level==='BRANCH_MGR'||(S.user && S.user.Role==='Accounts');   // monitors see all branches; branch managers see their own; Accounts for the attendance register
   document.querySelectorAll('[data-page="staffperf"]').forEach(function(n){ n.classList.toggle('hidden',!canPerf); });
   var canMkt=(S.perms.level==='SUPER')||S.perms.level==='BRANCH_MGR'||(S.user && ['Operations Manager','Marketing Manager','Director'].indexOf(S.user.Role)>=0);
   document.querySelectorAll('[data-page="marketing"]').forEach(function(n){ n.classList.toggle('hidden',!canMkt); });

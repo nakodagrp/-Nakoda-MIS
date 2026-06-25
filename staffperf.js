@@ -75,16 +75,22 @@
   var SP={rows:[],brName:function(x){return x;}};
   var DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'], MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   function fmtDay(ds){ var p=String(ds).split('-'); if(p.length<3) return {d:ds,dow:''}; var dt=new Date(+p[0],+p[1]-1,+p[2]); return {d:(+p[2])+' '+(MON[+p[1]-1]||''), dow:DOW[dt.getDay()]||''}; }
+  function hm2min(t){ var m=String(t||'').match(/^(\d{1,2}):(\d{2})/); return m?(+m[1])*60+(+m[2]):null; }
+  function calcHours(ci,co){ var a=hm2min(ci), b=hm2min(co); if(a===null||b===null) return ''; var d=(b-a)/60; if(d<0) d=0; return d.toFixed(1); }
   function openAttReg(){
+    var host=$id('spAttReg'); if(!host) return;
     var rows=(SP.rows||[]).slice().sort(function(a,b){ return String(a.name).localeCompare(String(b.name)); });
     var opts='<option value="">Select staff…</option>'+rows.map(function(d){ return '<option value="'+esc(d.emp)+'">'+esc(d.name)+'</option>'; }).join('');
     var ym=monthFrom().slice(0,7);
-    var body='<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;">'+
-      '<div style="flex:1;min-width:180px;"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px;">Staff member</label><select id="arEmp" class="in">'+opts+'</select></div>'+
-      '<div style="min-width:140px;"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px;">Branch</label><input id="arBr" class="in" value="" readonly style="background:#f5f6fa;"></div>'+
-      '<div style="min-width:140px;"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px;">Month</label><input id="arMonth" type="month" class="in" value="'+ym+'"></div>'+
-    '</div><div id="arBody"><div class="empty">Select a staff member to see their month.</div></div>';
-    openModal('Attendance register', body, '');
+    host.innerHTML='<div class="card" style="padding:14px 16px;margin-bottom:14px;">'+
+      '<div style="display:flex;align-items:center;margin-bottom:12px;"><span style="font-size:15px;font-weight:700;">🕒 Attendance register</span><div style="flex:1;"></div><span id="arClose" style="font-size:13px;color:#888;cursor:pointer;">✕ close</span></div>'+
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;">'+
+        '<div style="flex:1;min-width:180px;"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px;">Staff member</label><select id="arEmp" class="in">'+opts+'</select></div>'+
+        '<div style="min-width:140px;"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px;">Branch</label><input id="arBr" class="in" value="" readonly style="background:#f5f6fa;"></div>'+
+        '<div style="min-width:140px;"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px;">Month</label><input id="arMonth" type="month" class="in" value="'+ym+'"></div>'+
+      '</div><div id="arBody"><div class="empty">Select a staff member to see their month.</div></div>'+
+    '</div>';
+    $id('arClose').onclick=function(){ host.innerHTML=''; };
     function reload(){
       var emp=$id('arEmp').value, m=$id('arMonth').value||ym;
       var sel=(SP.rows||[]).filter(function(d){ return String(d.emp)===String(emp); })[0];
@@ -111,12 +117,13 @@
       var label = st==='half' ? 'Half day' : (st==='leave' ? ('Leave'+(r.notes?(' ('+esc(r.notes)+')'):'')) : (st==='absent' ? 'Absent' : (st?st.charAt(0).toUpperCase()+st.slice(1):'Present')));
       var cellC = tone?(' style="color:'+tone+';"'):'';
       var dash='<span style="color:#bbb;">—</span>';
+      var hrs=calcHours(r.checkIn,r.checkOut);
       return '<tr style="'+rowStyle+'">'+
         '<td'+cellC+'>'+esc(fd.d)+'</td>'+
         '<td'+(tone?' style="color:'+tone+';"':' style="color:#999;"')+'>'+esc(fd.dow)+'</td>'+
         '<td'+cellC+'>'+(r.checkIn||dash)+'</td>'+
         '<td'+cellC+'>'+(r.checkOut||dash)+'</td>'+
-        '<td'+cellC+'>'+(r.workHours||dash)+'</td>'+
+        '<td'+cellC+'>'+(hrs||dash)+'</td>'+
         '<td'+(tone?' style="color:'+tone+';font-weight:600;"':'')+'>'+label+(String(r.late)==='yes'&&st!=='half'?' ⚠':'')+'</td>'+
       '</tr>';
     }).join('');
@@ -139,9 +146,10 @@
         '<button class="btn ghost sm" id="spGo">Apply</button>'+
       '</div>'+
       '<div style="margin:0 0 12px;"><button class="btn sm" id="spAtt">🕒 Attendance</button></div>'+
+      '<div id="spAttReg"></div>'+
       '<div id="spBody"><div class="center-load"><span class="loader dark"></span> Loading…</div></div>';
     SP.brName=brName;
-    $id('spAtt').onclick=function(){ openAttReg(); };
+    $id('spAtt').onclick=function(){ var box=$id('spAttReg'); if(box && box.innerHTML.trim()){ box.innerHTML=''; } else openAttReg(); };
     function load(){
       var f=$id('spFrom').value, t=$id('spTo').value, b=(canPick&&$id('spBr'))?$id('spBr').value:'';
       $id('spBody').innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>';
