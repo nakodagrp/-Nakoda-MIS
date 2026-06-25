@@ -112,7 +112,11 @@
       }
       return true;
     });
-    list.sort(function(a,b){ return (a.dueDate||'9999')+(a.dueTime||'')>(b.dueDate||'9999')+(b.dueTime||'')?1:-1; });
+    list.sort(function(a,b){
+      var ad=(String(a.status)==='done')?1:0, bd=(String(b.status)==='done')?1:0;
+      if(ad!==bd) return ad-bd;                                   // pending first, completed sink to bottom
+      return (a.dueDate||'9999')+(a.dueTime||'')>(b.dueDate||'9999')+(b.dueTime||'')?1:-1;
+    });
     if(!list.length){ box.innerHTML='<div class="empty">No tasks here. Tap “+ Add task”.</div>'; return; }
     box.innerHTML=list.map(function(t){
       var done=t.status==='done', cl=pc(t), cldone=cl.filter(function(x){return x.done;}).length;
