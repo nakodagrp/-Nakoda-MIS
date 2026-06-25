@@ -70,6 +70,61 @@
 
   /* ---------- full leaderboard page ---------- */
   function bar(s){ var c=tier(s); return '<div style="display:flex;align-items:center;gap:6px;"><div style="flex:1;height:7px;border-radius:4px;background:#eee;overflow:hidden;"><div style="width:'+s+'%;height:100%;background:'+c+';"></div></div><span style="font-weight:600;color:'+c+';min-width:26px;font-size:12px;">'+s+'</span></div>'; }
+
+  /* ---------- Attendance register (per-staff whole month) ---------- */
+  var SP={rows:[],brName:function(x){return x;}};
+  var DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'], MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function fmtDay(ds){ var p=String(ds).split('-'); if(p.length<3) return {d:ds,dow:''}; var dt=new Date(+p[0],+p[1]-1,+p[2]); return {d:(+p[2])+' '+(MON[+p[1]-1]||''), dow:DOW[dt.getDay()]||''}; }
+  function openAttReg(){
+    var rows=(SP.rows||[]).slice().sort(function(a,b){ return String(a.name).localeCompare(String(b.name)); });
+    var opts='<option value="">Select staff…</option>'+rows.map(function(d){ return '<option value="'+esc(d.emp)+'">'+esc(d.name)+'</option>'; }).join('');
+    var ym=monthFrom().slice(0,7);
+    var body='<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;">'+
+      '<div style="flex:1;min-width:180px;"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px;">Staff member</label><select id="arEmp" class="in">'+opts+'</select></div>'+
+      '<div style="min-width:140px;"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px;">Branch</label><input id="arBr" class="in" value="" readonly style="background:#f5f6fa;"></div>'+
+      '<div style="min-width:140px;"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px;">Month</label><input id="arMonth" type="month" class="in" value="'+ym+'"></div>'+
+    '</div><div id="arBody"><div class="empty">Select a staff member to see their month.</div></div>';
+    openModal('Attendance register', body, '');
+    function reload(){
+      var emp=$id('arEmp').value, m=$id('arMonth').value||ym;
+      var sel=(SP.rows||[]).filter(function(d){ return String(d.emp)===String(emp); })[0];
+      $id('arBr').value = sel ? SP.brName(sel.branch) : '';
+      if(!emp){ $id('arBody').innerHTML='<div class="empty">Select a staff member to see their month.</div>'; return; }
+      $id('arBody').innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>';
+      API.staffMonthAttendance(emp,m).then(function(r){
+        var box=$id('arBody'); if(!box) return;
+        if(!r||!r.ok){ box.innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; return; }
+        if(r.branchName) $id('arBr').value=r.branchName;
+        box.innerHTML=renderRegTable(r.records||[]);
+      }).catch(function(){ var box=$id('arBody'); if(box) box.innerHTML='<div class="empty">Connect to load attendance.</div>'; });
+    }
+    $id('arEmp').onchange=reload; $id('arMonth').onchange=reload;
+  }
+  function renderRegTable(recs){
+    if(!recs.length) return '<div class="empty">No attendance recorded this month.</div>';
+    var present=0,half=0,leave=0;
+    var body=recs.map(function(r){
+      var st=String(r.status||''), fd=fmtDay(r.date), rowStyle='', tone='';
+      if(st==='half'){ half++; rowStyle='background:#FAEEDA;'; tone='#633806'; }
+      else if(st==='leave'||st==='absent'){ leave++; rowStyle='background:#F7C1C1;'; tone='#791F1F'; }
+      else { present++; }
+      var label = st==='half' ? 'Half day' : (st==='leave' ? ('Leave'+(r.notes?(' ('+esc(r.notes)+')'):'')) : (st==='absent' ? 'Absent' : (st?st.charAt(0).toUpperCase()+st.slice(1):'Present')));
+      var cellC = tone?(' style="color:'+tone+';"'):'';
+      var dash='<span style="color:#bbb;">—</span>';
+      return '<tr style="'+rowStyle+'">'+
+        '<td'+cellC+'>'+esc(fd.d)+'</td>'+
+        '<td'+(tone?' style="color:'+tone+';"':' style="color:#999;"')+'>'+esc(fd.dow)+'</td>'+
+        '<td'+cellC+'>'+(r.checkIn||dash)+'</td>'+
+        '<td'+cellC+'>'+(r.checkOut||dash)+'</td>'+
+        '<td'+cellC+'>'+(r.workHours||dash)+'</td>'+
+        '<td'+(tone?' style="color:'+tone+';font-weight:600;"':'')+'>'+label+(String(r.late)==='yes'&&st!=='half'?' ⚠':'')+'</td>'+
+      '</tr>';
+    }).join('');
+    var pill=function(bg,fg,txt){ return '<span style="font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;background:'+bg+';color:'+fg+';">'+txt+'</span>'; };
+    var summary='<div style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;">'+
+      pill('#eef0f4','#555','Present '+present)+pill('#FAEEDA','#633806','Half '+half)+pill('#F7C1C1','#791F1F','Leave '+leave)+'</div>';
+    return summary+'<div class="table-wrap"><table><thead><tr><th>Date</th><th>Day</th><th>Check in</th><th>Check out</th><th>Hours</th><th>Status</th></tr></thead><tbody>'+body+'</tbody></table></div>';
+  }
   window.renderStaffPerf=function(){
     var v=$id('page-staffperf'); if(!v) return;
     var canPick=window.S&&S.perms&&S.perms.canViewAll;
@@ -82,14 +137,18 @@
         '<input type="date" id="spTo" class="in" style="max-width:150px" value="'+todayD()+'">'+
         (canPick?'<select id="spBr" class="in" style="max-width:160px">'+brOpts+'</select>':'')+
         '<button class="btn ghost sm" id="spGo">Apply</button>'+
-      '</div><div id="spBody"><div class="center-load"><span class="loader dark"></span> Loading…</div></div>';
+      '</div>'+
+      '<div style="margin:0 0 12px;"><button class="btn sm" id="spAtt">🕒 Attendance</button></div>'+
+      '<div id="spBody"><div class="center-load"><span class="loader dark"></span> Loading…</div></div>';
+    SP.brName=brName;
+    $id('spAtt').onclick=function(){ openAttReg(); };
     function load(){
       var f=$id('spFrom').value, t=$id('spTo').value, b=(canPick&&$id('spBr'))?$id('spBr').value:'';
       $id('spBody').innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>';
       API.staffPerformance(f,t,b).then(function(r){
         var box=$id('spBody'); if(!box) return;
         if(!r||!r.ok){ box.innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; return; }
-        var rows=r.rows||[]; if(!rows.length){ box.innerHTML='<div class="empty">No data for this period.</div>'; return; }
+        var rows=r.rows||[]; SP.rows=rows; if(!rows.length){ box.innerHTML='<div class="empty">No data for this period.</div>'; return; }
         box.innerHTML='<div class="card"><div class="table-wrap"><table><thead><tr><th>#</th><th>Person</th><th>Dedication</th><th>Performance</th><th>Att.</th><th>Tasks</th><th>Calls</th><th>Meet</th><th>Output</th><th>On-time</th></tr></thead><tbody>'+
           rows.map(function(d,i){ return '<tr><td>'+(i+1)+'</td><td><b>'+esc(d.name)+'</b><div style="font-size:11px;color:#999">'+esc(d.role)+' · '+esc(brName(d.branch))+'</div></td>'+
             '<td style="min-width:120px">'+bar(d.dedication)+'</td><td style="min-width:120px">'+bar(d.performance)+'</td>'+
