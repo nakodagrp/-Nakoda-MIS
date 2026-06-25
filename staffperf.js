@@ -77,10 +77,20 @@
   function fmtDay(ds){ var p=String(ds).split('-'); if(p.length<3) return {d:ds,dow:''}; var dt=new Date(+p[0],+p[1]-1,+p[2]); return {d:(+p[2])+' '+(MON[+p[1]-1]||''), dow:DOW[dt.getDay()]||''}; }
   function hm2min(t){ var m=String(t||'').match(/^(\d{1,2}):(\d{2})/); return m?(+m[1])*60+(+m[2]):null; }
   function calcHours(ci,co){ var a=hm2min(ci), b=hm2min(co); if(a===null||b===null) return ''; var d=(b-a)/60; if(d<0) d=0; return d.toFixed(1); }
+  function staffOptHtml(rows){ return '<option value="">Select staff…</option>'+(rows||[]).slice().sort(function(a,b){ return String(a.name).localeCompare(String(b.name)); }).map(function(d){ return '<option value="'+esc(d.emp)+'">'+esc(d.name)+'</option>'; }).join(''); }
+  function fillStaffOptions(){
+    var sel=$id('arEmp'); if(!sel) return;
+    if((SP.rows||[]).length){ sel.innerHTML=staffOptHtml(SP.rows); return; }
+    sel.innerHTML='<option value="">Loading staff…</option>';
+    API.staffPerformance(monthFrom(),todayD(),'').then(function(r){
+      var s=$id('arEmp'); if(!s) return;
+      if(r&&r.ok&&r.rows&&r.rows.length){ SP.rows=r.rows; s.innerHTML=staffOptHtml(r.rows); }
+      else s.innerHTML='<option value="">No staff found</option>';
+    }).catch(function(){ var s=$id('arEmp'); if(s) s.innerHTML='<option value="">Connect to load staff</option>'; });
+  }
   function openAttReg(){
     var host=$id('spAttReg'); if(!host) return;
-    var rows=(SP.rows||[]).slice().sort(function(a,b){ return String(a.name).localeCompare(String(b.name)); });
-    var opts='<option value="">Select staff…</option>'+rows.map(function(d){ return '<option value="'+esc(d.emp)+'">'+esc(d.name)+'</option>'; }).join('');
+    var opts=staffOptHtml(SP.rows);
     var ym=monthFrom().slice(0,7);
     host.innerHTML='<div class="card" style="padding:14px 16px;margin-bottom:14px;">'+
       '<div style="display:flex;align-items:center;margin-bottom:12px;"><span style="font-size:15px;font-weight:700;">🕒 Attendance register</span><div style="flex:1;"></div><span id="arClose" style="font-size:13px;color:#888;cursor:pointer;">✕ close</span></div>'+
@@ -91,6 +101,7 @@
       '</div><div id="arBody"><div class="empty">Select a staff member to see their month.</div></div>'+
     '</div>';
     $id('arClose').onclick=function(){ host.innerHTML=''; };
+    fillStaffOptions();
     function reload(){
       var emp=$id('arEmp').value, m=$id('arMonth').value||ym;
       var sel=(SP.rows||[]).filter(function(d){ return String(d.emp)===String(emp); })[0];
