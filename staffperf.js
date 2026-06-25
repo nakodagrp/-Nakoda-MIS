@@ -167,7 +167,8 @@
       API.staffPerformance(f,t,b).then(function(r){
         var box=$id('spBody'); if(!box) return;
         if(!r||!r.ok){ box.innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; return; }
-        var rows=r.rows||[]; SP.rows=rows; if(!rows.length){ box.innerHTML='<div class="empty">No data for this period.</div>'; return; }
+        var rows=r.rows||[]; SP.rows=rows; if($id('arEmp')) $id('arEmp').innerHTML=staffOptHtml(rows);  // refill the open register dropdown
+        if(!rows.length){ box.innerHTML='<div class="empty">No data for this period.</div>'; return; }
         box.innerHTML='<div class="card"><div class="table-wrap"><table><thead><tr><th>#</th><th>Person</th><th>Dedication</th><th>Performance</th><th>Att.</th><th>Tasks</th><th>Calls</th><th>Meet</th><th>Output</th><th>On-time</th></tr></thead><tbody>'+
           rows.map(function(d,i){ return '<tr><td>'+(i+1)+'</td><td><b>'+esc(d.name)+'</b><div style="font-size:11px;color:#999">'+esc(d.role)+' · '+esc(brName(d.branch))+'</div></td>'+
             '<td style="min-width:120px">'+bar(d.dedication)+'</td><td style="min-width:120px">'+bar(d.performance)+'</td>'+
