@@ -4,7 +4,7 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v103';
+var CACHE_VERSION = 'nakoda-mis-v104';
 var SHELL = [
   './',
   './index.html',
@@ -40,11 +40,20 @@ var SHELL = [
   './icons/icon-512.png',
   './icons/favicon.png'
 ];
+/* The minimum set needed to render a styled, working login screen. These are cached all-or-nothing,
+   so a device can NEVER end up with index.html but a missing styles.css (the broken unstyled state). */
+var CRITICAL = ['./','./index.html','./styles.css','./manifest.webmanifest','./config.js','./api.js','./app.js'];
+var OPTIONAL = SHELL.filter(function(u){ return CRITICAL.indexOf(u)<0; });
 
 self.addEventListener('install', function(e){
   e.waitUntil(
     caches.open(CACHE_VERSION).then(function(c){
-      return Promise.all(SHELL.map(function(u){ return c.add(u).catch(function(){}); }));
+      // Critical files are all-or-nothing: if any can't be fetched, install REJECTS and the browser
+      // retries later — so we never activate a half-cached (unstyled) shell.
+      return c.addAll(CRITICAL).then(function(){
+        // Everything else is best-effort; a single missing module/icon must not block install.
+        return Promise.all(OPTIONAL.map(function(u){ return c.add(u).catch(function(){}); }));
+      });
     })
   );
 });
@@ -74,7 +83,10 @@ self.addEventListener('fetch', function(e){
           caches.open(CACHE_VERSION).then(function(c){ c.put(req, copy); });
         }
         return res;
-      }).catch(function(){ return cached; });
+      }).catch(function(){
+        if (req.mode === 'navigate') return caches.match('./index.html');   // offline page loads → cached shell
+        return cached;
+      });
       return cached || net;
     })
   );
