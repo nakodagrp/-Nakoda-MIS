@@ -15,7 +15,8 @@
     v.innerHTML='<div class="page-head"><h1>Attendance</h1></div>'+
       '<input type="file" id="attSelfie" accept="image/*" capture="user" style="display:none">'+
       '<div id="attMe"></div>'+
-      (canApprove()?'<div class="section-label" style="margin-top:18px">Approve — today</div><div id="attApprove"></div>':'');
+      (canApprove()?'<div class="section-label" style="margin-top:18px">Approve — today</div><div id="attApprove"></div>':'')+
+      '<div style="height:110px"></div>';   // bottom spacer so the last approve card clears the mobile bottom nav
     $id('attSelfie').onchange=function(){ var f=this.files[0]; if(!f) return; var fr=new FileReader(); fr.onload=function(){ var s=fr.result,i=s.indexOf(','); submitMark(ATT.kind, s.slice(i+1)); }; fr.readAsDataURL(f); this.value=''; };
     paintMe();
     API.cachedAttendance().then(function(r){ if(r&&r.records){ ATT.recs=r.records; paintMe(); } });
@@ -88,7 +89,7 @@
         var ap=String(a.approvalStatus)==='approved';
         return '<div class="att-row" data-id="'+esc(a.attId)+'"><div class="att-av">'+esc(initials(a.empName))+'</div>'+
           '<div class="att-mid"><div class="att-nm"><b>'+esc(a.empName)+'</b>'+(String(a.late)==='yes'?' <span class="att-late">late</span>':'')+'</div>'+
-          '<div class="att-m">In '+esc(a.checkIn||'—')+(a.checkOut?(' · Out '+esc(a.checkOut)):'')+(a.workHours?(' · '+esc(a.workHours)+'h'):'')+' · '+esc(a.status||'')+(a.selfieInUrl?' · <a href="'+esc(a.selfieInUrl)+'" target="_blank">selfie</a>':'')+'</div>'+
+          '<div class="att-m">In '+esc(a.checkIn||'—')+(a.checkOut?(' · Out '+esc(a.checkOut)):'')+(a.workHours?(' · '+esc(a.workHours)+'h'):'')+' · '+esc(a.status||'')+(a.selfieInUrl?' · <a href="'+esc(a.selfieInUrl)+'" target="_blank">selfie</a>':'')+((a.latIn&&a.lngIn)?' · <a href="https://maps.google.com/?q='+esc(a.latIn)+','+esc(a.lngIn)+'" target="_blank">📍 location</a>':'')+'</div>'+
           '<div class="att-m">ID '+esc(a.empId||'')+(a.dutyStart?(' · Duty '+esc(a.dutyStart)+(a.dutyEnd?('\u2013'+esc(a.dutyEnd)):'')):'')+(a.attMode?(' · '+esc(a.attMode)):'')+'</div></div>'+
           (ap?'<span class="att-ok">✓ approved</span>':'<button class="btn sm" data-ap="'+esc(a.attId)+'">Approve</button>')+
           '<select class="att-sel" data-st="'+esc(a.attId)+'">'+['present','half','leave','absent'].map(function(s){return '<option'+(s===a.status?' selected':'')+'>'+s+'</option>';}).join('')+'</select>'+
