@@ -516,7 +516,7 @@ function renderEmpTable(){
       '<td>'+esc(e.Role)+'</td>'+
       '<td>'+officeBadge(e)+'</td>'+
       '<td>'+esc(e.Phone||'—')+'</td>'+
-      '<td>'+statusBadge(e.Status)+'</td>'+
+      '<td>'+statusCell(e)+'</td>'+
       '<td><div class="row-actions">'+acts+'</div></td></tr>';
   });
   tb.innerHTML=html;
@@ -525,6 +525,25 @@ function pend(e){ return e._pending?' <span class="badge pending">syncing</span>
 function officeBadge(e){ return e.OfficeType==='Corporate'?'<span class="badge office">Corporate</span>':'<span class="badge branch">'+esc(branchName(e.Branch))+'</span>'; }
 function branchName(id){ var b=((S.meta&&S.meta.branches)||[]).filter(function(x){return x.BranchID===id;})[0]; return b?b.BranchName:(id||'—'); }
 function statusBadge(s){ return '<span class="badge '+(s==='Active'?'active':'inactive')+'">'+esc(s||'Active')+'</span>'; }
+/* Inline Active/Inactive dropdown — only managers (admin/HR, or a branch manager for their own branch) can change status; never your own row. */
+function canMgStatus(e){ return !!(S.perms && (S.perms.canManageAll || (S.perms.level==='BRANCH_MGR' && String(e.Branch)===String((S.user&&S.user.Branch)||''))) && !(S.user&&String(e.EmpID)===String(S.user.EmpID))); }
+function statusCell(e){
+  if(e._pending || !canMgStatus(e)) return statusBadge(e.Status);
+  var s=(e.Status==='Inactive')?'Inactive':'Active', on=(s==='Active');
+  var st='border:1px solid '+(on?'#cfe3d4':'#f0cccc')+';border-radius:8px;padding:5px 26px 5px 9px;font-size:12.5px;font-weight:700;color:'+(on?'#1a8f4c':'#b23b3b')+';background:'+(on?'#f3fbf5':'#fdf3f3')+';';
+  return '<select data-emp="'+esc(e.EmpID)+'" onchange="changeEmpStatus(this)" style="'+st+'">'+
+    ['Active','Inactive'].map(function(o){ return '<option'+(o===s?' selected':'')+'>'+o+'</option>'; }).join('')+'</select>';
+}
+function changeEmpStatus(sel){
+  var empId=sel.getAttribute('data-emp'), val=sel.value, e=(S.employees||[]).filter(function(x){return String(x.EmpID)===String(empId);})[0];
+  var prev=e?e.Status:'Active'; if(val===prev) return;
+  if(val==='Inactive' && !confirm('Make '+((e&&e.FullName)||'this staff member')+' inactive? They will no longer be able to log in.')){ sel.value=prev; return; }
+  sel.disabled=true;
+  API.setStatus(empId,val).then(function(r){
+    if(r&&r.ok){ if(e) e.Status=val; toast(val==='Active'?'Activated':'Set inactive'); renderEmpTable(); }
+    else { sel.disabled=false; toast((r&&r.error)||'Could not update status',true); sel.value=prev; }
+  }).catch(function(){ sel.disabled=false; toast('Changing status needs an internet connection.',true); sel.value=prev; });
+}
 
 function viewEmp(empId){
   API.getEmployee(empId).then(function(r){
