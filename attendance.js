@@ -38,9 +38,7 @@
     box.innerHTML='<div class="att-card"><div class="att-day">'+['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][now.getDay()]+', '+now.getDate()+' '+MON[now.getMonth()]+'</div>'+
       '<div class="att-sub">'+esc(dutyTxt)+'</div>'+btn+
       '<div class="att-stat">'+esc(stat)+'</div>'+
-      '<div class="att-note">'+[ (needSelfie()?'📷 selfie':''), ('📍 location'+(isFenced()?' verified at your branch':'')) ].filter(Boolean).join(' + ')+' · Late after shift+15 min = half day.</div>'+
-      (inb?'<div class="att-remark" style="margin-top:10px"><div style="font-size:12px;color:#666;margin-bottom:4px">Remark (optional)</div><select id="attRemark" class="in" style="max-width:240px"><option value="">— none —</option><option value="Work from home">Work from home</option></select></div>':'')+
-      '</div>'+
+      '<div class="att-note">'+[ (needSelfie()?'📷 selfie':''), ('📍 location'+(isFenced()?' verified at your branch':'')) ].filter(Boolean).join(' + ')+' · Late after shift+15 min = half day.</div></div>'+
       monthStrip();
     var b=$id('attBtn'); if(b) b.onclick=function(){ doMark(inb?'in':'out'); };
   }
@@ -83,12 +81,23 @@
       if(ci!==null && (nowm-ci)<240){ promptEarlyReason(function(reason){ ATT.outRemark=reason; geoThen(kind); }); return; } }   // under 4 hours → reason required
     geoThen(kind);
   }
+  function promptWfh(r, cb){
+    var dist=(r&&r.dist)?(Math.round(r.dist)+' m from '+esc(r.branch||'your branch')):'away from your branch';
+    openModal('Not at the centre','<style>@keyframes wfhBlink{0%,100%{opacity:1}50%{opacity:.15}} .wfh-blink{animation:wfhBlink .8s steps(1,end) infinite}</style>'+
+      '<div style="text-align:center"><div class="wfh-blink" style="font-size:19px;font-weight:800;color:#DA1017;margin:4px 0 10px">🏠 Work from home?</div>'+
+      '<div style="font-size:13px;color:#555;margin-bottom:14px">You are '+dist+'. If you are working from home, tap <b>Yes</b> — your attendance will be sent for approval. Otherwise you cannot punch.</div>'+
+      '<div style="display:flex;gap:10px;justify-content:center"><button class="btn ghost" id="wfhNo">No</button><button class="btn" id="wfhYes">Yes, work from home</button></div></div>','');
+    var y=document.getElementById('wfhYes'), n=document.getElementById('wfhNo');
+    if(y) y.onclick=function(){ closeModal(); cb(true); };
+    if(n) n.onclick=function(){ closeModal(); cb(false); };
+  }
   function submitMark(kind, selfie){
-    var c=ATT.coords||{}, remark = kind==='in' ? (((document.getElementById('attRemark')||{}).value)||'') : (ATT.outRemark||'');
-    var payload={selfie:selfie, lat:c.lat, lng:c.lng, remark:remark};
+    var c=ATT.coords||{}, payload={selfie:selfie, lat:c.lat, lng:c.lng, wfh:!!ATT.wfh, remark:(kind==='out'?(ATT.outRemark||''):'')};
     toast('Marking…');
     var p = kind==='in' ? API.checkIn(payload) : API.checkOut(payload);
-    p.then(function(r){ if(r&&r.ok){ toast(kind==='in'?('Checked in '+r.checkIn+(r.late?' (late)':'')):('Checked out '+r.checkOut+(r.half?' · half day':''))); API.myAttendance(ymNow()).then(function(x){ if(x&&x.ok){ ATT.recs=x.records||[]; paintMe(); } }); }
+    p.then(function(r){
+      if(r&&r.ok){ ATT.wfh=false; toast(kind==='in'?('Checked in '+r.checkIn+(r.late?' (late)':'')):('Checked out '+r.checkOut+(r.half?' · half day':''))); API.myAttendance(ymNow()).then(function(x){ if(x&&x.ok){ ATT.recs=x.records||[]; paintMe(); } }); }
+      else if(r&&r.wfhPrompt){ promptWfh(r, function(yes){ if(yes){ ATT.wfh=true; submitMark(kind, selfie); } else { ATT.wfh=false; toast('You are not at the centre — '+(kind==='in'?'check-in':'check-out')+' not allowed.',true); } }); }
       else toast((r&&r.error)||'Could not mark — needs internet & location.',true); })
       .catch(function(){ toast('Marking attendance needs an internet connection.',true); });
   }
