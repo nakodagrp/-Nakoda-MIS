@@ -78,14 +78,20 @@
     var start=ACC.dailyPage*PAGE, rows=all.slice(start,start+PAGE);
     var actions=canEnter()?'<div class="fin-actions"><button class="btn" id="dlyAdd">+ Daily entry</button><button class="btn ghost" id="dlyDep">🏦 Bank deposit</button></div>':'';
     box.innerHTML=actions+
-      '<div class="table-wrap"><table><thead><tr><th>Date</th><th>B2C</th><th>B2D</th><th>Other</th><th>Patients</th><th>Tests</th><th>Collection</th><th>Docs</th><th>Status</th></tr></thead><tbody>'+
-      (rows.length?rows.map(function(d){ var coll=(Number(d.cashIn)||0)+(Number(d.bankIn)||0)+(Number(d.other)||0); return '<tr><td>'+esc(d.date)+'</td><td>₹'+money(d.b2c)+'</td><td>₹'+money(d.b2d)+'</td><td>₹'+money(d.other)+'</td><td>'+(d.patients||0)+'</td><td>'+(d.tests||0)+'</td><td>₹'+money(coll)+'</td><td>'+docLinks(d)+'</td><td>'+(String(d.status)==='verified'?'<span class="chip paid">✓ verified</span>':(r.canVerify?'<button class="btn ghost sm" data-vf="'+esc(d.dayId)+'">Verify</button>':'<span class="chip partial">pending</span>'))+'</td></tr>'; }).join(''):'<tr><td class="empty" colspan="9">No entries this month.</td></tr>')+'</tbody></table></div>'+
+      '<div class="table-wrap"><table><thead><tr><th>Branch</th><th>Date</th><th>B2C cash</th><th>B2C bank</th><th>Expense</th><th>Other</th><th>Patients</th><th>Tests</th><th>Collection</th><th>Docs</th><th>Status</th><th>Reject</th></tr></thead><tbody>'+
+      (rows.length?rows.map(function(d){ var coll=(Number(d.cashIn)||0)+(Number(d.bankIn)||0)+(Number(d.other)||0); var stt=String(d.status);
+        var statusCell = stt==='verified' ? '<span class="chip paid">✓ verified</span>'
+          : stt==='rejected' ? '<span class="chip" style="background:#fdecec;color:#b23b3b">✗ rejected</span>'
+          : (r.canVerify ? '<button class="btn ghost sm" data-vf="'+esc(d.dayId)+'">Verify</button>' : '<span class="chip partial">pending</span>');
+        var rejectCell = (stt!=='verified' && stt!=='rejected' && r.canVerify) ? '<button class="btn ghost sm" data-rj="'+esc(d.dayId)+'" style="color:#b23b3b">Reject</button>' : '';
+        return '<tr><td>'+esc(branchName(d.branchId))+'</td><td>'+esc(d.date)+'</td><td>₹'+money(d.b2cCash)+'</td><td>₹'+money(d.b2cBank)+'</td><td>₹'+money(d.expense)+'</td><td>₹'+money(d.other)+'</td><td>'+(d.patients||0)+'</td><td>'+(d.tests||0)+'</td><td>₹'+money(coll)+'</td><td>'+docLinks(d)+'</td><td>'+statusCell+'</td><td>'+rejectCell+'</td></tr>'; }).join(''):'<tr><td class="empty" colspan="12">No entries this month.</td></tr>')+'</tbody></table></div>'+
       (total>PAGE?'<div class="acc-pager">'+(ACC.dailyPage>0?'<button class="btn ghost sm" id="dlyPrev">‹ Prev</button>':'<span></span>')+'<span>'+(start+1)+'–'+Math.min(start+PAGE,total)+' of '+total+'</span>'+(ACC.dailyPage<pages-1?'<button class="btn ghost sm" id="dlyNext">Next ›</button>':'<span></span>')+'</div>':'');
     var a=$id('dlyAdd'); if(a) a.onclick=openDailyForm;
     var dp=$id('dlyDep'); if(dp) dp.onclick=openDepositForm;
     var pv=$id('dlyPrev'); if(pv) pv.onclick=function(){ ACC.dailyPage--; loadDaily(); };
     var nx=$id('dlyNext'); if(nx) nx.onclick=function(){ ACC.dailyPage++; loadDaily(); };
     box.querySelectorAll('[data-vf]').forEach(function(b){ b.onclick=function(){ API.verifyDaily(b.getAttribute('data-vf')).then(function(x){ if(x&&x.ok){ toast('Verified'); loadDaily(); } }); }; });
+    box.querySelectorAll('[data-rj]').forEach(function(b){ b.onclick=function(){ var reason=prompt('Reason for rejecting this entry? (optional)'); if(reason===null) return; API.rejectDaily(b.getAttribute('data-rj'),reason).then(function(x){ if(x&&x.ok){ toast('Entry rejected'); loadDaily(); } else toast((x&&x.error)||'Failed',true); }); }; });
   }); }
   function openDepositForm(){
     var brs=(S.meta&&S.meta.branches)||[];
@@ -105,15 +111,16 @@
     var brField=canViewAll()
       ? '<div class="field full"><label>Branch *</label><select id="dlBranch" class="in"><option value="">Select branch</option>'+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'"'+(b.BranchID===ACC.branch?' selected':'')+'>'+esc(b.BranchName)+'</option>';}).join('')+'</select></div>'
       : '';
-    function incBlock(t,lbl){ return '<div class="dl-blk"><div class="dl-blk-h">'+lbl+'</div><div class="row2">'+
+    function incBlock(t,lbl,extra){ return '<div class="dl-blk"><div class="dl-blk-h">'+lbl+'</div><div class="row2">'+
         '<div class="field"><label>Cash (₹)</label><input id="dl'+t+'Cash" class="in dl-amt" type="number" inputmode="numeric"></div>'+
         '<div class="field"><label>Bank / UPI (₹)</label><input id="dl'+t+'Bank" class="in dl-amt" type="number" inputmode="numeric"></div></div>'+
+        (extra||'')+
         '<label class="dl-file"><span id="dl'+t+'DocSt">📎 Attach '+t.toUpperCase()+' document (PDF)</span><input id="dl'+t+'Doc" type="file" accept="application/pdf,image/*" hidden></label></div>'; }
     var body='<div class="grid2">'+brField+
       '<div class="field"><label>Date</label><input id="dlDate" class="in" type="date" value="'+(new Date().toISOString().slice(0,10))+'"></div>'+
       '<div class="field"><label>Patients served</label><input id="dlPat" class="in" type="number" inputmode="numeric"></div></div>'+
-      incBlock('B2c','B2C income (walk-in / patient)')+
-      incBlock('B2d','B2D income (doctor / referral)')+
+      incBlock('B2c','B2C income (walk-in / patient)','<div class="field"><label>Expense (₹)</label><input id="dlExpense" class="in" type="number" inputmode="numeric"></div>')+
+      incBlock('B2d','B2D income (doctor / referral)','')+
       '<div class="dl-blk"><div class="dl-blk-h">Other income (B2B — credit, billed monthly)</div>'+
         '<div class="field"><label>Amount (₹)</label><input id="dlOther" class="in dl-amt" type="number" inputmode="numeric"></div>'+
         '<div style="font-size:11px;color:#888;margin-top:4px">At month-end this is replaced by your B2B invoice total.</div></div>'+
@@ -140,7 +147,7 @@
       if(bsel && !bid){ $id('dlMsg').innerHTML='<div class="msg error">Please select a branch.</div>'; return; }
       this.disabled=true;
       API.saveDaily({branchId:bid,date:$id('dlDate').value,patients:$id('dlPat').value,tests:$id('dlTests').value,
-        b2cCash:$id('dlB2cCash').value,b2cBank:$id('dlB2cBank').value,b2dCash:$id('dlB2dCash').value,b2dBank:$id('dlB2dBank').value,other:$id('dlOther').value,
+        b2cCash:$id('dlB2cCash').value,b2cBank:$id('dlB2cBank').value,b2dCash:$id('dlB2dCash').value,b2dBank:$id('dlB2dBank').value,other:$id('dlOther').value,expense:($id('dlExpense')||{}).value,
         b2cDocUrl:st.b2cDocUrl,b2dDocUrl:st.b2dDocUrl,testXlUrl:st.testXlUrl}).then(function(r){ if(r&&r.ok){ closeModal(); toast('Saved'); loadDaily(); } else { $id('dlMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; var b=$id('dlSave'); if(b) b.disabled=false; } });
     };
   }
