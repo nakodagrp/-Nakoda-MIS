@@ -5,7 +5,7 @@
   function todayS(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
   function money(n){ return Math.round(Number(n)||0).toLocaleString('en-IN'); }
   function lvl(){ return (S.perms&&S.perms.level)||''; }
-  function canLeaveApprove(){ return lvl()==='BRANCH_MGR'||lvl()==='HR_ADMIN'||lvl()==='SUPER'||(S.user&&['Operations Manager','Executive Assistant'].indexOf(S.user.Role)>=0); }
+  function canLeaveApprove(){ return lvl()==='BRANCH_MGR'||lvl()==='HR_ADMIN'||lvl()==='SUPER'||(S.user&&S.user.Role==='Operations Manager'); }
   function canClaimApprove(){ return lvl()==='BRANCH_MGR'||lvl()==='HR_ADMIN'||lvl()==='SUPER'||(S.user&&S.user.Role==='Operations Manager'); }
   function payAllowed(){ return lvl()==='SUPER'||lvl()==='HR_ADMIN'; }
   function lstat(s){ s=String(s||''); var c=s==='approved'?'#1a7f37':s==='rejected'?'#DA1017':'#c47f00'; return '<span style="font-size:10px;font-weight:700;color:'+c+'">'+s.toUpperCase()+'</span>'; }
@@ -16,7 +16,7 @@
     v.innerHTML='<div class="page-head"><h1>Leave</h1><div class="spacer"></div><button class="btn" id="lvAdd">+ Apply leave</button></div>'+
       '<div id="lvBal" class="bal" style="margin-bottom:12px"></div>'+
       '<div class="section-label">My leave requests</div><div id="lvMine"></div>'+
-      (canLeaveApprove()?'<div class="section-label" style="margin-top:18px">Approvals (Branch Manager → HR)</div><div id="lvApp"></div>':'');
+      (canLeaveApprove()?'<div class="section-label" style="margin-top:18px">Leave Approvals</div><div id="lvApp"></div>':'');
     $id('lvAdd').onclick=openLeaveForm;
     API.cachedMyLeaves().then(function(r){ if(r) paintMyLeaves(r); });
     API.myLeaves().then(function(r){ if(r&&r.ok) paintMyLeaves(r); });
