@@ -8,6 +8,7 @@
   function attMode(){ return String((S.user&&S.user.AttendanceMode)||''); }
   function needSelfie(){ var m=attMode(); return m.indexOf('Selfie')>=0 || m===''; }
   function isFenced(){ var m=attMode().toLowerCase(); return m.indexOf('geo only')>=0 || m.indexOf('office')>=0; }   // "Geo only" mode is fenced to the branch (150 m)
+  function hm2min(t){ var p=String(t||'').split(':'); return p.length>=2?(+p[0])*60+(+p[1]):null; }
   function canApprove(){ var p=S.perms||{}; return p.level==='SUPER'||p.level==='HR_ADMIN'||p.level==='BRANCH_MGR'||(S.user&&S.user.Role==='Operations Manager'); }
   function todayRec(){ var t=todayS(); return (ATT.recs||[]).filter(function(r){return String(r.date)===t;})[0]; }
 
@@ -37,7 +38,9 @@
     box.innerHTML='<div class="att-card"><div class="att-day">'+['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][now.getDay()]+', '+now.getDate()+' '+MON[now.getMonth()]+'</div>'+
       '<div class="att-sub">'+esc(dutyTxt)+'</div>'+btn+
       '<div class="att-stat">'+esc(stat)+'</div>'+
-      '<div class="att-note">'+[ (needSelfie()?'📷 selfie':''), ('📍 location'+(isFenced()?' verified at your branch':'')) ].filter(Boolean).join(' + ')+' · Late after shift+15 min = half day.</div></div>'+
+      '<div class="att-note">'+[ (needSelfie()?'📷 selfie':''), ('📍 location'+(isFenced()?' verified at your branch':'')) ].filter(Boolean).join(' + ')+' · Late after shift+15 min = half day.</div>'+
+      (inb?'<div class="att-remark" style="margin-top:10px"><div style="font-size:12px;color:#666;margin-bottom:4px">Remark (optional)</div><select id="attRemark" class="in" style="max-width:240px"><option value="">— none —</option><option value="Work from home">Work from home</option></select></div>':'')+
+      '</div>'+
       monthStrip();
     var b=$id('attBtn'); if(b) b.onclick=function(){ doMark(inb?'in':'out'); };
   }
@@ -62,8 +65,11 @@
     var snap=document.getElementById('camSnap'); if(snap) snap.onclick=function(){ var c=document.getElementById('camC'); c.width=v.videoWidth||320; c.height=v.videoHeight||240; c.getContext('2d').drawImage(v,0,0,c.width,c.height); var d=c.toDataURL('image/jpeg',0.8),i=d.indexOf(','); stopCam(); closeModal(); cb(d.slice(i+1)); };
     var cancel=document.getElementById('camCancel'); if(cancel) cancel.onclick=function(){ stopCam(); closeModal(); };
   }
-  function doMark(kind){
-    ATT.kind=kind;
+  function promptEarlyReason(cb){
+    openModal('Leaving early?','<div style="font-size:13px;color:#555;margin-bottom:8px">You’ve worked under 4 hours — this will be marked <b>half day</b> and sent for approval. Please add a reason:</div><textarea id="earlyReason" rows="2" placeholder="e.g. doctor appointment" style="width:100%;border:1px solid #d9d9d9;border-radius:8px;padding:8px;font-size:13px"></textarea>','<button class="btn ghost" onclick="closeModal()">Cancel</button> <button class="btn" id="earlyOk">Confirm check-out</button>');
+    var ok=document.getElementById('earlyOk'); if(ok) ok.onclick=function(){ var v=(document.getElementById('earlyReason').value||'').trim(); if(!v){ toast('Please write a reason.',true); return; } closeModal(); cb(v); };
+  }
+  function geoThen(kind){
     if(!navigator.geolocation){ toast('Location not supported on this device.',true); return; }
     toast('Getting your location…');
     navigator.geolocation.getCurrentPosition(function(pos){          // always capture location in every mode (so the approval card can show the address)
@@ -71,11 +77,18 @@
       if(needSelfie()){ captureSelfie(function(b64){ submitMark(kind,b64); }); } else submitMark(kind,null);
     }, function(){ toast('Please allow location to mark attendance.',true); }, {enableHighAccuracy:true, timeout:12000});
   }
+  function doMark(kind){
+    ATT.kind=kind; ATT.outRemark='';
+    if(kind==='out'){ var rec=todayRec(), ci=(rec&&rec.checkIn)?hm2min(rec.checkIn):null, d=new Date(), nowm=d.getHours()*60+d.getMinutes();
+      if(ci!==null && (nowm-ci)<240){ promptEarlyReason(function(reason){ ATT.outRemark=reason; geoThen(kind); }); return; } }   // under 4 hours → reason required
+    geoThen(kind);
+  }
   function submitMark(kind, selfie){
-    var c=ATT.coords||{}, payload={selfie:selfie, lat:c.lat, lng:c.lng};
+    var c=ATT.coords||{}, remark = kind==='in' ? (((document.getElementById('attRemark')||{}).value)||'') : (ATT.outRemark||'');
+    var payload={selfie:selfie, lat:c.lat, lng:c.lng, remark:remark};
     toast('Marking…');
     var p = kind==='in' ? API.checkIn(payload) : API.checkOut(payload);
-    p.then(function(r){ if(r&&r.ok){ toast(kind==='in'?('Checked in '+r.checkIn+(r.late?' (late)':'')):('Checked out '+r.checkOut)); API.myAttendance(ymNow()).then(function(x){ if(x&&x.ok){ ATT.recs=x.records||[]; paintMe(); } }); }
+    p.then(function(r){ if(r&&r.ok){ toast(kind==='in'?('Checked in '+r.checkIn+(r.late?' (late)':'')):('Checked out '+r.checkOut+(r.half?' · half day':''))); API.myAttendance(ymNow()).then(function(x){ if(x&&x.ok){ ATT.recs=x.records||[]; paintMe(); } }); }
       else toast((r&&r.error)||'Could not mark — needs internet & location.',true); })
       .catch(function(){ toast('Marking attendance needs an internet connection.',true); });
   }
@@ -91,7 +104,7 @@
         return '<div class="att-row" data-id="'+esc(a.attId)+'"><div class="att-av">'+esc(initials(a.empName))+'</div>'+
           '<div class="att-mid"><div class="att-nm"><b>'+esc(a.empName)+'</b>'+(String(a.late)==='yes'?' <span class="att-late">late</span>':'')+'</div>'+
           '<div class="att-m">In '+esc(a.checkIn||'—')+(a.checkOut?(' · Out '+esc(a.checkOut)):'')+(a.workHours?(' · '+esc(a.workHours)+'h'):'')+' · '+esc(a.status||'')+(a.selfieInUrl?' · <a href="'+esc(a.selfieInUrl)+'" target="_blank">selfie</a>':'')+((a.latIn&&a.lngIn)?' · <a href="https://maps.google.com/?q='+esc(a.latIn)+','+esc(a.lngIn)+'" target="_blank">📍 '+esc(a.addrIn||'location')+'</a>':'')+'</div>'+
-          '<div class="att-m">ID '+esc(a.empId||'')+(a.dutyStart?(' · Duty '+esc(a.dutyStart)+(a.dutyEnd?('\u2013'+esc(a.dutyEnd)):'')):'')+(a.attMode?(' · '+esc(a.attMode)):'')+'</div></div>'+
+          '<div class="att-m">ID '+esc(a.empId||'')+(a.dutyStart?(' · Duty '+esc(a.dutyStart)+(a.dutyEnd?('\u2013'+esc(a.dutyEnd)):'')):'')+(a.attMode?(' · '+esc(a.attMode)):'')+'</div>'+(a.notes?'<div class="att-m" style="color:#a3271f;font-weight:600">📝 '+esc(a.notes)+'</div>':'')+'</div>'+
           (ap?'<span class="att-ok">✓ approved</span>':'<button class="btn sm" data-ap="'+esc(a.attId)+'">Approve</button>')+
           '<select class="att-sel" data-st="'+esc(a.attId)+'">'+['present','half','leave','absent'].map(function(s){return '<option'+(s===a.status?' selected':'')+'>'+s+'</option>';}).join('')+'</select>'+
           '</div>';
