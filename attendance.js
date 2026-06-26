@@ -7,6 +7,7 @@
   function todayS(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
   function attMode(){ return String((S.user&&S.user.AttendanceMode)||''); }
   function needSelfie(){ var m=attMode(); return m.indexOf('Selfie')>=0 || m===''; }
+  function isFenced(){ return attMode().toLowerCase().indexOf('office')>=0; }   // only "Geo only — office staff" is fenced to the branch (150 m)
   function canApprove(){ var p=S.perms||{}; return p.level==='SUPER'||p.level==='HR_ADMIN'||p.level==='BRANCH_MGR'||(S.user&&S.user.Role==='Operations Manager'); }
   function todayRec(){ var t=todayS(); return (ATT.recs||[]).filter(function(r){return String(r.date)===t;})[0]; }
 
@@ -36,7 +37,7 @@
     box.innerHTML='<div class="att-card"><div class="att-day">'+['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][now.getDay()]+', '+now.getDate()+' '+MON[now.getMonth()]+'</div>'+
       '<div class="att-sub">'+esc(dutyTxt)+'</div>'+btn+
       '<div class="att-stat">'+esc(stat)+'</div>'+
-      '<div class="att-note">'+(needSelfie()?'📷 selfie':'')+(needSelfie()?' + ':'')+'📍 location verified at your branch. Late after shift+15 min = half day.</div></div>'+
+      '<div class="att-note">'+[ (needSelfie()?'📷 selfie':''), ('📍 location'+(isFenced()?' verified at your branch':'')) ].filter(Boolean).join(' + ')+' · Late after shift+15 min = half day.</div></div>'+
       monthStrip();
     var b=$id('attBtn'); if(b) b.onclick=function(){ doMark(inb?'in':'out'); };
   }
@@ -65,7 +66,7 @@
     ATT.kind=kind;
     if(!navigator.geolocation){ toast('Location not supported on this device.',true); return; }
     toast('Getting your location…');
-    navigator.geolocation.getCurrentPosition(function(pos){
+    navigator.geolocation.getCurrentPosition(function(pos){          // always capture location in every mode (so the approval card can show the address)
       ATT.coords={lat:pos.coords.latitude, lng:pos.coords.longitude};
       if(needSelfie()){ captureSelfie(function(b64){ submitMark(kind,b64); }); } else submitMark(kind,null);
     }, function(){ toast('Please allow location to mark attendance.',true); }, {enableHighAccuracy:true, timeout:12000});
