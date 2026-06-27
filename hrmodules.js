@@ -5,7 +5,7 @@
   function todayS(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
   function money(n){ return Math.round(Number(n)||0).toLocaleString('en-IN'); }
   function lvl(){ return (S.perms&&S.perms.level)||''; }
-  function canLeaveApprove(){ return lvl()==='BRANCH_MGR'||lvl()==='HR_ADMIN'||lvl()==='SUPER'||(S.user&&S.user.Role==='Operations Manager'); }
+  function canLeaveApprove(){ return lvl()==='BRANCH_MGR'||lvl()==='SUPER'||(S.user&&String(S.user.Role)==='Operations Manager'); }
   function canClaimApprove(){ return lvl()==='BRANCH_MGR'||lvl()==='HR_ADMIN'||lvl()==='SUPER'||(S.user&&S.user.Role==='Operations Manager'); }
   function payAllowed(){ return lvl()==='SUPER'||lvl()==='HR_ADMIN'; }
   function lstat(s){ s=String(s||''); var c=s==='approved'?'#1a7f37':s==='rejected'?'#DA1017':'#c47f00'; return '<span style="font-size:10px;font-weight:700;color:'+c+'">'+s.toUpperCase()+'</span>'; }
@@ -16,7 +16,7 @@
     v.innerHTML='<div class="page-head"><h1>Leave</h1><div class="spacer"></div><button class="btn" id="lvAdd">+ Apply leave</button></div>'+
       '<div id="lvBal" class="bal" style="margin-bottom:12px"></div>'+
       '<div class="section-label">My leave requests</div><div id="lvMine"></div>'+
-      (canLeaveApprove()?'<div class="section-label" style="margin-top:18px">Leave Approvals</div><div id="lvApp"></div>':'');
+      (canLeaveApprove()?'<div class="section-label" style="margin-top:18px">Approvals (pending at my stage)</div><div id="lvApp"></div>':'');
     $id('lvAdd').onclick=openLeaveForm;
     API.cachedMyLeaves().then(function(r){ if(r) paintMyLeaves(r); });
     API.myLeaves().then(function(r){ if(r&&r.ok) paintMyLeaves(r); });
@@ -25,7 +25,11 @@
   function paintMyLeaves(r){
     var b=r.balance||{}, bal=$id('lvBal'); if(bal) bal.innerHTML=['CL','SL','EL'].map(function(t){ var x=b[t]||{bal:'-',ent:'-'}; return '<div class="bchip">'+t+'<b>'+x.bal+'</b><span style="font-size:9px;color:#aaa">of '+x.ent+'</span></div>'; }).join('');
     var box=$id('lvMine'); if(!box) return; var rows=(r.leaves||[]).slice().sort(function(a,b){return a.createdAt<b.createdAt?1:-1;});
-    box.innerHTML=rows.length?rows.map(function(l){ return '<div class="hx-row"><div class="hx-mid"><b>'+esc(l.type)+'</b> · '+esc(l.fromDate)+' → '+esc(l.toDate)+' ('+l.days+'d)<div class="hx-m">'+esc(l.reason||'')+' · stage: '+esc(l.stage)+'</div></div>'+lstat(l.status)+'</div>'; }).join(''):'<div class="empty">No leave requests yet.</div>';
+    var stageNames={'bm':'Awaiting Branch Manager','om':'Awaiting Operations Manager','dir':'Awaiting Director','done':''};
+    box.innerHTML=rows.length?rows.map(function(l){
+      var stLabel=String(l.status)==='pending'?(stageNames[String(l.stage||'bm')]||('Stage: '+l.stage)):'';
+      return '<div class="hx-row"><div class="hx-mid"><b>'+esc(l.type)+'</b> · '+esc(l.fromDate)+' → '+esc(l.toDate)+' ('+l.days+'d)<div class="hx-m">'+esc(l.reason||'')+(stLabel?' · <span style="color:#c47f00">'+esc(stLabel)+'</span>':'')+'</div></div>'+lstat(l.status)+'</div>';
+    }).join(''):'<div class="empty">No leave requests yet.</div>';
   }
   function openLeaveForm(){
     var body='<div class="grid2"><div class="field full"><label>Leave type</label><select id="lvType" class="in"><option>CL</option><option>SL</option><option>EL</option><option>Unpaid</option></select></div>'+
@@ -37,10 +41,24 @@
   }
   function loadLeaveApprovals(){
     API.leaveApprovals().then(function(r){ var box=$id('lvApp'); if(!box) return; if(!r||!r.ok){ box.innerHTML='<div class="empty">'+esc((r&&r.error)||'')+'</div>'; return; }
-      var rows=r.leaves||[]; if(!rows.length){ box.innerHTML='<div class="empty">Nothing to approve.</div>'; return; }
-      box.innerHTML=rows.map(function(l){ return '<div class="hx-row" data-id="'+esc(l.leaveId)+'"><div class="att-av">'+esc(initials(l.empName))+'</div><div class="hx-mid"><b>'+esc(l.empName)+'</b> · '+esc(l.type)+' '+l.days+'d<div class="hx-m">'+esc(l.fromDate)+'→'+esc(l.toDate)+' · '+esc(l.reason||'')+' · at '+esc(l.stage).toUpperCase()+'</div></div><button class="btn sm" data-ap="'+esc(l.leaveId)+'">Approve</button> <button class="btn ghost sm" data-rj="'+esc(l.leaveId)+'">Reject</button></div>'; }).join('');
-      box.querySelectorAll('[data-ap]').forEach(function(b){ b.onclick=function(){ API.setLeave(b.getAttribute('data-ap'),'approve').then(function(x){ if(x&&x.ok){ toast('Approved'); renderLeave(); } else toast((x&&x.error)||'Failed',true); }); }; });
-      box.querySelectorAll('[data-rj]').forEach(function(b){ b.onclick=function(){ API.setLeave(b.getAttribute('data-rj'),'reject').then(function(x){ if(x&&x.ok){ toast('Rejected'); renderLeave(); } }); }; });
+      var rows=r.leaves||[]; if(!rows.length){ box.innerHTML='<div class="empty">Nothing to approve at your stage.</div>'; return; }
+      var stageFullNames={'bm':'Branch Manager','om':'Operations Manager','dir':'Director'};
+      box.innerHTML=rows.map(function(l){
+        var stageLbl=stageFullNames[String(l.stage||'bm')]||l.stage;
+        var trackLbl={'staff':'Staff','bm':'Branch Manager','om':'Operations Manager','coop':'Co-operative Staff'}[String(l.track||'staff')]||'';
+        return '<div class="hx-row" data-id="'+esc(l.leaveId)+'">'+
+          '<div class="att-av">'+esc(initials(l.empName||'?'))+'</div>'+
+          '<div class="hx-mid">'+
+            '<b>'+esc(l.empName)+'</b>'+(trackLbl?' <span style="font-size:10px;color:#888;font-weight:400">('+esc(trackLbl)+')</span>':'')+' · '+esc(l.type)+' '+l.days+'d'+
+            '<div class="hx-m">'+esc(l.fromDate)+'→'+esc(l.toDate)+' · '+esc(l.reason||'')+'</div>'+
+            '<div class="hx-m" style="color:#c47f00;font-weight:600">Your stage: '+esc(stageLbl)+'</div>'+
+          '</div>'+
+          '<button class="btn sm" data-ap="'+esc(l.leaveId)+'">Approve</button> '+
+          '<button class="btn ghost sm" data-rj="'+esc(l.leaveId)+'">Reject</button>'+
+        '</div>';
+      }).join('');
+      box.querySelectorAll('[data-ap]').forEach(function(b){ b.onclick=function(){ b.disabled=true; b.textContent='…'; API.setLeave(b.getAttribute('data-ap'),'approve').then(function(x){ if(x&&x.ok){ toast('Approved — moved to next stage'); renderLeave(); } else { toast((x&&x.error)||'Failed',true); b.disabled=false; b.textContent='Approve'; } }); }; });
+      box.querySelectorAll('[data-rj]').forEach(function(b){ b.onclick=function(){ b.disabled=true; b.textContent='…'; API.setLeave(b.getAttribute('data-rj'),'reject').then(function(x){ if(x&&x.ok){ toast('Rejected'); renderLeave(); } else { b.disabled=false; b.textContent='Reject'; } }); }; });
     });
   }
 
@@ -176,17 +194,4 @@
     var cols=['Client_Code','Product_Code','Payment_Type','Payment_Ref_No.','Payment_Date','Instrument Date','Dr_Ac_No','Amount','Bank_Code_Indicator','Beneficiary_Code','Beneficiary_Name','Beneficiary_Bank','IFSC Code','Beneficiary_Acc_No','Location','Print_Location','Instrument_Number','Ben_Add1','Ben_Add2','Ben_Add3','Ben_Add4','Beneficiary_Email','Beneficiary_Mobile','Debit_Narration','Credit_Narration'];
     var today=new Date(),dt=today.getDate()+'/'+(today.getMonth()+1)+'/'+today.getFullYear();
     var head='<tr>'+cols.map(function(c){return '<th>'+c+'</th>';}).join('')+'</tr>';
-    var rows=slips.filter(function(s){return Number(s.net)>0;}).map(function(s){ var vals=['','VPAY','IFT/NEFT/RTGS','','"'+dt+'"','','',s.net,'M','',s.name,'',s.ifsc||'',('="'+(s.acct||'')+'"'),'','','','','','','','',s.mobile||'','Salary '+month,'Salary '+month]; return '<tr>'+vals.map(function(v){return '<td>'+String(v)+'</td>';}).join('')+'</tr>'; }).join('');
-    xlsDownload('<table border="1">'+head+rows+'</table>','Bank-Salary-'+month+'.xls');
-  }
-  function registerXls(slips,month){
-    var head='<tr><th>Name</th><th>IFSC</th><th>Account</th><th>Paid days</th><th>LOP</th><th>Earned</th><th>Field</th><th>Net</th></tr>';
-    var rows=slips.map(function(s){ return '<tr><td>'+esc(s.name)+'</td><td>'+esc(s.ifsc||'')+'</td><td>="'+esc(s.acct||'')+'"</td><td>'+s.paidDays+'</td><td>'+s.lopDays+'</td><td>'+s.earned+'</td><td>'+s.fieldPay+'</td><td>'+s.net+'</td></tr>'; }).join('');
-    xlsDownload('<table border="1">'+head+rows+'</table>','Salary-Register-'+month+'.xls');
-  }
-
-  window.renderLeave=renderLeave;
-  window.renderField=renderField;
-  window.renderPolicy=renderPolicy;
-  window.renderPayroll=renderPayroll;
-})();
+    var rows=slips.filter(function(s){return Number(s.net)>0;}).map(functio
