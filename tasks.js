@@ -127,8 +127,9 @@
               :(t.source==='training'?'<span style="background:#eafaf3;color:#1aa37a;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">🎓 Training</span>'
               :(t.source==='process'?'<span style="background:#eafaf3;color:#1aa37a;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">📁 CRM stage</span>'
               :(t.source==='attendance'?'<span style="background:#fdeaea;color:#a3271f;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">🕒 Attendance</span>'
+              :(t.source==='leave'?'<span style="background:#eef7ee;color:#1a7f37;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">🌴 Leave</span>'
               :(t.source==='nrlead'?'<span style="background:#fff4e8;color:#c47f00;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">↻ Not responding</span>'
-              :(t.source==='assigned'?'<span style="background:#eef2ff;color:#4253c5;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">Assigned by '+esc(t.assignedByName||'manager')+'</span>':''))))));
+              :(t.source==='assigned'?'<span style="background:#eef2ff;color:#4253c5;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">Assigned by '+esc(t.assignedByName||'manager')+'</span>':'')))))));
       return '<div class="tcard'+(done?' tdone':'')+'" data-id="'+esc(t.taskId)+'">'+
         '<span class="tbox'+(done?' on':'')+'" data-tog="'+esc(t.taskId)+'"></span>'+
         '<div class="tbody">'+
