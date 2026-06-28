@@ -6,7 +6,7 @@
   function ymNow(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
   function todayS(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
   function attMode(){ return String((S.user&&S.user.AttendanceMode)||''); }
-  function needSelfie(){ var m=attMode(); return m.indexOf('Selfie')>=0 || m===''; }
+  function needSelfie(){ return true; }  // selfie required for all modes
   function isFenced(){ var m=attMode().toLowerCase(); return m.indexOf('geo only')>=0 || m.indexOf('office')>=0; }   // "Geo only" mode is fenced to the branch (150 m)
   function hm2min(t){ var p=String(t||'').split(':'); return p.length>=2?(+p[0])*60+(+p[1]):null; }
   function dayBadge(st){ var m={present:['Full day','#eaf7ef','#1a8f4c'],half:['Half day','#faeeda','#854F0B'],leave:['Leave','#e9f1fb','#185FA5'],absent:['Absent','#fdecec','#b23b3b']}; var b=m[String(st||'present')]||m.present; return ' <span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:'+b[1]+';color:'+b[2]+'">'+b[0]+'</span>'; }
@@ -106,22 +106,34 @@
   function loadApprove(){
     API.listAttendance('',todayS()).then(function(r){ var box=$id('attApprove'); if(!box) return;
       if(!r||!r.ok){ box.innerHTML='<div class="empty">'+esc((r&&r.error)||'')+'</div>'; return; }
-      var recs=r.records||[];
+      var recs=(r.records||[]).slice().sort(function(a,b){
+        var ta=String(a.checkIn||''), tb=String(b.checkIn||'');
+        return tb>ta?1:tb<ta?-1:0;
+      });
       if(!recs.length){ box.innerHTML='<div class="empty">No attendance marked yet today.</div>'; return; }
       box.innerHTML=recs.map(function(a){
         var ap=String(a.approvalStatus)==='approved';
-        return '<div class="att-row" data-id="'+esc(a.attId)+'"><div class="att-av">'+esc(initials(a.empName))+'</div>'+
-          '<div class="att-mid"><div class="att-nm"><b>'+esc(a.empName)+'</b>'+dayBadge(a.status)+(String(a.late)==='yes'?' <span class="att-late">late</span>':'')+'</div>'+
-          '<div class="att-m">In '+esc(a.checkIn||'—')+(a.checkOut?(' · Out '+esc(a.checkOut)):'')+((a.workHours&&!isNaN(Number(a.workHours)))?(' · '+esc(a.workHours)+'h'):'')+' · '+esc(stLabel(a.status))+(a.selfieInUrl?' · <a href="'+esc(a.selfieInUrl)+'" target="_blank">selfie</a>':'')+((a.latIn&&a.lngIn)?' · <a href="https://maps.google.com/?q='+esc(a.latIn)+','+esc(a.lngIn)+'" target="_blank">📍 '+esc(a.addrIn||'location')+'</a>':'')+'</div>'+
-          '<div class="att-m">ID '+esc(a.empId||'')+(a.dutyStart?(' · Duty '+esc(a.dutyStart)+(a.dutyEnd?('\u2013'+esc(a.dutyEnd)):'')):'')+(a.attMode?(' · '+esc(a.attMode)):'')+'</div>'+(a.notes?'<div class="att-m" style="color:#a3271f;font-weight:600">📝 '+esc(a.notes)+'</div>':'')+'</div>'+
-          (ap?'<span class="att-ok">✓ approved</span>':'<button class="btn sm" data-ap="'+esc(a.attId)+'">Approve</button>')+
-          '<select class="att-sel" data-st="'+esc(a.attId)+'">'+['present','half','leave','absent'].map(function(s){return '<option value="'+s+'"'+(s===a.status?' selected':'')+'>'+esc(stLabel(s))+'</option>';}).join('')+'</select>'+
+        var selfieThumb=a.selfieInUrl
+          ? '<a href="'+esc(a.selfieInUrl)+'" target="_blank"><img src="'+esc(a.selfieInUrl)+'" alt="selfie" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1.5px solid #ddd;margin:4px 0;display:block"></a>'
+          : '';
+        return '<div class="att-row" data-id="'+esc(a.attId)+'" style="align-items:flex-start">'+
+          '<div class="att-av" style="margin-top:4px">'+esc(initials(a.empName))+'</div>'+
+          '<div class="att-mid" style="flex:1">'+
+            '<div class="att-nm"><b>'+esc(a.empName)+'</b>'+dayBadge(a.status)+(String(a.late)==='yes'?' <span class="att-late">late</span>':'')+'</div>'+
+            '<div class="att-m">In '+esc(a.checkIn||'—')+(a.checkOut?(' · Out '+esc(a.checkOut)):'')+((a.workHours&&!isNaN(Number(a.workHours)))?(' · '+esc(a.workHours)+'h'):'')+' · '+esc(stLabel(a.status))+((a.latIn&&a.lngIn)?' · <a href="https://maps.google.com/?q='+esc(a.latIn)+','+esc(a.lngIn)+'" target="_blank">📍 '+esc(a.addrIn||'location')+'</a>':'')+'</div>'+
+            '<div class="att-m">ID '+esc(a.empId||'')+(a.dutyStart?(' · Duty '+esc(a.dutyStart)+(a.dutyEnd?('–'+esc(a.dutyEnd)):'')):'')+(a.attMode?(' · '+esc(a.attMode)):'')+'</div>'+
+            (a.notes?'<div class="att-m" style="color:#a3271f;font-weight:600">📝 '+esc(a.notes)+'</div>':'')+
+            selfieThumb+
+          '</div>'+
+          '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">'+
+            (ap?'<span class="att-ok">✓ approved</span>':'<button class="btn sm" data-ap="'+esc(a.attId)+'">Approve</button>')+
+            '<select class="att-sel" data-st="'+esc(a.attId)+'">'+['present','half','leave','absent'].map(function(s){return '<option value="'+s+'"'+(s===a.status?' selected':'')+'>'+esc(stLabel(s))+'</option>';}).join('')+'</select>'+
+          '</div>'+
           '</div>';
       }).join('');
       box.querySelectorAll('[data-ap]').forEach(function(b){ b.onclick=function(){ API.setAttendance(b.getAttribute('data-ap'),{approvalStatus:'approved'}).then(function(x){ if(x&&x.ok){ toast('Approved'); loadApprove(); } else toast((x&&x.error)||'Failed',true); }); }; });
       box.querySelectorAll('[data-st]').forEach(function(s){ s.onchange=function(){ API.setAttendance(s.getAttribute('data-st'),{status:s.value}).then(function(x){ if(x&&x.ok) toast('Updated'); else toast((x&&x.error)||'Failed',true); }); }; });
     }).catch(function(){ var box=$id('attApprove'); if(box) box.innerHTML='<div class="empty">Connect to load today’s attendance.</div>'; });
   }
-
   window.renderAttendance=renderAttendance;
 })();

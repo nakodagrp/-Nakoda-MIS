@@ -41,19 +41,31 @@
     var v=document.getElementById('page-cardstatus');
     var branches=((S.meta&&S.meta.branches)||[]);
     var brOpts='<option value="">All branches</option>'+branches.map(function(b){ return '<option value="'+esc(b.BranchID)+'">'+esc(b.BranchName)+'</option>'; }).join('');
+    var todayVal=(function(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })();
     v.innerHTML='<div class="page-head"><h1>Card Status</h1></div>'+
       '<div class="sub" style="color:#888;font-size:13px;margin-bottom:12px">Cards flow: <b>issued → sent → activated</b>. Mark a card "sent" when you share it, and "activated" once the patient confirms.</div>'+
-      '<div style="margin-bottom:14px"><select id="cs_branch" class="greet-select">'+brOpts+'</select></div>'+
+      '<div style="margin-bottom:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">'+
+        '<select id="cs_branch" class="greet-select">'+brOpts+'</select>'+
+        '<input type="date" id="cs_date" class="greet-select" value="" style="min-width:145px" placeholder="Filter by issue date">'+
+        '<button class="btn ghost sm" id="cs_date_clear" style="font-size:12px">Clear date</button>'+
+      '</div>'+
       '<div id="cs_counts" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px"></div>'+
       '<div id="cs_lists"></div>';
     document.getElementById('cs_branch').addEventListener('change',load);
+    document.getElementById('cs_date').addEventListener('change',load);
+    document.getElementById('cs_date_clear').addEventListener('click',function(){ document.getElementById('cs_date').value=''; load(); });
     load();
     function compute(cards,b){
       var ins=[],sna=[],act=[],exp=[];
+      var dateFilter=(document.getElementById('cs_date')&&document.getElementById('cs_date').value)||'';
       (cards||[]).forEach(function(c){
         if(b && String(c.branchId)!==String(b)) return;
         if(c.status==='cancelled'||c.status==='renewed') return;
-        var lite={cardNumber:c.cardNumber,holderName:c.holderName,mobile:c.mobile,typeId:c.typeId,branchId:c.branchId,expiryDate:c.expiryDate};
+        if(dateFilter){
+          var issuedOn=String(c.issuedDate||c.createdAt||'').slice(0,10);
+          if(issuedOn!==dateFilter) return;
+        }
+        var lite={cardNumber:c.cardNumber,holderName:c.holderName,mobile:c.mobile,typeId:c.typeId,branchId:c.branchId,expiryDate:c.expiryDate,issuedDate:c.issuedDate||''};
         if(c.status==='expired'){ exp.push(lite); return; }
         if(c.activatedAt){ act.push(lite); } else if(c.sentAt){ sna.push(lite); } else { ins.push(lite); }
       });
