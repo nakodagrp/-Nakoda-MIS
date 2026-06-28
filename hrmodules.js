@@ -10,57 +10,7 @@
   function payAllowed(){ return lvl()==='SUPER'||lvl()==='HR_ADMIN'; }
   function lstat(s){ s=String(s||''); var c=s==='approved'?'#1a7f37':s==='rejected'?'#DA1017':'#c47f00'; return '<span style="font-size:10px;font-weight:700;color:'+c+'">'+s.toUpperCase()+'</span>'; }
 
-  /* ---------------- LEAVE ---------------- */
-  function renderLeave(){
-    var v=$id('page-leave');
-    v.innerHTML='<div class="page-head"><h1>Leave</h1><div class="spacer"></div><button class="btn" id="lvAdd">+ Apply leave</button></div>'+
-      '<div id="lvBal" class="bal" style="margin-bottom:12px"></div>'+
-      '<div class="section-label">My leave requests</div><div id="lvMine"></div>'+
-      (canLeaveApprove()?'<div class="section-label" style="margin-top:18px">Approvals (pending at my stage)</div><div id="lvApp"></div>':'');
-    $id('lvAdd').onclick=openLeaveForm;
-    API.cachedMyLeaves().then(function(r){ if(r) paintMyLeaves(r); });
-    API.myLeaves().then(function(r){ if(r&&r.ok) paintMyLeaves(r); });
-    if(canLeaveApprove()) loadLeaveApprovals();
-  }
-  function paintMyLeaves(r){
-    var b=r.balance||{}, bal=$id('lvBal'); if(bal) bal.innerHTML=['CL','SL','EL'].map(function(t){ var x=b[t]||{bal:'-',ent:'-'}; return '<div class="bchip">'+t+'<b>'+x.bal+'</b><span style="font-size:9px;color:#aaa">of '+x.ent+'</span></div>'; }).join('');
-    var box=$id('lvMine'); if(!box) return; var rows=(r.leaves||[]).slice().sort(function(a,b){return a.createdAt<b.createdAt?1:-1;});
-    var stageNames={'bm':'Awaiting Branch Manager','om':'Awaiting Operations Manager','dir':'Awaiting Director','done':''};
-    box.innerHTML=rows.length?rows.map(function(l){
-      var stLabel=String(l.status)==='pending'?(stageNames[String(l.stage||'bm')]||('Stage: '+l.stage)):'';
-      return '<div class="hx-row"><div class="hx-mid"><b>'+esc(l.type)+'</b> · '+esc(l.fromDate)+' → '+esc(l.toDate)+' ('+l.days+'d)<div class="hx-m">'+esc(l.reason||'')+(stLabel?' · <span style="color:#c47f00">'+esc(stLabel)+'</span>':'')+'</div></div>'+lstat(l.status)+'</div>';
-    }).join(''):'<div class="empty">No leave requests yet.</div>';
-  }
-  function openLeaveForm(){
-    var body='<div class="grid2"><div class="field full"><label>Leave type</label><select id="lvType" class="in"><option>CL</option><option>SL</option><option>EL</option><option>Unpaid</option></select></div>'+
-      '<div class="field"><label>From</label><input id="lvFrom" class="in" type="date"></div><div class="field"><label>To</label><input id="lvTo" class="in" type="date"></div>'+
-      '<div class="field full"><label>Reason</label><input id="lvReason" class="in"></div></div><div id="lvMsg"></div>';
-    openModal('Apply leave', body, '<button class="btn" id="lvSave">Apply</button>');
-    $id('lvSave').onclick=function(){ var f=$id('lvFrom').value,t=$id('lvTo').value; if(!f||!t){ $id('lvMsg').innerHTML='<div class="msg error">Pick dates.</div>'; return; } this.disabled=true;
-      API.applyLeave({type:$id('lvType').value,fromDate:f,toDate:t,reason:$id('lvReason').value}).then(function(r){ if(r&&r.ok){ closeModal(); toast('Leave applied'); renderLeave(); } else $id('lvMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; }); };
-  }
-  function loadLeaveApprovals(){
-    API.leaveApprovals().then(function(r){ var box=$id('lvApp'); if(!box) return; if(!r||!r.ok){ box.innerHTML='<div class="empty">'+esc((r&&r.error)||'')+'</div>'; return; }
-      var rows=r.leaves||[]; if(!rows.length){ box.innerHTML='<div class="empty">Nothing to approve at your stage.</div>'; return; }
-      var stageFullNames={'bm':'Branch Manager','om':'Operations Manager','dir':'Director'};
-      box.innerHTML=rows.map(function(l){
-        var stageLbl=stageFullNames[String(l.stage||'bm')]||l.stage;
-        var trackLbl={'staff':'Staff','bm':'Branch Manager','om':'Operations Manager','coop':'Co-operative Staff'}[String(l.track||'staff')]||'';
-        return '<div class="hx-row" data-id="'+esc(l.leaveId)+'">'+
-          '<div class="att-av">'+esc(initials(l.empName||'?'))+'</div>'+
-          '<div class="hx-mid">'+
-            '<b>'+esc(l.empName)+'</b>'+(trackLbl?' <span style="font-size:10px;color:#888;font-weight:400">('+esc(trackLbl)+')</span>':'')+' · '+esc(l.type)+' '+l.days+'d'+
-            '<div class="hx-m">'+esc(l.fromDate)+'→'+esc(l.toDate)+' · '+esc(l.reason||'')+'</div>'+
-            '<div class="hx-m" style="color:#c47f00;font-weight:600">Your stage: '+esc(stageLbl)+'</div>'+
-          '</div>'+
-          '<button class="btn sm" data-ap="'+esc(l.leaveId)+'">Approve</button> '+
-          '<button class="btn ghost sm" data-rj="'+esc(l.leaveId)+'">Reject</button>'+
-        '</div>';
-      }).join('');
-      box.querySelectorAll('[data-ap]').forEach(function(b){ b.onclick=function(){ b.disabled=true; b.textContent='…'; API.setLeave(b.getAttribute('data-ap'),'approve').then(function(x){ if(x&&x.ok){ toast('Approved — moved to next stage'); renderLeave(); } else { toast((x&&x.error)||'Failed',true); b.disabled=false; b.textContent='Approve'; } }); }; });
-      box.querySelectorAll('[data-rj]').forEach(function(b){ b.onclick=function(){ b.disabled=true; b.textContent='…'; API.setLeave(b.getAttribute('data-rj'),'reject').then(function(x){ if(x&&x.ok){ toast('Rejected'); renderLeave(); } else { b.disabled=false; b.textContent='Reject'; } }); }; });
-    });
-  }
+  /* Leave is handled by leave.js (renderLeave exposed on window.renderLeave) */
 
   /* ---------------- FIELD CLAIMS (km / visit) ---------------- */
   function renderField(){
