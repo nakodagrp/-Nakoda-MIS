@@ -591,11 +591,10 @@ function openEmpModal(empId){
       fld('Bank name / prefix','f_BankPrefix',e.BankPrefix)+fld('IFSC','f_IFSC',e.IFSC)+fld('Account number','f_AccountNo',e.AccountNo)+
       '<div class="section-title full">Work &amp; pay</div>'+
       fld('Duty start','f_DutyStart',e.DutyStart,'time')+fld('Duty end','f_DutyEnd',e.DutyEnd,'time')+
-      '<div class="field"><label>Sunday work</label><select id="f_SundayWork"><option value="">No</option><option value="yes"'+(String(e.SundayWork)==='yes'?' selected':'')+'>Yes</option></select></div>'+
-      '<div class="field" id="sundayHoursField" style="'+(String(e.SundayWork)==='yes'?'':'display:none')+'"><label>Sunday hours</label><input id="f_SundayHours" type="text" placeholder="e.g. 5:00 am to 9:00 am" value="'+esc(e.SundayHours||'')+'"></div>'+
       fld('Basic salary (₹)','f_BasicSalary',e.BasicSalary,'number')+
       sel('Attendance mode','f_AttendanceMode',['Geo only — lab staff','Selfie only — field staff','Geo + Selfie — both required'],e.AttendanceMode)+
-      sel('Sunday type','f_SundayType',['Type 1 — no Sundays','Type 2 — alternate Sundays'],e.SundayType)+
+      '<div class="field"><label>Sunday work</label><select id="f_SundayWork"><option value="">No</option><option value="yes"'+(String(e.SundayWork)==='yes'?' selected':'')+'>Yes</option></select></div>'+
+      '<div class="field"><label>Sunday time</label><input id="f_SundayHours" type="text" placeholder="e.g. 5:00 am to 9:00 am" value="'+esc(e.SundayHours||'')+'"></div>'+
       sel('Pay / visit type','f_PayType',['Fixed salary','Per km','Per visit'],e.PayType)+
       fld('Per-km rate (₹)','f_PerKmRate',e.PerKmRate,'number')+fld('Per-visit rate (₹)','f_PerVisitRate',e.PerVisitRate,'number')+
       '<div class="field full"><label>KRA (key responsibilities)</label><textarea id="f_KRA" rows="2">'+esc(e.KRA||'')+'</textarea></div>'+
@@ -627,8 +626,6 @@ function openEmpModal(empId){
       [].forEach.call(files,function(f){ if(f.size>4*1024*1024){ toast(f.name+' too large (max 4MB)',true); return; } var fr=new FileReader(); fr.onload=function(){ var s=fr.result,i=s.indexOf(',');
         API.uploadFile({base64:s.slice(i+1),mimeType:f.type,fileName:f.name,subPath:'EmployeeDocs'}).then(function(r){ if(r.ok){ if(multi){ window._empDocs.Edu.push(r.url); st.innerHTML='Uploaded ✓ ('+window._empDocs.Edu.length+')'; } else { window._empDocs[key]=r.url; st.innerHTML='Uploaded ✓ <a href="'+esc(r.url)+'" target="_blank">view</a>'; } } else st.textContent=r.error||'Upload failed'; }).catch(function(){ st.textContent='Uploading a document needs internet.'; }); }; fr.readAsDataURL(f); }); }; }
     ['Aadhaar','Pan','DL','LightBill'].forEach(function(k){ bindUp(k,false); }); bindUp('Edu',true);
-    var swSel=$('f_SundayWork');
-    if(swSel){ swSel.addEventListener('change',function(){ var hf=$('sundayHoursField'); if(hf) hf.style.display=(swSel.value==='yes'?'':'none'); }); }
     $('saveEmpBtn').addEventListener('click', function(){ saveEmp(editing?e.EmpID:null, manage); });
   }
   if(editing){ API.getEmployee(empId).then(function(r){ if(r.ok) build(r.employee); else toast(r.error,true); }); } else { build(null); }
@@ -663,7 +660,7 @@ function val(id){ var e=$(id); return e?e.value.trim():undefined; }
 function saveEmp(empId, manage){
   var data={ Phone:val('f_Phone'),Email:val('f_Email'),Gender:val('f_Gender'),DOB:val('f_DOB'),Address:val('f_Address'),EmergencyName:val('f_EmergencyName'),EmergencyPhone:val('f_EmergencyPhone') };
   if(manage){ data.FullName=val('f_FullName'); data.Role=val('f_Role'); data.JoiningDate=val('f_JoiningDate'); data.ReportsTo=val('f_ReportsTo'); var bs=$('f_Branch'); if(bs) data.Branch=bs.value;
-    ['FatherName','FatherPhone','MotherName','MotherPhone','SpouseName','SpousePhone','Anniversary','BankPrefix','IFSC','AccountNo','DutyStart','DutyEnd','BasicSalary','AttendanceMode','SundayType','SundayWork','SundayHours','PayType','PerKmRate','PerVisitRate','KRA'].forEach(function(f){ var v=val('f_'+f); if(v!==undefined) data[f]=v; });
+    ['FatherName','FatherPhone','MotherName','MotherPhone','SpouseName','SpousePhone','Anniversary','BankPrefix','IFSC','AccountNo','DutyStart','DutyEnd','BasicSalary','AttendanceMode','SundayWork','SundayHours','PayType','PerKmRate','PerVisitRate','KRA'].forEach(function(f){ var v=val('f_'+f); if(v!==undefined) data[f]=v; });
     var dc=window._empDocs||{}; data.AadhaarUrl=dc.Aadhaar||''; data.PanUrl=dc.Pan||''; data.DLUrl=dc.DL||''; data.LightBillUrl=dc.LightBill||''; data.EduDocsUrl=(dc.Edu||[]).join(','); }
   if(manage && !data.FullName){ toast('Full name is required.',true); return; }
   if(manage && !data.Role){ toast('Role is required.',true); return; }
