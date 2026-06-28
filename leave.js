@@ -39,18 +39,13 @@
   /* Approval chain track label */
   var TRACK_LABEL = {staff:'Staff',bm:'Branch Manager',om:'Operations Manager',coop:'Co-operative'};
 
-  /* Approval chain for each track — for visual display */
-  var CHAINS = {
-    staff: ['Branch Manager','Operations Manager'],
-    bm:    ['Operations Manager','Director'],
-    om:    ['Director'],
-    coop:  ['Director','Operations Manager']
+  /* Approvers by track (parallel — all see it at once, any can approve) */
+  var TRACK_APPROVERS = {
+    staff: ['Branch Manager','Operations Manager','HR'],
+    bm:    ['Operations Manager','Director','HR'],
+    om:    ['Director','HR'],
+    coop:  ['Operations Manager','Director','HR']
   };
-
-  /* Stage label */
-  function stageLbl(s) {
-    return {bm:'Branch Manager',om:'Operations Manager',dir:'Director',done:'Done'}[String(s||'')] || s;
-  }
 
   /* ---- Leave type config ---- */
   var LTYPES = ['CL','SL','EL','Comp Off','Unpaid'];
@@ -74,27 +69,16 @@
   }
 
   /* ============================================================
-   *  APPROVAL CHAIN MINI-TRACK (shown on each leave card)
+   *  APPROVERS PILLS — who can approve this leave (shown on cards)
    * ============================================================ */
-  function chainHTML(l) {
-    var track  = String(l.track||'staff');
-    var stage  = String(l.status)==='pending' ? String(l.stage||'bm') : (String(l.status)==='approved'?'done':'rejected');
-    var stages = CHAINS[track] || CHAINS.staff;
-    var stageKeys = track==='staff'?['bm','om']:track==='bm'?['om','dir']:track==='om'?['dir']:['dir','om'];
-
-    if(String(l.status)==='rejected') return '<div class="lv-chain"><span class="lv-cnode lv-cn-rej">✗ Rejected at '+esc(stageLbl(l.stage))+'</span></div>';
+  function approversHTML(l) {
+    if(String(l.status)==='approved')  return '<div class="lv-chain"><span class="lv-cnode lv-cn-done">✓ Approved'+(l.approvedBy?' by '+esc(l.approvedBy):'')+'</span></div>';
+    if(String(l.status)==='rejected')  return '<div class="lv-chain"><span class="lv-cnode lv-cn-rej">✗ Rejected</span></div>';
     if(String(l.status)==='cancelled') return '<div class="lv-chain"><span class="lv-cnode lv-cn-cancel">Cancelled</span></div>';
-
-    var nodes = stages.map(function(name, i) {
-      var key = stageKeys[i];
-      var isDone  = (l.status==='approved') || (stage!=='done' && stageKeys.indexOf(key) < stageKeys.indexOf(stage));
-      var isCurr  = stage===key;
-      var cls = isDone?'lv-cn-done':isCurr?'lv-cn-curr':'lv-cn-wait';
-      var icon = isDone?'✓':isCurr?'⏳':'○';
-      return '<span class="lv-cnode '+cls+'">'+icon+' '+esc(name)+(isCurr&&l.approverName?' <b>('+esc(l.approverName)+')</b>':'')+'</span>';
-    });
-    if(l.status==='approved') nodes.push('<span class="lv-cnode lv-cn-done">✓ Approved</span>');
-    return '<div class="lv-chain">'+nodes.join('<span class="lv-carrow">→</span>')+'</div>';
+    // pending — show who can approve
+    var roles = l.approverRoles || TRACK_APPROVERS[String(l.track||'staff')] || [];
+    var pills = roles.map(function(r){ return '<span class="lv-cnode lv-cn-curr">⏳ '+esc(r)+'</span>'; }).join(' ');
+    return '<div class="lv-chain" style="gap:5px"><span style="font-size:10.5px;color:#888;margin-right:3px">Pending from:</span>'+pills+'</div>';
   }
 
   /* ============================================================
@@ -116,8 +100,9 @@
     box.innerHTML = leaves.map(function(l) {
       var canCancel = String(l.status)==='pending';
       var awaitLine = '';
-      if(String(l.status)==='pending' && l.approverName && l.approverName!=='—') {
-        awaitLine = '<div class="lv-await">⏳ Awaiting: <b>'+esc(l.approverName)+'</b> <span class="lv-await-role">('+esc(l.approverRole)+')</span></div>';
+      if(String(l.status)==='pending') {
+        var roles = l.approverRoles || TRACK_APPROVERS[String(l.track||'staff')] || [];
+        if(roles.length) awaitLine = '<div class="lv-await">⏳ Pending approval from: <b>'+roles.map(esc).join(', ')+'</b></div>';
       }
       return '<div class="lv-leave-card">'+
         '<div class="lv-lc-top">'+
@@ -127,7 +112,7 @@
         '</div>'+
         (l.reason?'<div class="lv-lc-reason">'+esc(l.reason)+'</div>':'')+
         awaitLine+
-        chainHTML(l)+
+        approversHTML(l)+
       '</div>';
     }).join('');
 
@@ -210,26 +195,17 @@
     box.innerHTML='<div class="center-load" style="padding:28px 0"><span class="loader dark"></span> Loading…</div>';
     API.leaveApprovals().then(function(r) {
       if(!r||!r.ok){ box.innerHTML='<div class="empty">'+esc((r&&r.error)||'Not authorised.')+'</div>'; return; }
-      var all    = r.leaves||[];
-      var action = all.filter(function(l){ return l.canApprove; });
-      var monitor= all.filter(function(l){ return !l.canApprove; });
-      var html   = '';
+      var all  = r.leaves||[];
+      var html = '';
 
-      /* ── Action Required section ── */
-      if(action.length) {
-        html += '<div class="lv-sec-hdr lv-sec-action">⚡ Action Required — '+action.length+' pending your approval</div>';
-        html += action.map(function(l){ return apprCard(l, true); }).join('');
-      } else if(!r.isHR) {
-        html += '<div class="empty" style="padding:28px 0">✓ Nothing pending your approval right now.</div>';
+      if(all.length) {
+        html += '<div class="lv-sec-hdr lv-sec-action">⚡ '+all.length+' leave request'+(all.length===1?'':'s')+' pending your approval</div>';
+        html += all.map(function(l){ return apprCard(l, true); }).join('');
+      } else {
+        html = '<div class="empty" style="padding:28px 0">✓ No pending leave requests for you right now.</div>';
       }
 
-      /* ── Monitoring section for HR/Admin/Director ── */
-      if(monitor.length && (r.isHR||r.isDir)) {
-        html += '<div class="lv-sec-hdr lv-sec-monitor" style="margin-top:18px">📋 Monitoring — All pending leaves ('+monitor.length+')</div>';
-        html += monitor.map(function(l){ return apprCard(l, false); }).join('');
-      }
-
-      box.innerHTML = html || '<div class="empty" style="padding:28px 0">No pending leaves.</div>';
+      box.innerHTML = html;
 
       /* Approve buttons */
       box.querySelectorAll('[data-ap]').forEach(function(btn){
@@ -250,29 +226,27 @@
 
   function apprCard(l, canAct) {
     var trackLbl = TRACK_LABEL[String(l.track||'staff')]||'Staff';
-    var stageTag = '<span class="lv-stage-pill">Stage: '+esc(stageLbl(l.stage))+'</span>';
-    var approverTag = l.approverName && l.approverName!=='—'
-      ? '<span class="lv-apvr-pill">Approver: <b>'+esc(l.approverName)+'</b> ('+esc(l.approverRole)+')</span>' : '';
-    return '<div class="lv-appr-row '+(canAct?'lv-appr-action':'lv-appr-monitor')+'" data-id="'+esc(l.leaveId)+'">'+
+    var roles = l.approverRoles || TRACK_APPROVERS[String(l.track||'staff')] || [];
+    var rolePills = roles.map(function(r){ return '<span class="lv-apvr-pill">'+esc(r)+'</span>'; }).join(' ');
+    return '<div class="lv-appr-row lv-appr-action" data-id="'+esc(l.leaveId)+'">'+
       '<div class="att-av" style="margin-right:12px">'+esc(initials(l.empName||'?'))+'</div>'+
       '<div class="hx-mid" style="flex:1">'+
         '<div style="font-size:14px;font-weight:700">'+esc(l.empName)+
           ' <span style="font-size:10px;font-weight:400;color:#888">('+esc(trackLbl)+')</span>'+
-          ' — <b>'+esc(l.type)+'</b> · '+esc(l.days)+'d'+
+          ' — <b>'+esc(l.type)+'</b> &nbsp;·&nbsp; '+esc(l.days)+'d'+
         '</div>'+
         '<div style="font-size:12.5px;color:#555;margin-top:2px">'+
           esc(fmtDate(l.fromDate))+' → '+esc(fmtDate(l.toDate))+
           (l.empBranch?' &nbsp;·&nbsp; '+esc(l.empBranch):'')+
-          (l.reason?' &nbsp;·&nbsp; '+esc(l.reason):'')+'</div>'+
-        '<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:5px">'+stageTag+approverTag+'</div>'+
-        chainHTML(l)+
+          (l.reason?' &nbsp;·&nbsp; <i>'+esc(l.reason)+'</i>':'')+'</div>'+
+        '<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:5px;align-items:center">'+
+          '<span style="font-size:10px;color:#888">Approvers:</span>'+rolePills+
+        '</div>'+
       '</div>'+
-      (canAct?
-        '<div style="display:flex;gap:8px;align-items:center;flex-shrink:0;margin-left:10px">'+
-          '<button class="btn sm" data-ap="'+esc(l.leaveId)+'">Approve</button>'+
-          '<button class="btn ghost sm" data-rj="'+esc(l.leaveId)+'">Reject</button>'+
-        '</div>'
-      :'<div style="flex-shrink:0;margin-left:10px"><span style="font-size:10px;color:#888;font-weight:600;background:#f0f0f0;border-radius:6px;padding:3px 8px">MONITOR</span></div>')+
+      '<div style="display:flex;gap:8px;align-items:center;flex-shrink:0;margin-left:10px">'+
+        '<button class="btn sm" data-ap="'+esc(l.leaveId)+'">Approve</button>'+
+        '<button class="btn ghost sm" data-rj="'+esc(l.leaveId)+'">Reject</button>'+
+      '</div>'+
     '</div>';
   }
 
