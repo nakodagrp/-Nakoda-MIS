@@ -593,7 +593,7 @@ function openEmpModal(empId){
       fld('Duty start','f_DutyStart',e.DutyStart,'time')+fld('Duty end','f_DutyEnd',e.DutyEnd,'time')+
       fld('Basic salary (₹)','f_BasicSalary',e.BasicSalary,'number')+
       sel('Attendance mode','f_AttendanceMode',['Geo only — lab staff','Selfie only — field staff','Geo + Selfie — both required'],e.AttendanceMode)+
-      '<div class="field"><label>Sunday work</label><select id="f_SundayWork"><option value="">No</option><option value="yes"'+(String(e.SundayWork)==='yes'?' selected':'')+'>Yes</option></select></div>'+
+      '<div class="field"><label>Sunday work</label><select id="f_SundayWork"><option value="">No</option><option value="every"'+(String(e.SundayWork)==='every'?' selected':'')+'>Every Sunday</option><option value="alternate"'+(String(e.SundayWork)==='alternate'?' selected':'')+'>Alternate Sunday</option></select></div>'+
       '<div class="field"><label>Sunday time</label><input id="f_SundayHours" type="text" placeholder="e.g. 5:00 am to 9:00 am" value="'+esc(e.SundayHours||'')+'"></div>'+
       sel('Pay / visit type','f_PayType',['Fixed salary','Per km','Per visit'],e.PayType)+
       fld('Per-km rate (₹)','f_PerKmRate',e.PerKmRate,'number')+fld('Per-visit rate (₹)','f_PerVisitRate',e.PerVisitRate,'number')+
