@@ -46,24 +46,28 @@
       '<div class="sub" style="color:#888;font-size:13px;margin-bottom:12px">Cards flow: <b>issued → sent → activated</b>. Mark a card "sent" when you share it, and "activated" once the patient confirms.</div>'+
       '<div style="margin-bottom:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">'+
         '<select id="cs_branch" class="greet-select">'+brOpts+'</select>'+
-        '<input type="date" id="cs_date" class="greet-select" value="" style="min-width:145px" placeholder="Filter by issue date">'+
-        '<button class="btn ghost sm" id="cs_date_clear" style="font-size:12px">Clear date</button>'+
+        '<label style="font-size:12px;color:#888;display:flex;align-items:center;gap:5px">From <input type="date" id="cs_from" class="greet-select" value="" style="min-width:140px"></label>'+
+        '<label style="font-size:12px;color:#888;display:flex;align-items:center;gap:5px">To <input type="date" id="cs_to" class="greet-select" value="" style="min-width:140px"></label>'+
+        '<button class="btn ghost sm" id="cs_date_clear" style="font-size:12px">Clear dates</button>'+
       '</div>'+
       '<div id="cs_counts" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px"></div>'+
       '<div id="cs_lists"></div>';
     document.getElementById('cs_branch').addEventListener('change',load);
-    document.getElementById('cs_date').addEventListener('change',load);
-    document.getElementById('cs_date_clear').addEventListener('click',function(){ document.getElementById('cs_date').value=''; load(); });
+    document.getElementById('cs_from').addEventListener('change',load);
+    document.getElementById('cs_to').addEventListener('change',load);
+    document.getElementById('cs_date_clear').addEventListener('click',function(){ document.getElementById('cs_from').value=''; document.getElementById('cs_to').value=''; load(); });
     load();
     function compute(cards,b){
       var ins=[],sna=[],act=[],exp=[];
-      var dateFilter=(document.getElementById('cs_date')&&document.getElementById('cs_date').value)||'';
+      var fromFilter=(document.getElementById('cs_from')&&document.getElementById('cs_from').value)||'';
+      var toFilter=(document.getElementById('cs_to')&&document.getElementById('cs_to').value)||'';
       (cards||[]).forEach(function(c){
         if(b && String(c.branchId)!==String(b)) return;
         if(c.status==='cancelled'||c.status==='renewed') return;
-        if(dateFilter){
+        if(fromFilter||toFilter){
           var issuedOn=String(c.issuedDate||c.createdAt||'').slice(0,10);
-          if(issuedOn!==dateFilter) return;
+          if(fromFilter && issuedOn<fromFilter) return;
+          if(toFilter && issuedOn>toFilter) return;
         }
         var lite={cardNumber:c.cardNumber,holderName:c.holderName,mobile:c.mobile,typeId:c.typeId,branchId:c.branchId,expiryDate:c.expiryDate,issuedDate:c.issuedDate||''};
         if(c.status==='expired'){ exp.push(lite); return; }
@@ -95,7 +99,9 @@
       var actionable=(action==='sent'||action==='activated');
       var bulk=actionable?'<button class="btn sm" data-bulk="'+action+'" style="margin-left:auto">Mark selected '+(action==='sent'?'sent':'activated')+'</button>':'';
       var head='<div style="display:flex;align-items:center;gap:8px;margin:8px 2px 8px"><span class="section-label" style="margin:0">'+esc(title)+' ('+list.length+')</span>'+bulk+'</div>';
-      return head+'<div class="card" style="margin-bottom:16px"><div class="table-wrap"><table><thead><tr><th>Member</th><th>Type</th><th></th></tr></thead><tbody>'+
+      var selAllId='cs_selall_'+action;
+      var selAllChk=actionable?'<input type="checkbox" id="'+selAllId+'" title="Select all" style="transform:scale(1.25);margin-right:6px;vertical-align:middle">':'';
+      return head+'<div class="card" style="margin-bottom:16px"><div class="table-wrap"><table><thead><tr><th>'+selAllChk+'Member</th><th>Type</th><th></th></tr></thead><tbody>'+
         list.map(function(c){
           var sel=actionable?'<input type="checkbox" class="cs-sel" data-cn="'+esc(c.cardNumber)+'" style="transform:scale(1.25);margin-right:9px">':'';
           var act=action==='sent'?'<button class="btn ghost sm" data-mark="sent" data-cn="'+esc(c.cardNumber)+'">Sent</button>'
@@ -106,6 +112,15 @@
         }).join('')+'</tbody></table></div></div>';
     }
     function wire(){
+      // Select All checkboxes
+      ['sent','activated'].forEach(function(action){
+        var sa=document.getElementById('cs_selall_'+action); if(!sa) return;
+        sa.onchange=function(){
+          var card=sa.closest('table')||sa.parentNode;
+          var sels=Array.prototype.slice.call(document.querySelectorAll('#cs_lists .cs-sel'));
+          sels.forEach(function(x){ x.checked=sa.checked; });
+        };
+      });
       document.querySelectorAll('#cs_lists [data-open]').forEach(function(b){ b.onclick=function(){ window.openCardDetail(b.getAttribute('data-open')); }; });
       document.querySelectorAll('#cs_lists [data-mark]').forEach(function(b){ b.onclick=function(){
         var cn=b.getAttribute('data-cn'), mk=b.getAttribute('data-mark');

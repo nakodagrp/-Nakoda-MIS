@@ -145,7 +145,22 @@
   function bName(id){ var b=((S.meta&&S.meta.branches)||[]).filter(function(x){return String(x.BranchID)===String(id);})[0]; return b?b.BranchName:(id||'—'); }
 
   /* ── card detail ──────────────────────────────────────────────────────── */
-  function branchPhone(branchId){ var b=((S.meta&&S.meta.branches)||[]).filter(function(x){return String(x.BranchID)===String(branchId);})[0]; return b&&b.Phone?String(b.Phone):''; }
+  function branchPhone(branchId){
+    var b=((S.meta&&S.meta.branches)||[]).filter(function(x){return String(x.BranchID)===String(branchId);})[0];
+    if(!b) return '';
+    // Use Phone or Mobile from sheet if set
+    var ph=String(b.Phone||b.Mobile||'').trim();
+    if(ph) return ph;
+    // Fallback: hardcoded by branch name
+    var nm=String(b.BranchName||'').toUpperCase();
+    if(nm.indexOf('ANGEL')>=0) return '6353990481';
+    if(nm.indexOf('NAVSARI')>=0) return '9998144001';
+    if(nm.indexOf('DIGITAL')>=0) return '9512754001';
+    if(nm.indexOf('UDHANA')>=0||nm.indexOf('COOP')>=0||nm.indexOf('CO-OP')>=0||nm.indexOf('OPRATIVE')>=0) return '7405878379';
+    if(nm.indexOf('PAL')>=0) return '9408894464';
+    if(nm.indexOf('SOUTH')>=0||nm.indexOf('BOPAL')>=0) return '9512714001';
+    return '';
+  }
   function buildMessage(c,t,branchName,branchMobile){
     var bm=String(branchMobile||'').replace(/\s+/g,''); if(/^\d{10}$/.test(bm)) bm='+91 '+bm;
     var referByLine=c.referByName?('Refer by: *'+c.referByName+'*\n'):'';
