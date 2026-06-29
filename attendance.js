@@ -113,6 +113,13 @@
   }
 
   /* ---------- approver ---------- */
+  // Convert any Drive URL format to a direct image-renderable URL
+  function driveImg(url){
+    if(!url) return '';
+    var m=url.match(/[\/|=]([a-zA-Z0-9_-]{25,})/);
+    if(m) return 'https://drive.google.com/uc?export=view&id='+m[1];
+    return url;
+  }
   var _approveCache={ts:0,recs:null};
   function renderApproveRecs(recs){
     var box=$id('attApprove'); if(!box) return;
@@ -121,8 +128,9 @@
       var ap=String(a.approvalStatus)==='approved';
       // Inline selfie thumbnails — punch-in (IN) and punch-out (OUT) side by side, no PDF link
       var thumbs='';
-      if(a.selfieInUrl) thumbs+='<div style="text-align:center;display:inline-block;margin-right:6px;vertical-align:top"><img src="'+esc(a.selfieInUrl)+'" alt="In" style="width:58px;height:58px;object-fit:cover;border-radius:8px;border:1px solid #ddd;display:block"><span style="font-size:9px;color:#888">IN</span></div>';
-      if(a.selfieOutUrl) thumbs+='<div style="text-align:center;display:inline-block;vertical-align:top"><img src="'+esc(a.selfieOutUrl)+'" alt="Out" style="width:58px;height:58px;object-fit:cover;border-radius:8px;border:1px solid #ddd;display:block"><span style="font-size:9px;color:#888">OUT</span></div>';
+      if(a.selfieInUrl) thumbs+='<div style="text-align:center;display:inline-block;margin-right:10px;vertical-align:top"><img src="'+esc(driveImg(a.selfieInUrl))+'" alt="In" style="width:80px;height:80px;object-fit:cover;border-radius:10px;border:1px solid #ddd;display:block" onerror="this.style.background=\'#f3f4f6\';this.style.border=\'1px dashed #ccc\'"><span style="font-size:10px;font-weight:600;color:#888;letter-spacing:.04em">IN</span></div>';
+      if(a.selfieOutUrl) thumbs+='<div style="text-align:center;display:inline-block;vertical-align:top"><img src="'+esc(driveImg(a.selfieOutUrl))+'" alt="Out" style="width:80px;height:80px;object-fit:cover;border-radius:10px;border:1px solid #ddd;display:block" onerror="this.style.background=\'#f3f4f6\';this.style.border=\'1px dashed #ccc\'"><span style="font-size:10px;font-weight:600;color:#888;letter-spacing:.04em">OUT</span></div>';
+      else if(a.selfieInUrl) thumbs+='<div style="text-align:center;display:inline-block;vertical-align:top"><div style="width:80px;height:80px;border-radius:10px;border:1px dashed #ccc;background:#f9fafb;display:flex;align-items:center;justify-content:center;font-size:10px;color:#aaa;text-align:center">No punch-out yet</div><span style="font-size:10px;font-weight:600;color:#888;letter-spacing:.04em">OUT</span></div>';
       var selfieBlock=thumbs?('<div style="margin:6px 0">'+thumbs+'</div>'):'';
       return '<div class="att-row" data-id="'+esc(a.attId)+'" style="align-items:flex-start">'+
         '<div class="att-av" style="margin-top:4px">'+esc(initials(a.empName))+'</div>'+
