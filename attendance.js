@@ -116,8 +116,9 @@
   // Convert any Drive URL format to a direct image-renderable URL
   function driveImg(url){
     if(!url) return '';
+    // Already a thumbnail/uc URL — extract ID and re-format
     var m=url.match(/[\/|=]([a-zA-Z0-9_-]{25,})/);
-    if(m) return 'https://drive.google.com/uc?export=view&id='+m[1];
+    if(m) return 'https://drive.google.com/thumbnail?id='+m[1]+'&sz=w200-h200';
     return url;
   }
   var _approveCache={ts:0,recs:null};
