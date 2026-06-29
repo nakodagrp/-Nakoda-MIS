@@ -170,7 +170,7 @@
       'Card Type: '+String(t&&t.name?t.name:'').toUpperCase()+'\n'+
       'Valid up to: '+fmtDate(c.expiryDate)+'\n'+
       referByLine+'\n'+
-      'Benefits\n'+(t&&t.benefitsText?t.benefitsText:'')+'\n\n'+
+      (t&&t.benefitsText?t.benefitsText:'')+'\n\n'+
       'Please save '+(bm||'our number')+' as *Nakoda Lab* for any emergency.';
   }
   function openCardDetail(cardNumber){
