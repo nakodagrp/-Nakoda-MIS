@@ -59,6 +59,10 @@ a{color:var(--red);text-decoration:none}
 .syncchip.off .s{background:#c0392b}
 .syncchip.busy .s{background:#e69500;animation:blink 1s infinite}
 @keyframes blink{50%{opacity:.3}}
+.top-install-btn{display:flex;align-items:center;gap:5px;background:#DA1017;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
+.top-install-btn:hover{background:#b91c1c}
+.top-install-btn.installed{background:#f3f4f6;color:#6b7280;cursor:default;border:1px solid #e5e7eb}
+.top-install-btn.hidden{display:none}
 .userchip{display:flex;align-items:center;gap:9px;border:1px solid var(--line);border-radius:40px;padding:5px 8px 5px 11px}
 .avatar{width:34px;height:34px;border-radius:50%;background:var(--red);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13.5px}
 .userchip .who{line-height:1.15}

@@ -82,11 +82,14 @@ function isStandalone(){ return window.matchMedia('(display-mode: standalone)').
 function isIOS(){ return /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream; }
 function showInstallBar(){ $('installBar').classList.remove('hidden'); }
 function hideInstallBar(){ $('installBar').classList.add('hidden'); }
+function _showTopInstall(){ var b=document.getElementById('topInstallBtn'); if(b) b.classList.remove('hidden'); }
+function _hideTopInstall(){ var b=document.getElementById('topInstallBtn'); if(b) b.classList.add('hidden'); }
+function _markTopInstalled(){ var b=document.getElementById('topInstallBtn'); if(b){ b.textContent='Installed'; b.classList.add('installed'); b.disabled=true; } }
 function initInstall(){
-  if(isStandalone()){ hideInstallBar(); return; }
+  if(isStandalone()){ hideInstallBar(); _markTopInstalled(); _showTopInstall(); return; }
   if(sessionStorage.getItem('nk_install_dismiss')==='1') return;
-  window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); _deferredInstall=e; showInstallBar(); });
-  window.addEventListener('appinstalled', function(){ hideInstallBar(); _deferredInstall=null; toast('App installed'); });
+  window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); _deferredInstall=e; showInstallBar(); _showTopInstall(); });
+  window.addEventListener('appinstalled', function(){ hideInstallBar(); _deferredInstall=null; toast('App installed'); _markTopInstalled(); });
   if(isIOS()){ $('installText').textContent='Install this app: tap the Share button, then “Add to Home Screen”.'; showInstallBar(); }
   $('installBtn').addEventListener('click', function(){
     if(_deferredInstall){ _deferredInstall.prompt(); _deferredInstall.userChoice.then(function(){ _deferredInstall=null; hideInstallBar(); }); }
@@ -94,6 +97,13 @@ function initInstall(){
     else { toast('To install: open this site in Chrome, then use the install icon in the address bar.'); }
   });
   $('installDismiss').addEventListener('click', function(){ hideInstallBar(); try{ sessionStorage.setItem('nk_install_dismiss','1'); }catch(e){} });
+  var _topBtn=document.getElementById('topInstallBtn');
+  if(_topBtn) _topBtn.addEventListener('click', function(){
+    if(_topBtn.disabled) return;
+    if(_deferredInstall){ _deferredInstall.prompt(); _deferredInstall.userChoice.then(function(r){ _deferredInstall=null; hideInstallBar(); if(r&&r.outcome==='accepted') _markTopInstalled(); }); }
+    else if(isIOS()){ openModal('Install on iPhone / iPad','<p>1. Tap the <b>Share</b> button at the bottom of Safari.<br>2. Tap <b>Add to Home Screen</b>.<br>3. Tap <b>Add</b>.</p>','<button class="btn" onclick="closeModal()">Got it</button>'); }
+    else { toast('To install: open in Chrome then use the install icon in the address bar.'); }
+  });
 }
 
 /* status chip / offline banner */
