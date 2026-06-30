@@ -144,7 +144,7 @@
     }).join('');
     box.querySelectorAll('.tcard').forEach(function(el){ el.onclick=function(ev){ if(ev.target.getAttribute('data-tog')) return; var id=el.getAttribute('data-id'); var tk=byId(id);
       if(id.indexOf('CAL::')===0){ if(window.openCalendarEntryById && tk) window.openCalendarEntryById(tk.calId, function(){ if(window.renderMyTasks) window.renderMyTasks(); }); return; }
-      if(tk && (tk.source==='process'||tk.source==='nrlead') && tk.instanceId && window.openProcessInstance){ window.openProcessInstance(tk.instanceId, function(){ if(window.renderMyTasks) window.renderMyTasks(); }, tk.stageId||''); return; }
+      if(tk && (tk.source==='process'||tk.source==='nrlead') && tk.instanceId && window.openProcessInstance){ window.openProcessInstance(tk.instanceId, function(){ if(window.renderMyTasks) window.renderMyTasks(); }); return; }
       openTaskDetail(id); }; });
     box.querySelectorAll('[data-tog]').forEach(function(b){ b.onclick=function(ev){ ev.stopPropagation(); toggleDone(b.getAttribute('data-tog')); }; });
   }

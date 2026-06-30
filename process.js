@@ -168,43 +168,17 @@
   }
 
   /* ---------- work / advance a lead ---------- */
-  function applyStageOverride(r, forceStageId){
-    // If a specific stageId is requested (e.g. from a task record) and it differs from
-    // the instance's currentStageId, swap in the correct stage + fields so the popup
-    // always matches the task the user actually tapped.
-    if(!forceStageId || !r || !r.ok) return r;
-    var cur=r.stage||{};
-    if(String(cur.stageId)===String(forceStageId)) return r;
-    // We need the process definition to look up the right stage + its fields.
-    // apiGetProcess caches, so this is essentially free after first load.
-    return API.getProcess(r.instance&&r.instance.processId||'').then(function(d){
-      if(!d||!d.ok) return r;
-      var forced=(d.stages||[]).filter(function(s){return String(s.stageId)===String(forceStageId);})[0];
-      if(!forced) return r;
-      var copy=Object.assign({},r);
-      copy.stage=forced;
-      copy.fields=forced.fields||[];
-      // Rebuild out-edges for the forced stage
-      copy.edges=(d.edges||[]).filter(function(e){return String(e.fromStageId)===String(forceStageId);}).map(function(e){
-        var ts=(d.stages||[]).filter(function(s){return String(s.stageId)===String(e.toStageId);})[0];
-        return {toStageId:e.toStageId,label:e.label,toName:ts?ts.name:e.toStageId,tatDays:ts?ts.tatDays:7};
-      });
-      return copy;
-    });
-  }
-  function openInstance(iid, after, forceStageId){
+  function openInstance(iid, after){
     // Show cached version instantly, then silently refresh in background
     API.cachedInstance(iid).then(function(cached){
       if(cached && cached.ok){
-        Promise.resolve(applyStageOverride(cached, forceStageId)).then(function(r){ renderInstance(r, iid, after); });
+        renderInstance(cached, iid, after);
         // Silent background refresh — updates fields/history without blocking
-        API.getInstance(iid).then(function(r){
-          if(r&&r.ok) Promise.resolve(applyStageOverride(r, forceStageId)).then(function(r2){ renderInstance(r2, iid, after); });
-        });
+        API.getInstance(iid).then(function(r){ if(r&&r.ok) renderInstance(r, iid, after); });
       } else {
         openModal('Lead','<div class="center-load"><span class="loader dark"></span> Loading…</div>','');
         API.getInstance(iid).then(function(r){
-          if(r&&r.ok) Promise.resolve(applyStageOverride(r, forceStageId)).then(function(r2){ renderInstance(r2, iid, after); });
+          if(r&&r.ok) renderInstance(r, iid, after);
           else { closeModal(); toast((r&&r.error)||'Could not open',true); }
         });
       }
