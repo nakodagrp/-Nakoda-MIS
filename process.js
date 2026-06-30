@@ -168,17 +168,43 @@
   }
 
   /* ---------- work / advance a lead ---------- */
-  function openInstance(iid, after){
+  function applyStageOverride(r, forceStageId){
+    // If a specific stageId is requested (e.g. from a task record) and it differs from
+    // the instance's currentStageId, swap in the correct stage + fields so the popup
+    // always matches the task the user actually tapped.
+    if(!forceStageId || !r || !r.ok) return r;
+    var cur=r.stage||{};
+    if(String(cur.stageId)===String(forceStageId)) return r;
+    // We need the process definition to look up the right stage + its fields.
+    // apiGetProcess caches, so this is essentially free after first load.
+    return API.getProcess(r.instance&&r.instance.processId||'').then(function(d){
+      if(!d||!d.ok) return r;
+      var forced=(d.stages||[]).filter(function(s){return String(s.stageId)===String(forceStageId);})[0];
+      if(!forced) return r;
+      var copy=Object.assign({},r);
+      copy.stage=forced;
+      copy.fields=forced.fields||[];
+      // Rebuild out-edges for the forced stage
+      copy.edges=(d.edges||[]).filter(function(e){return String(e.fromStageId)===String(forceStageId);}).map(function(e){
+        var ts=(d.stages||[]).filter(function(s){return String(s.stageId)===String(e.toStageId);})[0];
+        return {toStageId:e.toStageId,label:e.label,toName:ts?ts.name:e.toStageId,tatDays:ts?ts.tatDays:7};
+      });
+      return copy;
+    });
+  }
+  function openInstance(iid, after, forceStageId){
     // Show cached version instantly, then silently refresh in background
     API.cachedInstance(iid).then(function(cached){
       if(cached && cached.ok){
-        renderInstance(cached, iid, after);
+        Promise.resolve(applyStageOverride(cached, forceStageId)).then(function(r){ renderInstance(r, iid, after); });
         // Silent background refresh — updates fields/history without blocking
-        API.getInstance(iid).then(function(r){ if(r&&r.ok) renderInstance(r, iid, after); });
+        API.getInstance(iid).then(function(r){
+          if(r&&r.ok) Promise.resolve(applyStageOverride(r, forceStageId)).then(function(r2){ renderInstance(r2, iid, after); });
+        });
       } else {
         openModal('Lead','<div class="center-load"><span class="loader dark"></span> Loading…</div>','');
         API.getInstance(iid).then(function(r){
-          if(r&&r.ok) renderInstance(r, iid, after);
+          if(r&&r.ok) Promise.resolve(applyStageOverride(r, forceStageId)).then(function(r2){ renderInstance(r2, iid, after); });
           else { closeModal(); toast((r&&r.error)||'Could not open',true); }
         });
       }
@@ -213,14 +239,17 @@
       var body='<div style="font-size:12.5px;color:#666;margin-bottom:8px"><b>'+esc(r.instance.leadName)+'</b>'+(r.instance.leadMobile?(' · '+esc(r.instance.leadMobile)):'')+' · stage: '+esc(st.name||'')+'</div>'+mouBtn+detailHtml+
         '<div class="grid2">'+
         '<div class="field full"><label>Activity</label><select id="avAct" class="in">'+acts.map(function(a){return '<option>'+esc(a)+'</option>';}).join('')+'</select></div>'+
-        fieldsHtml(r.fields,'av_')+
+        fieldsHtml((r.fields||[]).filter(function(f){ var l=String(f.label||'').toLowerCase().trim(); return l!=='dr. name'&&l!=='visit time'&&l!=='contact number'; }),'av_')+
+        '<div class="field full"><label>Notes</label><textarea id="avNotes" class="in" rows="2" placeholder="Outcome / notes for this step..."></textarea></div>'+
         '<div class="field full"><label>Move to *</label><select id="avMove" class="in">'+moveOpts+'</select></div>'+
         '<div class="field" id="avAssWrap"><label>Assign next to</label><select id="avAssignee" class="in">'+empOpts(emps,r.instance.assigneeEmpId)+'</select></div>'+
         '<div class="field" id="avDateWrap"><label>Next date</label><input id="avDate" class="in" type="date"></div>'+
         '<div class="field full" id="avCloseWrap" style="display:none"><label>Close reason</label><input id="avReason" class="in"></div>'+
         '</div>'+timelineHtml(r.steps)+'<div id="avMsg"></div>';
+      var _avSkip=['dr. name','visit time','contact number'];
+      var avFields=(r.fields||[]).filter(function(f){ return _avSkip.indexOf(String(f.label||'').toLowerCase().trim())<0; });
       openModal(st.name||'Work lead', body, '<button class="btn" id="avSave">Submit & advance</button>');
-      wireFileInputs(r.fields,'av_');
+      wireFileInputs(avFields,'av_');
       function onMove(){ var v=document.getElementById('avMove').value, close=(v==='CLOSE_WON'||v==='CLOSE_LOST'), nr=(v==='STAY_NR');
         document.getElementById('avCloseWrap').style.display=close?'':'none';
         document.getElementById('avAssWrap').style.display=(close||nr)?'none':'';
@@ -228,7 +257,9 @@
       document.getElementById('avMove').onchange=onMove; onMove();
       var mb=document.getElementById('avMou'); if(mb) mb.onclick=function(){ buildMou(r); };
       document.getElementById('avSave').onclick=function(){
-        var data={ activityType:(document.getElementById('avAct')||{}).value||'', formData:collectFields(r.fields,'av_'),
+        var _avFd=collectFields(avFields,'av_');
+        var _avNotes=(document.getElementById('avNotes')||{}).value||''; if(_avNotes) _avFd['Notes']=_avNotes;
+        var data={ activityType:(document.getElementById('avAct')||{}).value||'', formData:_avFd,
           nextStageId:document.getElementById('avMove').value, nextAssigneeEmpId:(document.getElementById('avAssignee')||{}).value||'',
           nextDate:(document.getElementById('avDate')||{}).value||'', closeReason:(document.getElementById('avReason')||{}).value||'' };
         this.disabled=true; this.textContent='Saving…';
