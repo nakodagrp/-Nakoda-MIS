@@ -134,27 +134,33 @@
       var defName=isGriev?esc((S.user&&S.user.FullName)||''):'';
       var defMobile=isGriev?esc((S.user&&(S.user.Phone||S.user.Mobile))||''):'';
       var mobileField=isRecruit?'':'<div class="field"><label>Mobile</label><input id="psMobile" class="in" value="'+defMobile+'"></div>';
+      // Filter out fields that are captured differently or removed for cleaner start form
+      var _skipLabels=['dr. name','visit time','contact number'];
+      var startFields=(start.fields||[]).filter(function(f){ return _skipLabels.indexOf(String(f.label||'').toLowerCase().trim())<0; });
       var body='<div class="grid2">'+
         '<div class="field"><label>'+nameLabel+'</label><input id="psName" class="in" placeholder="'+namePh+'" value="'+defName+'"></div>'+
         mobileField+
         '<div class="field"><label>Serving branch</label><select id="psBranch" class="in">'+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'"'+(String(b.BranchID)===String(S.user&&S.user.Branch)?' selected':'')+'>'+esc(b.BranchName)+'</option>';}).join('')+'</select></div>'+
         '<div class="field"><label>Assign first task to</label><select id="psAssignee" class="in">'+empOpts(emps,defAssignee)+'</select></div>'+
-        fieldsHtml(start.fields,'ps_')+
+        fieldsHtml(startFields,'ps_')+
+        '<div class="field full"><label>Notes</label><textarea id="psNotes" class="in" rows="2" placeholder="Initial notes about this lead..."></textarea></div>'+
         '<div class="field"><label>Lead date</label><input id="psLeadDate" class="in" type="date"></div>'+
         '<div class="field"><label>First task date</label><input id="psDate" class="in" type="date"></div>'+
         '<div class="field"><label>Activity</label><select id="psAct" class="in">'+actOpts+'</select></div>'+
         '<div class="field"><label>Move to *</label><select id="psMove" class="in">'+moveOpts+'</select></div>'+
         '</div><div id="psMsg"></div>';
       openModal('Add to '+DEF.process.name, body, '<button class="btn" id="psSave">Save & start</button>');
-      wireFileInputs(start.fields,'ps_');
+      wireFileInputs(startFields,'ps_');
       var psBr=document.getElementById('psBranch');
       if(psBr) psBr.onchange=function(){ API.branchAssignees(psBr.value, wantHR?'HR':'').then(function(rr){ var es=(rr&&rr.employees)||[]; var a=document.getElementById('psAssignee'); if(a) a.innerHTML=empOpts(es, hrOf(es, S.user&&S.user.EmpID)); }); };
       var psMv=document.getElementById('psMove'); if(psMv) psMv.onchange=function(){ var pd=document.getElementById('psDate'); if(pd&&pd.parentNode) pd.parentNode.style.display=(psMv.value==='STAY_NR')?'none':''; };
       document.getElementById('psSave').onclick=function(){
         var name=document.getElementById('psName').value.trim(); if(!name){ document.getElementById('psMsg').innerHTML='<div class="msg error">'+(isRecruit?'Position is required.':'Name is required.')+'</div>'; return; }
         var pmob=document.getElementById('psMobile');
+        var _dj=collectFields(startFields,'ps_');
+        var _notes=(document.getElementById('psNotes')||{}).value||''; if(_notes) _dj['Notes']=_notes;
         var data={ leadName:name, leadMobile:pmob?pmob.value.trim():'', branchId:document.getElementById('psBranch').value,
-          assigneeEmpId:document.getElementById('psAssignee').value, dataJson:collectFields(start.fields,'ps_'), leadDate:(document.getElementById('psLeadDate')||{}).value||'', startStageId:(document.getElementById('psMove')||{}).value||'', activityType:(document.getElementById('psAct')||{}).value||'', nextDate:document.getElementById('psDate').value };
+          assigneeEmpId:document.getElementById('psAssignee').value, dataJson:_dj, leadDate:(document.getElementById('psLeadDate')||{}).value||'', startStageId:(document.getElementById('psMove')||{}).value||'', activityType:(document.getElementById('psAct')||{}).value||'', nextDate:document.getElementById('psDate').value };
         this.disabled=true; this.textContent='Saving…';
         API.startInstance(pid,data).then(function(r){ if(r&&(r.ok||r.offline)){ closeModal(); toast(r.offline?'Saved offline — will sync':'Added to pipeline'); if(after) after(); } else { document.getElementById('psMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; } });
       };
@@ -163,11 +169,19 @@
 
   /* ---------- work / advance a lead ---------- */
   function openInstance(iid, after){
+    // Show cached version instantly, then silently refresh in background
     API.cachedInstance(iid).then(function(cached){
-      var shown=false;
-      if(cached && cached.ok){ renderInstance(cached, iid, after); shown=true; }
-      else openModal('Lead','<div class="center-load"><span class="loader dark"></span> Loading…</div>','');
-      API.getInstance(iid).then(function(r){ if(r&&r.ok){ if(!shown) renderInstance(r, iid, after); } else if(!shown){ closeModal(); toast((r&&r.error)||'Could not open',true); } });
+      if(cached && cached.ok){
+        renderInstance(cached, iid, after);
+        // Silent background refresh — updates fields/history without blocking
+        API.getInstance(iid).then(function(r){ if(r&&r.ok) renderInstance(r, iid, after); });
+      } else {
+        openModal('Lead','<div class="center-load"><span class="loader dark"></span> Loading…</div>','');
+        API.getInstance(iid).then(function(r){
+          if(r&&r.ok) renderInstance(r, iid, after);
+          else { closeModal(); toast((r&&r.error)||'Could not open',true); }
+        });
+      }
     });
   }
   function actsFor(st, steps){
