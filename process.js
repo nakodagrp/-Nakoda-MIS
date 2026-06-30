@@ -236,18 +236,36 @@
       (r.steps||[]).forEach(function(s){ var fd={}; try{ fd=JSON.parse(s.formDataJson||'{}')||{}; }catch(e){} Object.keys(fd).forEach(function(k){ var v=fd[k]; var empty=(v==null)||(v instanceof Array && !v.length)||(String(v).trim()===''); if(!empty) dj[k]=v; }); });
       var djKeys=Object.keys(dj).filter(function(k){ var v=dj[k]; return v!=null && String(v).trim()!=='' && !(v instanceof Array && !v.length); });
       var detailHtml=djKeys.length?('<div style="background:#faf6f6;border:1px solid #eee;border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:12.5px">'+djKeys.map(function(k){ var v=dj[k]; if(v instanceof Array) v=v.join(', '); var sv=String(v); var disp=/^https?:\/\//.test(sv)?('<a href="'+esc(sv)+'" target="_blank">View</a>'):('<b>'+esc(sv)+'</b>'); return '<div><span style="color:#888">'+esc(k)+':</span> '+disp+'</div>'; }).join('')+'</div>'):'';
-      var body='<div style="font-size:12.5px;color:#666;margin-bottom:8px"><b>'+esc(r.instance.leadName)+'</b>'+(r.instance.leadMobile?(' · '+esc(r.instance.leadMobile)):'')+' · stage: '+esc(st.name||'')+'</div>'+mouBtn+detailHtml+
+      var _avSkip=['dr. name','visit time','contact number'];
+      var avFields=(r.fields||[]).filter(function(f){ return _avSkip.indexOf(String(f.label||'').toLowerCase().trim())<0; });
+      // Split: checklist fields rendered as styled tick-rows; regular fields in the grid
+      var ckFields=avFields.filter(function(f){ return f.fieldType==='checklist'; });
+      var regFields=avFields.filter(function(f){ return f.fieldType!=='checklist'; });
+      var ckSection='';
+      if(ckFields.length){
+        ckSection='<div class="field full">'+
+          '<div style="font-size:11px;font-weight:500;color:var(--text-muted,#aaa);letter-spacing:.05em;text-transform:uppercase;margin-bottom:7px">Checklist</div>'+
+          ckFields.map(function(f){
+            var items=String(f.options||'').split(',').filter(Boolean);
+            return '<div id="av_'+esc(f.fieldId)+'" style="display:flex;flex-direction:column;gap:5px;margin-bottom:6px">'+
+              items.map(function(o){
+                return '<label style="display:flex;align-items:center;gap:10px;padding:7px 10px;background:var(--surface-1,#f9fafb);border:0.5px solid var(--border,#e5e7eb);border-radius:8px;font-size:13px;cursor:pointer;user-select:none">'+
+                  '<input type="checkbox" value="'+esc(o.trim())+'" style="width:15px;height:15px;accent-color:#DA1017;flex-shrink:0"> '+esc(o.trim())+
+                  '</label>';
+              }).join('')+'</div>';
+          }).join('')+'</div>';
+      }
+      var body='<div style="font-size:12.5px;color:#666;margin-bottom:8px"><b>'+esc(r.instance.leadName)+'</b>'+(r.instance.leadMobile?(' · '+esc(r.instance.leadMobile)):'')+' · stage: <b style="color:var(--text-primary,#111)">'+esc(st.name||'')+'</b></div>'+mouBtn+detailHtml+
         '<div class="grid2">'+
         '<div class="field full"><label>Activity</label><select id="avAct" class="in">'+acts.map(function(a){return '<option>'+esc(a)+'</option>';}).join('')+'</select></div>'+
-        fieldsHtml((r.fields||[]).filter(function(f){ var l=String(f.label||'').toLowerCase().trim(); return l!=='dr. name'&&l!=='visit time'&&l!=='contact number'; }),'av_')+
+        ckSection+
+        fieldsHtml(regFields,'av_')+
         '<div class="field full"><label>Notes</label><textarea id="avNotes" class="in" rows="2" placeholder="Outcome / notes for this step..."></textarea></div>'+
         '<div class="field full"><label>Move to *</label><select id="avMove" class="in">'+moveOpts+'</select></div>'+
         '<div class="field" id="avAssWrap"><label>Assign next to</label><select id="avAssignee" class="in">'+empOpts(emps,r.instance.assigneeEmpId)+'</select></div>'+
         '<div class="field" id="avDateWrap"><label>Next date</label><input id="avDate" class="in" type="date"></div>'+
         '<div class="field full" id="avCloseWrap" style="display:none"><label>Close reason</label><input id="avReason" class="in"></div>'+
         '</div>'+timelineHtml(r.steps)+'<div id="avMsg"></div>';
-      var _avSkip=['dr. name','visit time','contact number'];
-      var avFields=(r.fields||[]).filter(function(f){ return _avSkip.indexOf(String(f.label||'').toLowerCase().trim())<0; });
       openModal(st.name||'Work lead', body, '<button class="btn" id="avSave">Submit & advance</button>');
       wireFileInputs(avFields,'av_');
       function onMove(){ var v=document.getElementById('avMove').value, close=(v==='CLOSE_WON'||v==='CLOSE_LOST'), nr=(v==='STAY_NR');
