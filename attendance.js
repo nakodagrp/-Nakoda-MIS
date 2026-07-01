@@ -9,6 +9,8 @@
   function needSelfie(){ return true; }  // selfie required for all modes
   function isFenced(){ var m=attMode().toLowerCase(); return m.indexOf('geo only')>=0 || m.indexOf('office')>=0; }   // "Geo only" mode is fenced to the branch (150 m)
   function hm2min(t){ var p=String(t||'').split(':'); return p.length>=2?(+p[0])*60+(+p[1]):null; }
+  // Sheets time cells arrive as ISO strings like "1899-12-30T06:38:50.000Z" — extract HH:MM only
+  function fmtDutyTime(t){ if(!t) return ''; var s=String(t); var m=s.match(/T(\d{2}):(\d{2})/); if(m) return m[1]+':'+m[2]; return s; }
   function dayBadge(st){ var m={present:['Full day','#eaf7ef','#1a8f4c'],half:['Half day','#faeeda','#854F0B'],leave:['Leave','#e9f1fb','#185FA5'],absent:['Absent','#fdecec','#b23b3b']}; var b=m[String(st||'present')]||m.present; return ' <span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:'+b[1]+';color:'+b[2]+'">'+b[0]+'</span>'; }
   function canApprove(){ var p=S.perms||{}; return p.level==='SUPER'||p.level==='HR_ADMIN'||p.level==='BRANCH_MGR'||(S.user&&S.user.Role==='Operations Manager'); }
   function todayRec(){ var t=todayS(); return (ATT.recs||[]).filter(function(r){return String(r.date)===t;})[0]; }
@@ -30,7 +32,7 @@
   function paintMe(){
     var box=$id('attMe'); if(!box) return;
     var rec=todayRec(), now=new Date();
-    var dutyTxt=(S.user&&S.user.DutyStart)?('Shift from '+S.user.DutyStart+(S.user.DutyEnd?('–'+S.user.DutyEnd):'')):'';
+    var dutyTxt=(S.user&&S.user.DutyStart)?('Shift from '+fmtDutyTime(S.user.DutyStart)+(S.user.DutyEnd?('–'+fmtDutyTime(S.user.DutyEnd)):'')):'';
     var inb = !rec || !rec.checkIn;
     var btn = inb
       ? '<button class="att-big in" id="attBtn">⊕ Check in</button>'
@@ -84,7 +86,7 @@
     navigator.geolocation.getCurrentPosition(function(pos){          // always capture location in every mode (so the approval card can show the address)
       ATT.coords={lat:pos.coords.latitude, lng:pos.coords.longitude};
       if(needSelfie()){ captureSelfie(function(b64){ submitMark(kind,b64); }); } else submitMark(kind,null);
-    }, function(){ toast('Please allow location to mark attendance.',true); }, {enableHighAccuracy:true, timeout:12000});
+    }, function(err){ var msg=(!err||err.code===1)?'Location blocked — go to phone Settings → Apps → Chrome/Browser → Permissions → Location → Allow.':err.code===3?'Location timed out. Move to open area and try again.':'Location unavailable. Please try again.'; toast(msg,true); }, {enableHighAccuracy:true, timeout:15000});
   }
   function doMark(kind){
     ATT.kind=kind; ATT.outRemark='';   // under 4 hours auto-marks half day on the server — no reason prompt
@@ -156,14 +158,28 @@
         API.setAttendance(attId,{approvalStatus:'approved'}).then(function(x){
           if(x&&x.ok){
             toast('Approved');
-            _approveCache.ts=0; // invalidate cache so next open re-fetches
+            var rec0=(_approveCache.recs||[]).filter(function(r){return String(r.attId)===attId;})[0]; if(rec0) rec0.approvalStatus='approved';   // keep in-memory cache in sync so a later status change re-render doesn't revert this button
+            _approveCache.ts=0; // still invalidate so the NEXT open re-fetches fresh from the server
             var row=b.closest ? b.closest('.att-row') : null;
             if(row){ var btn=row.querySelector('[data-ap]'); if(btn) btn.outerHTML='<span class="att-ok">✓ approved</span>'; }
           } else { b.disabled=false; b.textContent='Approve'; toast((x&&x.error)||'Failed',true); }
         }).catch(function(){ b.disabled=false; b.textContent='Approve'; toast('Failed',true); });
       };
     });
-    box.querySelectorAll('[data-st]').forEach(function(s){ s.onchange=function(){ API.setAttendance(s.getAttribute('data-st'),{status:s.value}).then(function(x){ if(x&&x.ok) toast('Updated'); else toast((x&&x.error)||'Failed',true); }); }; });
+    box.querySelectorAll('[data-st]').forEach(function(s){
+      s.onchange=function(){
+        var attId=s.getAttribute('data-st'), val=s.value, prev=s.getAttribute('data-prev')||val;
+        s.disabled=true;
+        API.setAttendance(attId,{status:val}).then(function(x){
+          s.disabled=false;
+          if(x&&x.ok){
+            toast('Updated');
+            var rec=(_approveCache.recs||[]).filter(function(r){return String(r.attId)===attId;})[0];
+            if(rec){ rec.status=val; renderApproveRecs(_approveCache.recs); }   // repaint so the badge + "· Full day/Half day" text next to the photo matches the new dropdown value
+          } else { s.value=prev; toast((x&&x.error)||'Failed',true); }
+        }).catch(function(){ s.disabled=false; s.value=prev; toast('Failed — check connection.',true); });
+      };
+    });
   }
   function loadApprove(){
     var box=$id('attApprove'); if(!box) return;
