@@ -119,7 +119,7 @@
     var body='<div class="grid2">'+brField+
       '<div class="field"><label>Date</label><input id="dlDate" class="in" type="date" value="'+(new Date().toISOString().slice(0,10))+'"></div>'+
       '<div class="field"><label>Patients served</label><input id="dlPat" class="in" type="number" inputmode="numeric"></div></div>'+
-      incBlock('B2c','B2C income (walk-in / patient)','<div class="field"><label>Expense (₹)</label><input id="dlExpense" class="in" type="number" inputmode="numeric"></div>')+
+      incBlock('B2c','B2C income (walk-in / patient)','')+
       incBlock('B2d','B2D income (doctor / referral)','')+
       '<div class="dl-blk"><div class="dl-blk-h">Other income (B2B — credit, billed monthly)</div>'+
         '<div class="field"><label>Amount (₹)</label><input id="dlOther" class="in dl-amt" type="number" inputmode="numeric"></div>'+
