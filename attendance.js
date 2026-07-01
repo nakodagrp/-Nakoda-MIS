@@ -20,12 +20,11 @@
     v.innerHTML='<div class="page-head"><h1>Attendance</h1></div>'+
       '<input type="file" id="attSelfie" accept="image/*" capture="user" style="display:none">'+
       '<div id="attMe"></div>'+
-      (canApprove()?'<div class="section-label" style="margin-top:18px">Approve — attendance</div>'+
+      (canApprove()?'<div class="section-label" style="margin-top:18px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">Approve — today<span id="attApSummary"></span></div>'+
         '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0 10px">'+
           '<input type="date" id="attApDate" value="'+todayS()+'" style="border:1px solid #d9d9d9;border-radius:8px;padding:6px 8px;font-size:13px">'+
           '<button class="btn sm" id="attApGo">Show</button>'+
         '</div>'+
-        '<div id="attApSummary"></div>'+
         '<div id="attApprove"></div>':'')+
       '<div style="height:110px"></div>';   // bottom spacer so the last approve card clears the mobile bottom nav
     $id('attSelfie').onchange=function(){ var f=this.files[0]; if(!f) return; var fr=new FileReader(); fr.onload=function(){ var s=fr.result,i=s.indexOf(','); submitMark(ATT.kind, s.slice(i+1)); }; fr.readAsDataURL(f); this.value=''; };
@@ -147,17 +146,18 @@
     return url;
   }
   var _approveCache={ts:0,recs:null,date:null};
-  function pill(bg,fg,txt){ return '<span style="font-size:12px;font-weight:700;padding:3px 10px;border-radius:10px;background:'+bg+';color:'+fg+'">'+esc(txt)+'</span>'; }
+  function chip(bg,fg,letter,n){ return '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:'+bg+';color:'+fg+'" title="'+esc(letter)+'">'+esc(letter)+' '+n+'</span>'; }
   function renderApSummary(recs){
     var box=$id('attApSummary'); if(!box) return;
     var c={present:0,half:0,leave:0,absent:0};
     (recs||[]).forEach(function(r){ var s=String(r.status||'present'); if(c[s]!==undefined) c[s]++; else c.present++; });
-    box.innerHTML='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'+
-      pill('#eaf7ef','#1a8f4c','Full day '+c.present)+
-      pill('#faeeda','#854F0B','Half day '+c.half)+
-      pill('#e9f1fb','#185FA5','Leave '+c.leave)+
-      pill('#fdecec','#b23b3b','Absent '+c.absent)+
-      '</div>';
+    // Compact P / H / L (/ A) chips shown right beside the "Approve — today" header, same letters as the This month legend
+    box.innerHTML='<span style="display:inline-flex;gap:6px;flex-wrap:wrap">'+
+      chip('#eaf7ef','#1a8f4c','P',c.present)+
+      chip('#faeeda','#854F0B','H',c.half)+
+      chip('#e9f1fb','#185FA5','L',c.leave)+
+      (c.absent?chip('#fdecec','#b23b3b','A',c.absent):'')+
+      '</span>';
   }
   function renderApproveRecs(recs){
     var box=$id('attApprove'); if(!box) return;
