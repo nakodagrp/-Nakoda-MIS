@@ -146,24 +146,35 @@
     return url;
   }
   var _approveCache={ts:0,recs:null,date:null};
-  function chip(bg,fg,letter,n){ return '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:'+bg+';color:'+fg+'" title="'+esc(letter)+'">'+esc(letter)+' '+n+'</span>'; }
+  function chip(bg,fg,letter,n,statusKey){
+    var active=(ATT.apFilter===statusKey);
+    return '<span data-f="'+esc(statusKey)+'" style="cursor:pointer;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:'+bg+';color:'+fg+';'+(active?'box-shadow:0 0 0 2px '+fg+';':'')+'" title="Tap to show only '+esc(letter)+'">'+esc(letter)+' '+n+'</span>';
+  }
   function renderApSummary(recs){
     var box=$id('attApSummary'); if(!box) return;
     var c={present:0,half:0,leave:0,absent:0};
     (recs||[]).forEach(function(r){ var s=String(r.status||'present'); if(c[s]!==undefined) c[s]++; else c.present++; });
-    // Compact P / H / L (/ A) chips shown right beside the "Approve — today" header, same letters as the This month legend
+    // Compact P / H / L (/ A) chips shown right beside the "Approve — today" header — tap one to filter the list below to just that status
     box.innerHTML='<span style="display:inline-flex;gap:6px;flex-wrap:wrap">'+
-      chip('#eaf7ef','#1a8f4c','P',c.present)+
-      chip('#faeeda','#854F0B','H',c.half)+
-      chip('#e9f1fb','#185FA5','L',c.leave)+
-      (c.absent?chip('#fdecec','#b23b3b','A',c.absent):'')+
+      chip('#eaf7ef','#1a8f4c','P',c.present,'present')+
+      chip('#faeeda','#854F0B','H',c.half,'half')+
+      chip('#e9f1fb','#185FA5','L',c.leave,'leave')+
+      (c.absent?chip('#fdecec','#b23b3b','A',c.absent,'absent'):'')+
       '</span>';
+    box.querySelectorAll('[data-f]').forEach(function(s){
+      s.onclick=function(){
+        var f=s.getAttribute('data-f');
+        ATT.apFilter=(ATT.apFilter===f)?null:f;   // tap the same chip again to clear the filter and show everyone
+        if(_approveCache.recs) renderApproveRecs(_approveCache.recs);
+      };
+    });
   }
   function renderApproveRecs(recs){
     var box=$id('attApprove'); if(!box) return;
     renderApSummary(recs);
-    if(!recs.length){ box.innerHTML='<div class="empty">No attendance marked for this date.</div>'; return; }
-    box.innerHTML=recs.map(function(a){
+    var shown=ATT.apFilter ? recs.filter(function(r){ return String(r.status||'present')===ATT.apFilter; }) : recs;
+    if(!shown.length){ box.innerHTML='<div class="empty">No '+(ATT.apFilter?(stLabel(ATT.apFilter)+' '):'')+'attendance marked for this date.</div>'; return; }
+    box.innerHTML=shown.map(function(a){
       var ap=String(a.approvalStatus)==='approved';
       // Inline selfie thumbnails — punch-in (IN) and punch-out (OUT) side by side, no PDF link
       var thumbs='';
