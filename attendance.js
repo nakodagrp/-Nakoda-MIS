@@ -20,19 +20,28 @@
     v.innerHTML='<div class="page-head"><h1>Attendance</h1></div>'+
       '<input type="file" id="attSelfie" accept="image/*" capture="user" style="display:none">'+
       '<div id="attMe"></div>'+
-      (canApprove()?'<div class="section-label" style="margin-top:18px">Approve — today</div><div id="attApprove"></div>':'')+
+      (canApprove()?'<div class="section-label" style="margin-top:18px">Approve — attendance</div>'+
+        '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0 10px">'+
+          '<input type="date" id="attApDate" value="'+todayS()+'" style="border:1px solid #d9d9d9;border-radius:8px;padding:6px 8px;font-size:13px">'+
+          '<button class="btn sm" id="attApGo">Show</button>'+
+        '</div>'+
+        '<div id="attApSummary"></div>'+
+        '<div id="attApprove"></div>':'')+
       '<div style="height:110px"></div>';   // bottom spacer so the last approve card clears the mobile bottom nav
     $id('attSelfie').onchange=function(){ var f=this.files[0]; if(!f) return; var fr=new FileReader(); fr.onload=function(){ var s=fr.result,i=s.indexOf(','); submitMark(ATT.kind, s.slice(i+1)); }; fr.readAsDataURL(f); this.value=''; };
     paintMe();
     API.cachedAttendance().then(function(r){ if(r&&r.records){ ATT.recs=r.records; paintMe(); } });
     API.myAttendance(ymNow()).then(function(r){ if(r&&r.ok){ ATT.recs=r.records||[]; paintMe(); } });
-    if(canApprove()) loadApprove();
+    if(canApprove()){
+      loadApprove(todayS());
+      var apGo=$id('attApGo'); if(apGo) apGo.onclick=function(){ loadApprove($id('attApDate').value||todayS()); };
+    }
   }
 
   function paintMe(){
     var box=$id('attMe'); if(!box) return;
     var rec=todayRec(), now=new Date();
-    var dutyTxt=(S.user&&S.user.DutyStart)?('Shift from '+fmtDutyTime(S.user.DutyStart)+(S.user.DutyEnd?('–'+fmtDutyTime(S.user.DutyEnd)):'')):'';
+    var dutyTxt=(S.user&&S.user.DutyStart)?('Shift '+fmtDutyTime(S.user.DutyStart)+(S.user.DutyEnd?('–'+fmtDutyTime(S.user.DutyEnd)):'')+((S.user.AltDutyStart)?(' (or alt shift '+fmtDutyTime(S.user.AltDutyStart)+(S.user.AltDutyEnd?('–'+fmtDutyTime(S.user.AltDutyEnd)):'')+')'):'')):'';
     var inb = !rec || !rec.checkIn;
     var btn = inb
       ? '<button class="att-big in" id="attBtn">⊕ Check in</button>'
@@ -90,7 +99,21 @@
   }
   function doMark(kind){
     ATT.kind=kind; ATT.outRemark='';   // under 4 hours auto-marks half day on the server — no reason prompt
-    geoThen(kind);
+    if(kind==='in'){ ATT.altShift=false; maybeAltShiftPrompt(function(){ geoThen(kind); }); }
+    else geoThen(kind);
+  }
+  // Two-shift staff (e.g. Angel branch: 8–4 and 12–8): if this employee has an alternate shift configured
+  // and they're punching in near its start time, ask which shift they're on today.
+  function maybeAltShiftPrompt(cb){
+    var alt=(S.user&&S.user.AltDutyStart)||'';
+    if(!alt){ cb(); return; }
+    var altMin=hm2min(alt), n=new Date(), nowMin=n.getHours()*60+n.getMinutes();
+    if(altMin==null || Math.abs(nowMin-altMin)>90){ cb(); return; }   // only ask when punching in near the alt shift's start
+    var altEnd=(S.user&&S.user.AltDutyEnd)||'';
+    openModal('Alternate shift?','<div style="text-align:center"><div style="font-size:15px;font-weight:700;margin-bottom:8px">Working your alternate shift today?</div><div style="font-size:13px;color:#555;margin-bottom:14px">'+esc(fmtDutyTime(alt))+(altEnd?('–'+esc(fmtDutyTime(altEnd))):'')+' shift</div><div style="display:flex;gap:10px;justify-content:center"><button class="btn ghost" id="altNo">No</button><button class="btn" id="altYes">Yes</button></div></div>','');
+    var y=document.getElementById('altYes'), n2=document.getElementById('altNo');
+    if(y) y.onclick=function(){ ATT.altShift=true; closeModal(); cb(); };
+    if(n2) n2.onclick=function(){ ATT.altShift=false; closeModal(); cb(); };
   }
   function stLabel(s){ return ({present:'Full day',half:'Half day',leave:'Leave',absent:'Absent'})[String(s)]||(s||'Full day'); }
   function promptWfh(r, cb){
@@ -104,7 +127,7 @@
     if(n) n.onclick=function(){ closeModal(); cb(false); };
   }
   function submitMark(kind, selfie){
-    var c=ATT.coords||{}, payload={selfie:selfie, lat:c.lat, lng:c.lng, wfh:!!ATT.wfh, remark:(kind==='out'?(ATT.outRemark||''):'')};
+    var c=ATT.coords||{}, payload={selfie:selfie, lat:c.lat, lng:c.lng, wfh:!!ATT.wfh, altShift:!!ATT.altShift, remark:(kind==='out'?(ATT.outRemark||''):'')};
     toast('Marking…');
     var p = kind==='in' ? API.checkIn(payload) : API.checkOut(payload);
     p.then(function(r){
@@ -123,10 +146,23 @@
     if(m) return 'https://drive.google.com/thumbnail?id='+m[1]+'&sz=w200-h200';
     return url;
   }
-  var _approveCache={ts:0,recs:null};
+  var _approveCache={ts:0,recs:null,date:null};
+  function pill(bg,fg,txt){ return '<span style="font-size:12px;font-weight:700;padding:3px 10px;border-radius:10px;background:'+bg+';color:'+fg+'">'+esc(txt)+'</span>'; }
+  function renderApSummary(recs){
+    var box=$id('attApSummary'); if(!box) return;
+    var c={present:0,half:0,leave:0,absent:0};
+    (recs||[]).forEach(function(r){ var s=String(r.status||'present'); if(c[s]!==undefined) c[s]++; else c.present++; });
+    box.innerHTML='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'+
+      pill('#eaf7ef','#1a8f4c','Full day '+c.present)+
+      pill('#faeeda','#854F0B','Half day '+c.half)+
+      pill('#e9f1fb','#185FA5','Leave '+c.leave)+
+      pill('#fdecec','#b23b3b','Absent '+c.absent)+
+      '</div>';
+  }
   function renderApproveRecs(recs){
     var box=$id('attApprove'); if(!box) return;
-    if(!recs.length){ box.innerHTML='<div class="empty">No attendance marked yet today.</div>'; return; }
+    renderApSummary(recs);
+    if(!recs.length){ box.innerHTML='<div class="empty">No attendance marked for this date.</div>'; return; }
     box.innerHTML=recs.map(function(a){
       var ap=String(a.approvalStatus)==='approved';
       // Inline selfie thumbnails — punch-in (IN) and punch-out (OUT) side by side, no PDF link
@@ -181,17 +217,19 @@
       };
     });
   }
-  function loadApprove(){
+  function loadApprove(date){
+    date=date||todayS();
     var box=$id('attApprove'); if(!box) return;
-    // Use cached data if fresh (within 45 s) — avoids repeated API calls on re-render
+    // Use cached data if fresh (within 45 s) AND for the same date — avoids repeated API calls on re-render
     var now=Date.now();
-    if(_approveCache.recs && (now-_approveCache.ts)<45000){ renderApproveRecs(_approveCache.recs); return; }
-    API.listAttendance('',todayS()).then(function(r){
+    if(_approveCache.recs && _approveCache.date===date && (now-_approveCache.ts)<45000){ renderApproveRecs(_approveCache.recs); return; }
+    box.innerHTML='<div class="empty">Loading…</div>';
+    API.listAttendance('',date).then(function(r){
       if(!r||!r.ok){ box.innerHTML='<div class="empty">'+esc((r&&r.error)||'')+'</div>'; return; }
       var recs=(r.records||[]).slice().sort(function(a,b){ var ta=String(a.checkIn||''),tb=String(b.checkIn||''); return tb>ta?1:tb<ta?-1:0; });
-      _approveCache={ts:Date.now(), recs:recs};
+      _approveCache={ts:Date.now(), recs:recs, date:date};
       renderApproveRecs(recs);
-    }).catch(function(){ if(box) box.innerHTML='<div class="empty">Connect to load today’s attendance.</div>'; });
+    }).catch(function(){ if(box) box.innerHTML='<div class="empty">Connect to load attendance for this date.</div>'; });
   }
   window.renderAttendance=renderAttendance;
 })();
