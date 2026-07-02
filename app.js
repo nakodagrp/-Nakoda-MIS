@@ -633,11 +633,21 @@ function openEmpModal(empId){
     function syncBranch(){ if(!roleSel) return; var sel=S.meta.roles.filter(function(r){return r.Role===roleSel.value;})[0]; var bf=$('branchField'); if(bf) bf.style.display=(sel&&sel.OfficeType==='Branch')?'':'none'; }
     if(roleSel){ roleSel.addEventListener('change',syncBranch); syncBranch(); }
     if(S.perms.level==='BRANCH_MGR'){ var bs=$('f_Branch'); if(bs){ bs.value=S.perms.branch; bs.disabled=true; } }
+    var empDocsPending=0;
+    function empDocsSaveState(){ var b=$('saveEmpBtn'); if(!b) return; b.disabled=empDocsPending>0; if(empDocsPending>0) b.textContent='Uploading… ('+empDocsPending+') — please wait'; else b.textContent=editing?'Save changes':'Create staff'; }
     function bindUp(key,multi){ var inp=$('up_'+key); if(!inp) return; inp.onchange=function(){ var files=inp.files; if(!files||!files.length) return; var st=$('st_'+key); st.textContent='Uploading…';
-      [].forEach.call(files,function(f){ if(f.size>4*1024*1024){ toast(f.name+' too large (max 4MB)',true); return; } var fr=new FileReader(); fr.onload=function(){ var s=fr.result,i=s.indexOf(',');
-        API.uploadFile({base64:s.slice(i+1),mimeType:f.type,fileName:f.name,subPath:'EmployeeDocs'}).then(function(r){ if(r.ok){ if(multi){ window._empDocs.Edu.push(r.url); st.innerHTML='Uploaded ✓ ('+window._empDocs.Edu.length+')'; } else { window._empDocs[key]=r.url; st.innerHTML='Uploaded ✓ <a href="'+esc(r.url)+'" target="_blank">view</a>'; } } else st.textContent=r.error||'Upload failed'; }).catch(function(){ st.textContent='Uploading a document needs internet.'; }); }; fr.readAsDataURL(f); }); }; }
+      [].forEach.call(files,function(f){ if(f.size>4*1024*1024){ toast(f.name+' too large (max 4MB)',true); return; }
+        empDocsPending++; empDocsSaveState();
+        var fr=new FileReader(); fr.onload=function(){ var s=fr.result,i=s.indexOf(',');
+          API.uploadFile({base64:s.slice(i+1),mimeType:f.type,fileName:f.name,subPath:'EmployeeDocs'}).then(function(r){
+            empDocsPending--; empDocsSaveState();
+            if(r.ok){ if(multi){ window._empDocs.Edu.push(r.url); st.innerHTML='Uploaded ✓ ('+window._empDocs.Edu.length+')'; } else { window._empDocs[key]=r.url; st.innerHTML='Uploaded ✓ <a href="'+esc(r.url)+'" target="_blank">view</a>'; } }
+            else st.textContent=r.error||'Upload failed';
+          }, function(){ empDocsPending--; empDocsSaveState(); st.textContent='Uploading a document needs internet.'; });
+        }; fr.readAsDataURL(f);
+      }); }; }
     ['Aadhaar','Pan','DL','LightBill'].forEach(function(k){ bindUp(k,false); }); bindUp('Edu',true);
-    $('saveEmpBtn').addEventListener('click', function(){ saveEmp(editing?e.EmpID:null, manage); });
+    $('saveEmpBtn').addEventListener('click', function(){ if(empDocsPending>0){ toast('Still uploading — wait for "Uploaded ✓" on every file before saving.',true); return; } saveEmp(editing?e.EmpID:null, manage); });
   }
   if(editing){ API.getEmployee(empId).then(function(r){ if(r.ok) build(r.employee); else toast(r.error,true); }); } else { build(null); }
 }
@@ -791,11 +801,24 @@ function openMyDocsModal(e){
     '<div class="field full"><label>Education documents (multiple)</label><input type="file" id="md_Edu" multiple accept="image/*,application/pdf"><div id="mdst_Edu" class="upst" style="font-size:12px;color:#666;margin-top:4px">'+(eduArr.length?('Uploaded ✓ ('+eduArr.length+')'):'')+'</div></div>'+
   '</div><div id="mdMsg"></div>';
   openModal('Upload my documents', body, '<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="mdSaveBtn">Save documents</button>');
+  // Track uploads still in flight so Save can't fire (or silently overwrite a field with '') before a pick has finished linking its Drive URL.
+  var mdPending=0;
+  function mdSaveState(){ var b=$('mdSaveBtn'); if(!b) return; b.disabled=mdPending>0; b.textContent=mdPending>0?('Uploading… ('+mdPending+') — please wait'):'Save documents'; }
   function bind(key,multi){ var inp=$('md_'+key); if(!inp) return; inp.onchange=function(){ var files=inp.files; if(!files||!files.length) return; var st=$('mdst_'+key); st.textContent='Uploading…';
-    [].forEach.call(files,function(f){ if(f.size>4*1024*1024){ toast(f.name+' too large (max 4MB)',true); return; } var fr=new FileReader(); fr.onload=function(){ var s=fr.result,i=s.indexOf(',');
-      API.uploadFile({base64:s.slice(i+1),mimeType:f.type,fileName:f.name,subPath:'EmployeeDocs'}).then(function(r){ if(r.ok){ if(multi){ window._myDocs.Edu.push(r.url); st.innerHTML='Uploaded ✓ ('+window._myDocs.Edu.length+')'; } else { window._myDocs[key]=r.url; st.innerHTML='Uploaded ✓ <a href="'+esc(r.url)+'" target="_blank">view</a>'; } } else st.textContent=r.error||'Upload failed'; }).catch(function(){ st.textContent='Uploading a document needs internet.'; }); }; fr.readAsDataURL(f); }); }; }
+    [].forEach.call(files,function(f){ if(f.size>4*1024*1024){ toast(f.name+' too large (max 4MB)',true); return; }
+      mdPending++; mdSaveState();
+      var fr=new FileReader(); fr.onload=function(){ var s=fr.result,i=s.indexOf(',');
+        API.uploadFile({base64:s.slice(i+1),mimeType:f.type,fileName:f.name,subPath:'EmployeeDocs'}).then(function(r){
+          mdPending--; mdSaveState();
+          if(r.ok){ if(multi){ window._myDocs.Edu.push(r.url); st.innerHTML='Uploaded ✓ ('+window._myDocs.Edu.length+')'; } else { window._myDocs[key]=r.url; st.innerHTML='Uploaded ✓ <a href="'+esc(r.url)+'" target="_blank">view</a>'; } }
+          else st.textContent=r.error||'Upload failed';
+        }, function(){ mdPending--; mdSaveState(); st.textContent='Uploading a document needs internet.'; });
+      }; fr.readAsDataURL(f);
+    });
+  }; }
   ['Aadhaar','Pan','DL','LightBill'].forEach(function(k){ bind(k,false); }); bind('Edu',true);
   $('mdSaveBtn').addEventListener('click', function(){
+    if(mdPending>0){ toast('Still uploading — wait for "Uploaded ✓" on every file before saving.',true); return; }
     var b=$('mdSaveBtn'); b.disabled=true; b.innerHTML='<span class="loader"></span> Saving…';
     var dc=window._myDocs||{};
     API.updateEmployee(S.user.EmpID, {AadhaarUrl:dc.Aadhaar||'',PanUrl:dc.Pan||'',DLUrl:dc.DL||'',LightBillUrl:dc.LightBill||'',EduDocsUrl:(dc.Edu||[]).join(',')}).then(function(r){
