@@ -787,7 +787,12 @@ function loadProfile(){
       API.updateEmployee(S.user.EmpID, data).then(function(r){ toast(r.ok?(r.offline?'Saved on device — will sync':'Profile updated'):(r.error||'Error'), !r.ok); b.disabled=false; b.textContent='Save my details'; });
     });
     $('changePwBtn').addEventListener('click', openChangePwModal);
-    $('docUpBtn').addEventListener('click', function(){ openMyDocsModal(e); });
+    $('docUpBtn').addEventListener('click', function(){
+      // Always re-fetch fresh before opening — reusing the page-load snapshot would show stale (pre-save) values
+      // if this is opened a second time in the same session, e.g. right after a save.
+      var b=$('docUpBtn'); b.disabled=true; var t0=b.textContent; b.textContent='Loading…';
+      API.getEmployee(S.user.EmpID).then(function(r2){ b.disabled=false; b.textContent=t0; openMyDocsModal((r2&&r2.ok)?r2.employee:e); });
+    });
   });
 }
 // Self-service document upload — same fields HR sees in the staff edit form (Documents section), so once an
