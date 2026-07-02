@@ -608,6 +608,9 @@ function openEmpModal(empId){
       sel('Pay / visit type','f_PayType',['Fixed salary','Per km','Per visit'],e.PayType)+
       fld('Per-km rate (₹)','f_PerKmRate',e.PerKmRate,'number')+fld('Per-visit rate (₹)','f_PerVisitRate',e.PerVisitRate,'number')+
       '<div class="field full"><label>KRA (key responsibilities)</label><textarea id="f_KRA" rows="2">'+esc(e.KRA||'')+'</textarea></div>'+
+      (['SUPER','HR_ADMIN'].indexOf(S.perms.level)>=0 ?
+        '<div class="field full" style="display:flex;align-items:center;gap:8px;margin-top:4px"><input type="checkbox" id="f_AttApproveDenied" style="width:16px;height:16px" '+(String(e.AttApproveDenied)==='yes'?'checked':'')+'><label for="f_AttApproveDenied" style="margin:0;font-size:13px">Remove attendance-approval authority (even if their role normally grants it)</label></div>'
+        : '')+
       '<div class="section-title full">Documents (upload)</div>'+
       docFieldRow('Aadhaar card','Aadhaar',e.AadhaarUrl,'up')+docFieldRow('PAN card','Pan',e.PanUrl,'up')+docFieldRow('Driving licence (if applicable)','DL',e.DLUrl,'up')+docFieldRow('Light bill','LightBill',e.LightBillUrl,'up')+
       '<div class="field full"><label>Education documents (multiple)</label><div id="upEduList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px">'+eduArr.map(function(u,i){return '<a href="'+esc(u)+'" target="_blank" style="font-size:13px;color:#185FA5;text-decoration:none">📄 Education document '+(i+1)+'</a>';}).join('')+'</div><input type="file" id="up_Edu" multiple accept="image/*,application/pdf"></div>'
@@ -721,7 +724,8 @@ function saveEmp(empId, manage){
   var data={ Phone:val('f_Phone'),Email:val('f_Email'),Gender:val('f_Gender'),DOB:val('f_DOB'),Address:val('f_Address'),EmergencyName:val('f_EmergencyName'),EmergencyPhone:val('f_EmergencyPhone') };
   if(manage){ data.FullName=val('f_FullName'); data.Role=val('f_Role'); data.JoiningDate=val('f_JoiningDate'); data.ReportsTo=val('f_ReportsTo'); var bs=$('f_Branch'); if(bs) data.Branch=bs.value;
     ['FatherName','FatherPhone','MotherName','MotherPhone','SpouseName','SpousePhone','Anniversary','BankPrefix','IFSC','AccountNo','DutyStart','DutyEnd','AltDutyStart','AltDutyEnd','BasicSalary','AttendanceMode','SundayWork','SundayHours','PayType','PerKmRate','PerVisitRate','KRA'].forEach(function(f){ var v=val('f_'+f); if(v!==undefined) data[f]=v; });
-    var dc=window._empDocs||{}; data.AadhaarUrl=dc.Aadhaar||''; data.PanUrl=dc.Pan||''; data.DLUrl=dc.DL||''; data.LightBillUrl=dc.LightBill||''; data.EduDocsUrl=(dc.Edu||[]).join(','); }
+    var dc=window._empDocs||{}; data.AadhaarUrl=dc.Aadhaar||''; data.PanUrl=dc.Pan||''; data.DLUrl=dc.DL||''; data.LightBillUrl=dc.LightBill||''; data.EduDocsUrl=(dc.Edu||[]).join(',');
+    var adCb=$('f_AttApproveDenied'); if(adCb) data.AttApproveDenied=adCb.checked?'yes':''; }
   if(manage && !data.FullName){ toast('Full name is required.',true); return; }
   if(manage && !data.Role){ toast('Role is required.',true); return; }
   var b=$('saveEmpBtn'); b.disabled=true; b.innerHTML='<span class="loader"></span> Saving…';

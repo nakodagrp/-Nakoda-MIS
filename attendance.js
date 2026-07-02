@@ -12,7 +12,7 @@
   // Sheets time cells arrive as ISO strings like "1899-12-30T06:38:50.000Z" — extract HH:MM only
   function fmtDutyTime(t){ if(!t) return ''; var s=String(t); var m=s.match(/T(\d{2}):(\d{2})/); if(m) return m[1]+':'+m[2]; return s; }
   function dayBadge(st){ var m={present:['Full day','#eaf7ef','#1a8f4c'],half:['Half day','#faeeda','#854F0B'],leave:['Leave','#e9f1fb','#185FA5'],absent:['Absent','#fdecec','#b23b3b']}; var b=m[String(st||'present')]||m.present; return ' <span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:'+b[1]+';color:'+b[2]+'">'+b[0]+'</span>'; }
-  function canApprove(){ var p=S.perms||{}; return p.level==='SUPER'||p.level==='HR_ADMIN'||p.level==='BRANCH_MGR'||(S.user&&S.user.Role==='Operations Manager'); }
+  function canApprove(){ if(S.user&&String(S.user.AttApproveDenied)==='yes') return false; var p=S.perms||{}; return p.level==='SUPER'||p.level==='HR_ADMIN'||p.level==='BRANCH_MGR'||(S.user&&S.user.Role==='Operations Manager'); }
   function todayRec(){ var t=todayS(); return (ATT.recs||[]).filter(function(r){return String(r.date)===t;})[0]; }
 
   function renderAttendance(){
@@ -157,21 +157,23 @@
     if(m) return 'https://drive.google.com/thumbnail?id='+m[1]+'&sz=w200-h200';
     return url;
   }
-  var _approveCache={ts:0,recs:null,date:null};
-  function chip(bg,fg,letter,n,statusKey){
+  var _approveCache={ts:0,recs:null,date:null,activeStaff:0};
+  function chip(bg,fg,letter,n,statusKey,clickable){
     var active=(ATT.apFilter===statusKey);
-    return '<span data-f="'+esc(statusKey)+'" style="cursor:pointer;font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:'+bg+';color:'+fg+';'+(active?'box-shadow:0 0 0 2px '+fg+';':'')+'" title="Tap to show only '+esc(letter)+'">'+esc(letter)+' '+n+'</span>';
+    return '<span'+(clickable?' data-f="'+esc(statusKey)+'"':'')+' style="'+(clickable?'cursor:pointer;':'')+'font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:'+bg+';color:'+fg+';'+(active?'box-shadow:0 0 0 2px '+fg+';':'')+'" title="'+(clickable?('Tap to show only '+esc(letter)):(esc(letter)+' = active staff minus Full day and Half day — staff with no punch today (on leave, absent, or not yet checked in)'))+'">'+esc(letter)+' '+n+'</span>';
   }
   function renderApSummary(recs){
     var box=$id('attApSummary'); if(!box) return;
     var c={present:0,half:0,leave:0,absent:0};
     (recs||[]).forEach(function(r){ var s=String(r.status||'present'); if(c[s]!==undefined) c[s]++; else c.present++; });
-    // Compact P / H / L (/ A) chips shown right beside the "Approve — today" header — tap one to filter the list below to just that status
+    // L = active staff in scope minus (Full day + Half day) — anyone with no punch today at all, not just explicit "leave" records
+    var activeStaff=_approveCache.activeStaff||0;
+    var leaveCount=Math.max(0, activeStaff-c.present-c.half);
     box.innerHTML='<span style="display:inline-flex;gap:6px;flex-wrap:wrap">'+
-      chip('#eaf7ef','#1a8f4c','P',c.present,'present')+
-      chip('#faeeda','#854F0B','H',c.half,'half')+
-      chip('#e9f1fb','#185FA5','L',c.leave,'leave')+
-      (c.absent?chip('#fdecec','#b23b3b','A',c.absent,'absent'):'')+
+      chip('#eaf7ef','#1a8f4c','P',c.present,'present',true)+
+      chip('#faeeda','#854F0B','H',c.half,'half',true)+
+      chip('#e9f1fb','#185FA5','L',leaveCount,'leave',false)+
+      (c.absent?chip('#fdecec','#b23b3b','A',c.absent,'absent',true):'')+
       '</span>';
     box.querySelectorAll('[data-f]').forEach(function(s){
       s.onclick=function(){
@@ -250,7 +252,7 @@
     API.listAttendance('',date).then(function(r){
       if(!r||!r.ok){ box.innerHTML='<div class="empty">'+esc((r&&r.error)||'')+'</div>'; return; }
       var recs=(r.records||[]).slice().sort(function(a,b){ var ta=String(a.checkIn||''),tb=String(b.checkIn||''); return tb>ta?1:tb<ta?-1:0; });
-      _approveCache={ts:Date.now(), recs:recs, date:date};
+      _approveCache={ts:Date.now(), recs:recs, date:date, activeStaff:r.activeStaff||0};
       renderApproveRecs(recs);
     }).catch(function(){ if(box) box.innerHTML='<div class="empty">Connect to load attendance for this date.</div>'; });
   }
