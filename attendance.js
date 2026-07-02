@@ -91,10 +91,22 @@
   function geoThen(kind){
     if(!navigator.geolocation){ toast('Location not supported on this device.',true); return; }
     toast('Getting your location…');
+    // An installed PWA (tap "Installed" / opened from the home-screen icon) runs as its OWN Android app —
+    // granting location to "Chrome" does NOT grant it to this installed app. Different fix, so give different guidance.
+    var installed=(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone===true;
     navigator.geolocation.getCurrentPosition(function(pos){          // always capture location in every mode (so the approval card can show the address)
       ATT.coords={lat:pos.coords.latitude, lng:pos.coords.longitude};
       if(needSelfie()){ captureSelfie(function(b64){ submitMark(kind,b64); }); } else submitMark(kind,null);
-    }, function(err){ var msg=(!err||err.code===1)?'Location blocked — go to phone Settings → Apps → Chrome/Browser → Permissions → Location → Allow.':err.code===3?'Location timed out. Move to open area and try again.':'Location unavailable. Please try again.'; toast(msg,true); }, {enableHighAccuracy:true, timeout:15000});
+    }, function(err){
+      var msg;
+      if(!err||err.code===1){
+        msg = installed
+          ? 'Location blocked. This installed app has its own Android permission — go to phone Settings → Apps → find this app by its own name/icon (not "Chrome") → Permissions → Location → Allow. Also check your phone\'s Location/GPS toggle is ON.'
+          : 'Location blocked — go to phone Settings → Apps → Chrome/Browser → Permissions → Location → Allow. Also check your phone\'s Location/GPS toggle is ON.';
+      } else if(err.code===3){ msg='Location timed out. Move to open area and try again.'; }
+      else { msg='Location unavailable. Please try again.'; }
+      toast(msg,true);
+    }, {enableHighAccuracy:true, timeout:15000});
   }
   function doMark(kind){
     ATT.kind=kind; ATT.outRemark='';   // under 4 hours auto-marks half day on the server — no reason prompt

@@ -610,7 +610,7 @@ function openEmpModal(empId){
       fld('Per-km rate (₹)','f_PerKmRate',e.PerKmRate,'number')+fld('Per-visit rate (₹)','f_PerVisitRate',e.PerVisitRate,'number')+
       '<div class="field full"><label>KRA (key responsibilities)</label><textarea id="f_KRA" rows="2">'+esc(e.KRA||'')+'</textarea></div>'+
       '<div class="section-title full">Documents (upload)</div>'+
-      docRow('Aadhaar card','Aadhaar',e.AadhaarUrl)+docRow('PAN card','Pan',e.PanUrl)+docRow('Driving licence','DL',e.DLUrl)+docRow('Light bill','LightBill',e.LightBillUrl)+
+      docRow('Aadhaar card','Aadhaar',e.AadhaarUrl)+docRow('PAN card','Pan',e.PanUrl)+docRow('Driving licence (if applicable)','DL',e.DLUrl)+docRow('Light bill','LightBill',e.LightBillUrl)+
       '<div class="field full"><label>Education documents (multiple)</label><input type="file" id="up_Edu" multiple accept="image/*,application/pdf"><div id="st_Edu" class="upst" style="font-size:12px;color:#666;margin-top:4px">'+(eduArr.length?('Uploaded ✓ ('+eduArr.length+')'):'')+'</div></div>'
     ):'';
     var body='<div class="grid2">'+
@@ -738,6 +738,7 @@ function loadProfile(){
     '</div><div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">'+
       '<button class="btn" id="saveProfileBtn">Save my details</button>'+
       '<button class="btn ghost" id="changePwBtn">Change password</button>'+
+      '<button class="btn ghost" id="docUpBtn">📎 Upload documents</button>'+
       '<button class="btn ghost" id="updBtn" title="Clear cache and load the latest version">↻ Check for updates</button></div>'+
       '<div class="card" style="margin-top:14px"><div class="section-label" style="margin-top:0">My responsibility</div><div style="font-size:13px;white-space:pre-wrap;color:#444">'+(e.KRA?esc(e.KRA):'<span class="muted">No responsibilities set yet — ask HR to fill your KRA.</span>')+'</div></div>'+
       '<div class="card" style="margin-top:14px"><div class="section-label" style="margin-top:0">My key performance index · this month</div><div id="myKpi"><div class="muted" style="font-size:12px">Loading…</div></div></div>'+
@@ -776,6 +777,31 @@ function loadProfile(){
       API.updateEmployee(S.user.EmpID, data).then(function(r){ toast(r.ok?(r.offline?'Saved on device — will sync':'Profile updated'):(r.error||'Error'), !r.ok); b.disabled=false; b.textContent='Save my details'; });
     });
     $('changePwBtn').addEventListener('click', openChangePwModal);
+    $('docUpBtn').addEventListener('click', function(){ openMyDocsModal(e); });
+  });
+}
+// Self-service document upload — same fields HR sees in the staff edit form (Documents section), so once an
+// employee uploads their own KYC docs here, they show up automatically for HR without any extra step.
+function openMyDocsModal(e){
+  var eduArr=e.EduDocsUrl?String(e.EduDocsUrl).split(',').filter(Boolean):[];
+  window._myDocs={Aadhaar:e.AadhaarUrl||'',Pan:e.PanUrl||'',DL:e.DLUrl||'',LightBill:e.LightBillUrl||'',Edu:eduArr.slice()};
+  function row(lbl,key,url){ return '<div class="field full"><label>'+lbl+'</label><input type="file" id="md_'+key+'" accept="image/*,application/pdf"><div id="mdst_'+key+'" class="upst" style="font-size:12px;color:#666;margin-top:4px">'+(url?('Uploaded ✓ <a href="'+esc(url)+'" target="_blank">view</a>'):'')+'</div></div>'; }
+  var body='<div class="grid2">'+
+    row('Aadhaar card','Aadhaar',e.AadhaarUrl)+row('PAN card','Pan',e.PanUrl)+row('Driving licence (if applicable)','DL',e.DLUrl)+row('Light bill','LightBill',e.LightBillUrl)+
+    '<div class="field full"><label>Education documents (multiple)</label><input type="file" id="md_Edu" multiple accept="image/*,application/pdf"><div id="mdst_Edu" class="upst" style="font-size:12px;color:#666;margin-top:4px">'+(eduArr.length?('Uploaded ✓ ('+eduArr.length+')'):'')+'</div></div>'+
+  '</div><div id="mdMsg"></div>';
+  openModal('Upload my documents', body, '<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="mdSaveBtn">Save documents</button>');
+  function bind(key,multi){ var inp=$('md_'+key); if(!inp) return; inp.onchange=function(){ var files=inp.files; if(!files||!files.length) return; var st=$('mdst_'+key); st.textContent='Uploading…';
+    [].forEach.call(files,function(f){ if(f.size>4*1024*1024){ toast(f.name+' too large (max 4MB)',true); return; } var fr=new FileReader(); fr.onload=function(){ var s=fr.result,i=s.indexOf(',');
+      API.uploadFile({base64:s.slice(i+1),mimeType:f.type,fileName:f.name,subPath:'EmployeeDocs'}).then(function(r){ if(r.ok){ if(multi){ window._myDocs.Edu.push(r.url); st.innerHTML='Uploaded ✓ ('+window._myDocs.Edu.length+')'; } else { window._myDocs[key]=r.url; st.innerHTML='Uploaded ✓ <a href="'+esc(r.url)+'" target="_blank">view</a>'; } } else st.textContent=r.error||'Upload failed'; }).catch(function(){ st.textContent='Uploading a document needs internet.'; }); }; fr.readAsDataURL(f); }); }; }
+  ['Aadhaar','Pan','DL','LightBill'].forEach(function(k){ bind(k,false); }); bind('Edu',true);
+  $('mdSaveBtn').addEventListener('click', function(){
+    var b=$('mdSaveBtn'); b.disabled=true; b.innerHTML='<span class="loader"></span> Saving…';
+    var dc=window._myDocs||{};
+    API.updateEmployee(S.user.EmpID, {AadhaarUrl:dc.Aadhaar||'',PanUrl:dc.Pan||'',DLUrl:dc.DL||'',LightBillUrl:dc.LightBill||'',EduDocsUrl:(dc.Edu||[]).join(',')}).then(function(r){
+      if(r&&r.ok){ closeModal(); toast(r.offline?'Saved on device — will sync':'Documents saved'); }
+      else { $('mdMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; b.disabled=false; b.textContent='Save documents'; }
+    });
   });
 }
 function openChangePwModal(){
