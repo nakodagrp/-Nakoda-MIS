@@ -588,7 +588,6 @@ function openEmpModal(empId){
     var joinField=manage?'<div class="field"><label>Joining date</label><input id="f_JoiningDate" type="date" value="'+esc(e.JoiningDate||'')+'"></div>':'';
     function fld(lbl,id,v,t){ return '<div class="field"><label>'+lbl+'</label><input id="'+id+'"'+(t?(' type="'+t+'"'):'')+' value="'+esc(v||'')+'"></div>'; }
     function sel(lbl,id,arr,v){ return '<div class="field"><label>'+lbl+'</label><select id="'+id+'"><option value=""></option>'+arr.map(function(o){return '<option'+(String(o)===String(v)?' selected':'')+'>'+esc(o)+'</option>';}).join('')+'</select></div>'; }
-    function docRow(lbl,key,url){ return '<div class="field full"><label>'+lbl+'</label><input type="file" id="up_'+key+'" accept="image/*,application/pdf"><div id="st_'+key+'" class="upst" style="font-size:12px;color:#666;margin-top:4px">'+(url?('Uploaded ✓ <a href="'+esc(url)+'" target="_blank">view</a>'):'')+'</div></div>'; }
     var eduArr=e.EduDocsUrl?String(e.EduDocsUrl).split(',').filter(Boolean):[];
     window._empDocs={Aadhaar:e.AadhaarUrl||'',Pan:e.PanUrl||'',DL:e.DLUrl||'',LightBill:e.LightBillUrl||'',Edu:eduArr.slice()};
     var extBlock=manage?(
@@ -610,8 +609,8 @@ function openEmpModal(empId){
       fld('Per-km rate (₹)','f_PerKmRate',e.PerKmRate,'number')+fld('Per-visit rate (₹)','f_PerVisitRate',e.PerVisitRate,'number')+
       '<div class="field full"><label>KRA (key responsibilities)</label><textarea id="f_KRA" rows="2">'+esc(e.KRA||'')+'</textarea></div>'+
       '<div class="section-title full">Documents (upload)</div>'+
-      docRow('Aadhaar card','Aadhaar',e.AadhaarUrl)+docRow('PAN card','Pan',e.PanUrl)+docRow('Driving licence (if applicable)','DL',e.DLUrl)+docRow('Light bill','LightBill',e.LightBillUrl)+
-      '<div class="field full"><label>Education documents (multiple)</label><input type="file" id="up_Edu" multiple accept="image/*,application/pdf"><div id="st_Edu" class="upst" style="font-size:12px;color:#666;margin-top:4px">'+(eduArr.length?('Uploaded ✓ ('+eduArr.length+')'):'')+'</div></div>'
+      docFieldRow('Aadhaar card','Aadhaar',e.AadhaarUrl,'up')+docFieldRow('PAN card','Pan',e.PanUrl,'up')+docFieldRow('Driving licence (if applicable)','DL',e.DLUrl,'up')+docFieldRow('Light bill','LightBill',e.LightBillUrl,'up')+
+      '<div class="field full"><label>Education documents (multiple)</label><div id="upEduList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px">'+eduArr.map(function(u,i){return '<a href="'+esc(u)+'" target="_blank" style="font-size:13px;color:#185FA5;text-decoration:none">📄 Education document '+(i+1)+'</a>';}).join('')+'</div><input type="file" id="up_Edu" multiple accept="image/*,application/pdf"></div>'
     ):'';
     var body='<div class="grid2">'+
       '<div class="section-title full">Basic details</div>'+nameField+joinField+
@@ -635,19 +634,13 @@ function openEmpModal(empId){
     if(S.perms.level==='BRANCH_MGR'){ var bs=$('f_Branch'); if(bs){ bs.value=S.perms.branch; bs.disabled=true; } }
     var empDocsPending=0;
     function empDocsSaveState(){ var b=$('saveEmpBtn'); if(!b) return; b.disabled=empDocsPending>0; if(empDocsPending>0) b.textContent='Uploading… ('+empDocsPending+') — please wait'; else b.textContent=editing?'Save changes':'Create staff'; }
-    function bindUp(key,multi){ var inp=$('up_'+key); if(!inp) return; inp.onchange=function(){ var files=inp.files; if(!files||!files.length) return; var st=$('st_'+key); st.textContent='Uploading…';
-      [].forEach.call(files,function(f){ if(f.size>4*1024*1024){ toast(f.name+' too large (max 4MB)',true); return; }
-        empDocsPending++; empDocsSaveState();
-        var fr=new FileReader(); fr.onload=function(){ var s=fr.result,i=s.indexOf(',');
-          API.uploadFile({base64:s.slice(i+1),mimeType:f.type,fileName:f.name,subPath:'EmployeeDocs'}).then(function(r){
-            empDocsPending--; empDocsSaveState();
-            if(r.ok){ if(multi){ window._empDocs.Edu.push(r.url); st.innerHTML='Uploaded ✓ ('+window._empDocs.Edu.length+')'; } else { window._empDocs[key]=r.url; st.innerHTML='Uploaded ✓ <a href="'+esc(r.url)+'" target="_blank">view</a>'; } }
-            else st.textContent=r.error||'Upload failed';
-          }, function(){ empDocsPending--; empDocsSaveState(); st.textContent='Uploading a document needs internet.'; });
-        }; fr.readAsDataURL(f);
-      }); }; }
-    ['Aadhaar','Pan','DL','LightBill'].forEach(function(k){ bindUp(k,false); }); bindUp('Edu',true);
-    $('saveEmpBtn').addEventListener('click', function(){ if(empDocsPending>0){ toast('Still uploading — wait for "Uploaded ✓" on every file before saving.',true); return; } saveEmp(editing?e.EmpID:null, manage); });
+    function empDocDone(key,url,name){
+      if(key==='Edu'){ window._empDocs.Edu.push(url); var list=$('upEduList'); if(list) list.insertAdjacentHTML('beforeend','<a href="'+esc(url)+'" target="_blank" style="font-size:13px;color:#185FA5;text-decoration:none">📄 '+esc(name)+'</a>'); }
+      else window._empDocs[key]=url;
+    }
+    ['Aadhaar','Pan','DL','LightBill'].forEach(function(k){ bindDocField('up',k,false,empDocDone,function(d){ empDocsPending+=d; empDocsSaveState(); }); });
+    bindDocField('up','Edu',true,empDocDone,function(d){ empDocsPending+=d; empDocsSaveState(); });
+    $('saveEmpBtn').addEventListener('click', function(){ if(empDocsPending>0){ toast('Still uploading — wait for uploads to finish before saving.',true); return; } saveEmp(editing?e.EmpID:null, manage); });
   }
   if(editing){ API.getEmployee(empId).then(function(r){ if(r.ok) build(r.employee); else toast(r.error,true); }); } else { build(null); }
 }
@@ -676,6 +669,52 @@ function downloadEmpFormPdf(){
     x.fillStyle='#888'; x.font='italic 13px Arial'; x.textAlign='center'; x.fillText('Fill & attach documents · submit to HR · Nakoda Diagnostics And Research Center', W/2, H-40); x.textAlign='left';
     c.toBlob(function(b){ var u=URL.createObjectURL(b); var a=document.createElement('a'); a.href=u; a.download='Employee-Form.png'; a.click(); setTimeout(function(){URL.revokeObjectURL(u);},2000); toast('Employee form saved'); });
   }
+}
+/* ---------- Shared document-upload field: once a file is uploaded, the "Choose File" input disappears and is
+   replaced by a clickable document name (opens the file); a small "Replace" link swaps the picker back in. ---------- */
+function docFieldRow(lbl,key,url,idPrefix){
+  return '<div class="field full"><label>'+lbl+'</label><div id="'+idPrefix+'wrap_'+key+'">'+
+    (url?docFieldUploadedHtml(url,null,key,idPrefix):('<input type="file" id="'+idPrefix+'_'+key+'" accept="image/*,application/pdf">'))+
+  '</div></div>';
+}
+function docFieldUploadedHtml(url,name,key,idPrefix){
+  return '<div style="display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:#f9fafb">'+
+    '<a href="'+esc(url)+'" target="_blank" style="flex:1;font-size:13px;color:#185FA5;text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📄 '+esc(name||'Document uploaded — tap to view')+'</a>'+
+    '<span data-replace="'+key+'" style="font-size:12px;color:#888;text-decoration:underline;cursor:pointer;flex-shrink:0">Replace</span>'+
+  '</div>';
+}
+/* Wires one document field: attaches the file input's change handler (uploads, then swaps the row to the
+   "uploaded" view) and the Replace link (swaps back to a fresh file input). `onDone(key,url)` is called with
+   the new URL once a file finishes uploading so the caller can update its own state object. */
+function bindDocField(idPrefix, key, multi, onDone, onPendingChange){
+  function wireInput(){
+    var inp=$(idPrefix+'_'+key); if(!inp) return;
+    inp.onchange=function(){
+      var files=inp.files; if(!files||!files.length) return;
+      [].forEach.call(files,function(f){
+        if(f.size>4*1024*1024){ toast(f.name+' too large (max 4MB)',true); return; }
+        if(onPendingChange) onPendingChange(1);
+        var wrap=$(idPrefix+'wrap_'+key); if(wrap && !multi) wrap.innerHTML='<div class="upst" style="font-size:12px;color:#666">Uploading '+esc(f.name)+'…</div>';
+        var fr=new FileReader(); fr.onload=function(){ var s=fr.result,i=s.indexOf(',');
+          API.uploadFile({base64:s.slice(i+1),mimeType:f.type,fileName:f.name,subPath:'EmployeeDocs'}).then(function(r){
+            if(onPendingChange) onPendingChange(-1);
+            if(r.ok){
+              onDone(key,r.url,f.name);
+              if(!multi){ var w=$(idPrefix+'wrap_'+key); if(w) w.innerHTML=docFieldUploadedHtml(r.url,f.name,key,idPrefix); wireReplace(); }
+            } else { var w2=$(idPrefix+'wrap_'+key); if(w2) w2.innerHTML='<div class="upst" style="font-size:12px;color:#b23b3b">'+esc(r.error||'Upload failed')+'</div><input type="file" id="'+idPrefix+'_'+key+'" accept="image/*,application/pdf">'; wireInput(); }
+          }, function(){
+            if(onPendingChange) onPendingChange(-1);
+            var w3=$(idPrefix+'wrap_'+key); if(w3) w3.innerHTML='<div class="upst" style="font-size:12px;color:#b23b3b">Uploading a document needs internet.</div><input type="file" id="'+idPrefix+'_'+key+'" accept="image/*,application/pdf">'; wireInput();
+          });
+        }; fr.readAsDataURL(f);
+      });
+    };
+  }
+  function wireReplace(){
+    var link=document.querySelector('[data-replace="'+key+'"]'); if(!link) return;
+    link.onclick=function(){ var w=$(idPrefix+'wrap_'+key); if(w){ w.innerHTML='<input type="file" id="'+idPrefix+'_'+key+'" accept="image/*,application/pdf">'; } wireInput(); };
+  }
+  wireInput(); wireReplace();
 }
 function val(id){ var e=$(id); return e?e.value.trim():undefined; }
 function saveEmp(empId, manage){
@@ -800,30 +839,22 @@ function loadProfile(){
 function openMyDocsModal(e){
   var eduArr=e.EduDocsUrl?String(e.EduDocsUrl).split(',').filter(Boolean):[];
   window._myDocs={Aadhaar:e.AadhaarUrl||'',Pan:e.PanUrl||'',DL:e.DLUrl||'',LightBill:e.LightBillUrl||'',Edu:eduArr.slice()};
-  function row(lbl,key,url){ return '<div class="field full"><label>'+lbl+'</label><input type="file" id="md_'+key+'" accept="image/*,application/pdf"><div id="mdst_'+key+'" class="upst" style="font-size:12px;color:#666;margin-top:4px">'+(url?('Uploaded ✓ <a href="'+esc(url)+'" target="_blank">view</a>'):'')+'</div></div>'; }
   var body='<div class="grid2">'+
-    row('Aadhaar card','Aadhaar',e.AadhaarUrl)+row('PAN card','Pan',e.PanUrl)+row('Driving licence (if applicable)','DL',e.DLUrl)+row('Light bill','LightBill',e.LightBillUrl)+
-    '<div class="field full"><label>Education documents (multiple)</label><input type="file" id="md_Edu" multiple accept="image/*,application/pdf"><div id="mdst_Edu" class="upst" style="font-size:12px;color:#666;margin-top:4px">'+(eduArr.length?('Uploaded ✓ ('+eduArr.length+')'):'')+'</div></div>'+
+    docFieldRow('Aadhaar card','Aadhaar',e.AadhaarUrl,'md')+docFieldRow('PAN card','Pan',e.PanUrl,'md')+docFieldRow('Driving licence (if applicable)','DL',e.DLUrl,'md')+docFieldRow('Light bill','LightBill',e.LightBillUrl,'md')+
+    '<div class="field full"><label>Education documents (multiple)</label><div id="mdEduList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px">'+eduArr.map(function(u,i){return '<a href="'+esc(u)+'" target="_blank" style="font-size:13px;color:#185FA5;text-decoration:none">📄 Education document '+(i+1)+'</a>';}).join('')+'</div><input type="file" id="md_Edu" multiple accept="image/*,application/pdf"></div>'+
   '</div><div id="mdMsg"></div>';
   openModal('Upload my documents', body, '<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="mdSaveBtn">Save documents</button>');
   // Track uploads still in flight so Save can't fire (or silently overwrite a field with '') before a pick has finished linking its Drive URL.
   var mdPending=0;
   function mdSaveState(){ var b=$('mdSaveBtn'); if(!b) return; b.disabled=mdPending>0; b.textContent=mdPending>0?('Uploading… ('+mdPending+') — please wait'):'Save documents'; }
-  function bind(key,multi){ var inp=$('md_'+key); if(!inp) return; inp.onchange=function(){ var files=inp.files; if(!files||!files.length) return; var st=$('mdst_'+key); st.textContent='Uploading…';
-    [].forEach.call(files,function(f){ if(f.size>4*1024*1024){ toast(f.name+' too large (max 4MB)',true); return; }
-      mdPending++; mdSaveState();
-      var fr=new FileReader(); fr.onload=function(){ var s=fr.result,i=s.indexOf(',');
-        API.uploadFile({base64:s.slice(i+1),mimeType:f.type,fileName:f.name,subPath:'EmployeeDocs'}).then(function(r){
-          mdPending--; mdSaveState();
-          if(r.ok){ if(multi){ window._myDocs.Edu.push(r.url); st.innerHTML='Uploaded ✓ ('+window._myDocs.Edu.length+')'; } else { window._myDocs[key]=r.url; st.innerHTML='Uploaded ✓ <a href="'+esc(r.url)+'" target="_blank">view</a>'; } }
-          else st.textContent=r.error||'Upload failed';
-        }, function(){ mdPending--; mdSaveState(); st.textContent='Uploading a document needs internet.'; });
-      }; fr.readAsDataURL(f);
-    });
-  }; }
-  ['Aadhaar','Pan','DL','LightBill'].forEach(function(k){ bind(k,false); }); bind('Edu',true);
+  function mdDocDone(key,url,name){
+    if(key==='Edu'){ window._myDocs.Edu.push(url); var list=$('mdEduList'); if(list) list.insertAdjacentHTML('beforeend','<a href="'+esc(url)+'" target="_blank" style="font-size:13px;color:#185FA5;text-decoration:none">📄 '+esc(name)+'</a>'); }
+    else window._myDocs[key]=url;
+  }
+  ['Aadhaar','Pan','DL','LightBill'].forEach(function(k){ bindDocField('md',k,false,mdDocDone,function(d){ mdPending+=d; mdSaveState(); }); });
+  bindDocField('md','Edu',true,mdDocDone,function(d){ mdPending+=d; mdSaveState(); });
   $('mdSaveBtn').addEventListener('click', function(){
-    if(mdPending>0){ toast('Still uploading — wait for "Uploaded ✓" on every file before saving.',true); return; }
+    if(mdPending>0){ toast('Still uploading — wait for uploads to finish before saving.',true); return; }
     var b=$('mdSaveBtn'); b.disabled=true; b.innerHTML='<span class="loader"></span> Saving…';
     var dc=window._myDocs||{};
     API.updateEmployee(S.user.EmpID, {AadhaarUrl:dc.Aadhaar||'',PanUrl:dc.Pan||'',DLUrl:dc.DL||'',LightBillUrl:dc.LightBill||'',EduDocsUrl:(dc.Edu||[]).join(',')}).then(function(r){
