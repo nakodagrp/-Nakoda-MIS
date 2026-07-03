@@ -27,7 +27,16 @@
         '</div>'+
         '<div id="attApprove"></div>':'')+
       '<div style="height:110px"></div>';   // bottom spacer so the last approve card clears the mobile bottom nav
-    $id('attSelfie').onchange=function(){ var f=this.files[0]; if(!f) return; var fr=new FileReader(); fr.onload=function(){ var s=fr.result,i=s.indexOf(','); submitMark(ATT.kind, s.slice(i+1)); }; fr.readAsDataURL(f); this.value=''; };
+    $id('attSelfie').onchange=function(){
+      var f=this.files[0]; if(!f) return; var fr=new FileReader();
+      fr.onload=function(){
+        resizeDataUrl(fr.result, function(b64){
+          var cb=_pendingSelfieCb; _pendingSelfieCb=null;
+          if(cb) cb(b64); else submitMark(ATT.kind, b64);   // no camera-flow resolver waiting — used standalone
+        });
+      };
+      fr.readAsDataURL(f); this.value='';
+    };
     paintMe();
     API.cachedAttendance().then(function(r){ if(r&&r.records){ ATT.recs=r.records; paintMe(); } });
     API.myAttendance(ymNow()).then(function(r){ if(r&&r.ok){ ATT.recs=r.records||[]; paintMe(); } });
@@ -74,30 +83,61 @@
     return '<div class="att-month"><div class="att-mh">This month</div><div class="att-strip">'+cells+'</div><div class="att-legend">P present · ½ half · L leave · A absent</div></div>';
   }
 
+  // Selfies only need to be big enough to identify someone in an 80x80 thumbnail — shrinking before upload
+  // cuts the payload from a multi-MB camera frame down to well under 100KB, which is most of what made
+  // punch-in/out feel slow on a normal mobile connection.
+  var SELFIE_MAX_DIM=640, SELFIE_QUALITY=0.7;
+  function resizeDataUrl(dataUrl, cb){
+    var img=new Image();
+    img.onload=function(){
+      var scale=Math.min(1, SELFIE_MAX_DIM/Math.max(img.width,img.height));
+      var c=document.createElement('canvas'); c.width=Math.max(1,Math.round(img.width*scale)); c.height=Math.max(1,Math.round(img.height*scale));
+      c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+      var d=c.toDataURL('image/jpeg',SELFIE_QUALITY), i=d.indexOf(',');
+      cb(d.slice(i+1));
+    };
+    img.onerror=function(){ var i=dataUrl.indexOf(','); cb(dataUrl.slice(i+1)); };   // resize failed — send original rather than block the punch
+    img.src=dataUrl;
+  }
+  var _pendingSelfieCb=null;
   function captureSelfie(cb){
-    if(!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){ $id('attSelfie').click(); return; }  // fallback to file/camera input
+    if(!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){ _pendingSelfieCb=cb; $id('attSelfie').click(); return; }  // fallback to file/camera input
     var stream=null;
     openModal('Take selfie','<div style="text-align:center"><video id="camV" autoplay playsinline muted style="width:100%;max-width:320px;border-radius:10px;background:#000"></video><canvas id="camC" style="display:none"></canvas><div style="margin-top:10px"><button class="btn" id="camSnap">\ud83d\udcf8 Capture</button> <button class="btn ghost" id="camCancel">Cancel</button></div></div>','');
     var v=document.getElementById('camV');
-    navigator.mediaDevices.getUserMedia({video:{facingMode:'user'}}).then(function(st){ stream=st; v.srcObject=st; }).catch(function(){ closeModal(); toast('Camera blocked — pick a photo instead.',true); $id('attSelfie').click(); });
+    navigator.mediaDevices.getUserMedia({video:{facingMode:'user'}}).then(function(st){ stream=st; v.srcObject=st; }).catch(function(){ closeModal(); toast('Camera blocked — pick a photo instead.',true); _pendingSelfieCb=cb; $id('attSelfie').click(); });
     function stopCam(){ try{ if(stream) stream.getTracks().forEach(function(t){t.stop();}); }catch(e){} }
-    var snap=document.getElementById('camSnap'); if(snap) snap.onclick=function(){ var c=document.getElementById('camC'); c.width=v.videoWidth||320; c.height=v.videoHeight||240; c.getContext('2d').drawImage(v,0,0,c.width,c.height); var d=c.toDataURL('image/jpeg',0.8),i=d.indexOf(','); stopCam(); closeModal(); cb(d.slice(i+1)); };
+    var snap=document.getElementById('camSnap'); if(snap) snap.onclick=function(){
+      var c=document.getElementById('camC'), vw=v.videoWidth||320, vh=v.videoHeight||240, scale=Math.min(1, SELFIE_MAX_DIM/Math.max(vw,vh));
+      c.width=Math.max(1,Math.round(vw*scale)); c.height=Math.max(1,Math.round(vh*scale));
+      c.getContext('2d').drawImage(v,0,0,c.width,c.height);
+      var d=c.toDataURL('image/jpeg',SELFIE_QUALITY),i=d.indexOf(',');
+      stopCam(); closeModal(); cb(d.slice(i+1));
+    };
     var cancel=document.getElementById('camCancel'); if(cancel) cancel.onclick=function(){ stopCam(); closeModal(); };
   }
   function promptEarlyReason(cb){
     openModal('Leaving early?','<div style="font-size:13px;color:#555;margin-bottom:8px">You’ve worked under 4 hours — this will be marked <b>half day</b> and sent for approval. Please add a reason:</div><textarea id="earlyReason" rows="2" placeholder="e.g. doctor appointment" style="width:100%;border:1px solid #d9d9d9;border-radius:8px;padding:8px;font-size:13px"></textarea>','<button class="btn ghost" onclick="closeModal()">Cancel</button> <button class="btn" id="earlyOk">Confirm check-out</button>');
     var ok=document.getElementById('earlyOk'); if(ok) ok.onclick=function(){ var v=(document.getElementById('earlyReason').value||'').trim(); if(!v){ toast('Please write a reason.',true); return; } closeModal(); cb(v); };
   }
-  function geoThen(kind){
+  // Location and the selfie camera don't depend on each other, so fetch/open them at the same time instead
+  // of waiting for GPS to resolve before even showing the camera — this alone can save several seconds,
+  // especially on a weak signal (enableHighAccuracy can take up to 15s).
+  function getLocation_(){
+    return new Promise(function(resolve,reject){
+      if(!navigator.geolocation){ reject({code:0}); return; }
+      navigator.geolocation.getCurrentPosition(function(pos){ resolve({lat:pos.coords.latitude,lng:pos.coords.longitude}); }, reject, {enableHighAccuracy:true, timeout:15000});
+    });
+  }
+  function startMark(kind){
     if(!navigator.geolocation){ toast('Location not supported on this device.',true); return; }
     toast('Getting your location…');
     // An installed PWA (tap "Installed" / opened from the home-screen icon) runs as its OWN Android app —
     // granting location to "Chrome" does NOT grant it to this installed app. Different fix, so give different guidance.
     var installed=(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone===true;
-    navigator.geolocation.getCurrentPosition(function(pos){          // always capture location in every mode (so the approval card can show the address)
-      ATT.coords={lat:pos.coords.latitude, lng:pos.coords.longitude};
-      if(needSelfie()){ captureSelfie(function(b64){ submitMark(kind,b64); }); } else submitMark(kind,null);
-    }, function(err){
+    var geoP=getLocation_();
+    var selfieP=needSelfie() ? new Promise(function(resolve){ captureSelfie(resolve); }) : Promise.resolve(null);
+    geoP.then(function(loc){ ATT.coords=loc; }).catch(function(err){
       var msg;
       if(!err||err.code===1){
         msg = installed
@@ -106,12 +146,16 @@
       } else if(err.code===3){ msg='Location timed out. Move to open area and try again.'; }
       else { msg='Location unavailable. Please try again.'; }
       toast(msg,true);
-    }, {enableHighAccuracy:true, timeout:15000});
+    });
+    selfieP.then(function(b64){
+      // Wait for location too (usually already done by the time the selfie is captured) before submitting.
+      geoP.then(function(){ submitMark(kind,b64); }, function(){});   // location error already toasted above — don't submit without it
+    });
   }
   function doMark(kind){
     ATT.kind=kind; ATT.outRemark='';   // under 4 hours auto-marks half day on the server — no reason prompt
-    if(kind==='in'){ ATT.altShift=false; maybeAltShiftPrompt(function(){ geoThen(kind); }); }
-    else geoThen(kind);
+    if(kind==='in'){ ATT.altShift=false; maybeAltShiftPrompt(function(){ startMark(kind); }); }
+    else startMark(kind);
   }
   // Two-shift staff (e.g. Angel branch: 8–4 and 12–8): if this employee has an alternate shift configured
   // and they're punching in near its start time, ask which shift they're on today.
@@ -138,11 +182,19 @@
     if(n) n.onclick=function(){ closeModal(); cb(false); };
   }
   function submitMark(kind, selfie){
-    var c=ATT.coords||{}, payload={selfie:selfie, lat:c.lat, lng:c.lng, wfh:!!ATT.wfh, altShift:!!ATT.altShift, remark:(kind==='out'?(ATT.outRemark||''):'')};
+    // PERFORMANCE: the selfie is no longer sent in this call — the row gets written and the response comes
+    // back as soon as the (fast) Sheets write finishes. The photo itself uploads right after, in the
+    // background, via attachSelfie — the user already sees "Checked in/out" before that finishes.
+    var c=ATT.coords||{}, payload={hasSelfie:!!selfie, lat:c.lat, lng:c.lng, wfh:!!ATT.wfh, altShift:!!ATT.altShift, remark:(kind==='out'?(ATT.outRemark||''):'')};
     toast('Marking…');
     var p = kind==='in' ? API.checkIn(payload) : API.checkOut(payload);
     p.then(function(r){
-      if(r&&r.ok){ ATT.wfh=false; toast(kind==='in'?('Checked in '+r.checkIn+(r.late?' (late)':'')):('Checked out '+r.checkOut+(r.half?' · half day':''))); API.myAttendance(ymNow()).then(function(x){ if(x&&x.ok){ ATT.recs=x.records||[]; paintMe(); } }); }
+      if(r&&r.ok){
+        ATT.wfh=false;
+        toast(kind==='in'?('Checked in '+r.checkIn+(r.late?' (late)':'')):('Checked out '+r.checkOut+(r.half?' · half day':'')));
+        API.myAttendance(ymNow()).then(function(x){ if(x&&x.ok){ ATT.recs=x.records||[]; paintMe(); } });
+        if(selfie && r.attId) API.attachSelfie({attId:r.attId, kind:kind, base64:selfie});   // fire-and-forget — queues in the offline outbox automatically if it fails
+      }
       else if(r&&r.wfhPrompt){ promptWfh(r, function(yes){ if(yes){ ATT.wfh=true; submitMark(kind, selfie); } else { ATT.wfh=false; toast('You are not at the centre — '+(kind==='in'?'check-in':'check-out')+' not allowed.',true); } }); }
       else toast((r&&r.error)||'Could not mark — needs internet & location.',true); })
       .catch(function(){ toast('Marking attendance needs an internet connection.',true); });

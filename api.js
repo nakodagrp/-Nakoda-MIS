@@ -53,7 +53,7 @@
     saveDaily:1,verifyDaily:1,rejectDaily:1,addLedger:1,setLedger:1,saveInvoice:1,recordPayment:1,saveBankRows:1,
     saveItem:1,deleteItem:1,saveVendor:1,deleteVendor:1,saveConsumption:1,raiseIndent:1,advanceIndent:1,saveAudit:1,approveAudit:1,
     saveSection:1,deleteSection:1,saveVideo:1,deleteVideo:1,submitQuiz:1,saveAsset:1,deleteAsset:1,
-    login:1,validate:1,logout:1,uploadFile:1,importOldCards:1,
+    login:1,validate:1,logout:1,uploadFile:1,importOldCards:1,attachSelfie:1,
     submitSuggestion:1,replySuggestion:1,saveFixedAsset:1,deleteFixedAsset:1};
   /* Writes that already do their own optimistic queueing inside the method (don't double-queue here). */
   var SELF_QUEUE={createEmployee:1,updateEmployee:1,setStatus:1,issueCard:1,renewCard:1,cancelCard:1,markCardSent:1,markCardActivated:1,
@@ -293,6 +293,10 @@
     deleteField:function(id){ return call('deleteField',{token:getToken(),fieldId:id}); },
     checkIn:function(d){ return call('checkIn',{token:getToken(),data:d}); },
     checkOut:function(d){ return call('checkOut',{token:getToken(),data:d}); },
+    // Fire-and-forget: uploads the selfie after check-in/out already succeeded, so the punch itself
+    // doesn't wait on Drive. If it fails (or the device is offline), it queues in the same outbox as
+    // every other write and retries automatically once back online.
+    attachSelfie:function(d){ return call('attachSelfie',{token:getToken(),attId:d.attId,kind:d.kind,base64:d.base64}); },
     cachedAttendance:function(){ return kvGet('myatt'); },
     myAttendance:function(ym){ return call('myAttendance',{token:getToken(),ym:ym}).then(function(r){ if(r.ok) kvSet('myatt',r); return r; }).catch(function(){ return kvGet('myatt').then(function(x){ return x||{ok:true,records:[],offline:true}; }); }); },
     listAttendance:function(branch,date){ return call('listAttendance',{token:getToken(),branch:branch,date:date}); },
