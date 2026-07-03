@@ -262,12 +262,19 @@
     if(!shown.length){ box.innerHTML='<div class="empty">No '+(ATT.apFilter?(stLabel(ATT.apFilter)+' '):'')+'attendance marked for this date.</div>'; return; }
     box.innerHTML=shown.map(function(a){
       var ap=String(a.approvalStatus)==='approved';
-      // Inline selfie thumbnails — punch-in (IN) and punch-out (OUT) side by side, no PDF link
-      var thumbs='';
-      if(a.selfieInUrl) thumbs+='<div style="text-align:center;display:inline-block;margin-right:10px;vertical-align:top"><img src="'+esc(driveImg(a.selfieInUrl))+'" alt="In" style="width:80px;height:80px;object-fit:cover;border-radius:10px;border:1px solid #ddd;display:block" onerror="this.style.background=\'#f3f4f6\';this.style.border=\'1px dashed #ccc\'"><span style="font-size:10px;font-weight:600;color:#888;letter-spacing:.04em">IN</span></div>';
-      if(a.selfieOutUrl) thumbs+='<div style="text-align:center;display:inline-block;vertical-align:top"><img src="'+esc(driveImg(a.selfieOutUrl))+'" alt="Out" style="width:80px;height:80px;object-fit:cover;border-radius:10px;border:1px solid #ddd;display:block" onerror="this.style.background=\'#f3f4f6\';this.style.border=\'1px dashed #ccc\'"><span style="font-size:10px;font-weight:600;color:#888;letter-spacing:.04em">OUT</span></div>';
-      else if(a.selfieInUrl) thumbs+='<div style="text-align:center;display:inline-block;vertical-align:top"><div style="width:80px;height:80px;border-radius:10px;border:1px dashed #ccc;background:#f9fafb;display:flex;align-items:center;justify-content:center;font-size:10px;color:#aaa;text-align:center">No punch-out yet</div><span style="font-size:10px;font-weight:600;color:#888;letter-spacing:.04em">OUT</span></div>';
-      var selfieBlock=thumbs?('<div style="margin:6px 0">'+thumbs+'</div>'):'';
+      // Inline selfie thumbnails — punch-in (IN) and punch-out (OUT) side by side, no PDF link.
+      // Always render both boxes (with a placeholder when missing) so a missing selfie is visible on
+      // the card instead of the whole row just silently not appearing.
+      var inBox = a.selfieInUrl
+        ? '<img src="'+esc(driveImg(a.selfieInUrl))+'" alt="In" style="width:80px;height:80px;object-fit:cover;border-radius:10px;border:1px solid #ddd;display:block" onerror="this.style.background=\'#f3f4f6\';this.style.border=\'1px dashed #ccc\'">'
+        : '<div style="width:80px;height:80px;border-radius:10px;border:1px dashed #e0a1a1;background:#fdf2f2;display:flex;align-items:center;justify-content:center;font-size:10px;color:#a3271f;text-align:center">No selfie</div>';
+      var outBox;
+      if(a.selfieOutUrl) outBox='<img src="'+esc(driveImg(a.selfieOutUrl))+'" alt="Out" style="width:80px;height:80px;object-fit:cover;border-radius:10px;border:1px solid #ddd;display:block" onerror="this.style.background=\'#f3f4f6\';this.style.border=\'1px dashed #ccc\'">';
+      else if(a.checkOut) outBox='<div style="width:80px;height:80px;border-radius:10px;border:1px dashed #e0a1a1;background:#fdf2f2;display:flex;align-items:center;justify-content:center;font-size:10px;color:#a3271f;text-align:center">No selfie</div>';
+      else outBox='<div style="width:80px;height:80px;border-radius:10px;border:1px dashed #ccc;background:#f9fafb;display:flex;align-items:center;justify-content:center;font-size:10px;color:#aaa;text-align:center">No punch-out yet</div>';
+      var thumbs='<div style="text-align:center;display:inline-block;margin-right:10px;vertical-align:top">'+inBox+'<span style="font-size:10px;font-weight:600;color:#888;letter-spacing:.04em">IN</span></div>'+
+        '<div style="text-align:center;display:inline-block;vertical-align:top">'+outBox+'<span style="font-size:10px;font-weight:600;color:#888;letter-spacing:.04em">OUT</span></div>';
+      var selfieBlock='<div style="margin:6px 0">'+thumbs+'</div>';
       return '<div class="att-row" data-id="'+esc(a.attId)+'" style="align-items:flex-start">'+
         '<div class="att-av" style="margin-top:4px">'+esc(initials(a.empName))+'</div>'+
         '<div class="att-mid" style="flex:1">'+
