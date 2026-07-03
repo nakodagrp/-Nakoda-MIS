@@ -28,6 +28,7 @@
   function obAdd(item){ return tx('outbox','readwrite').then(function(s){ return new Promise(function(res){ var r=s.add(item); r.onsuccess=function(){res(r.result);}; r.onerror=function(){res();}; }); }); }
   function obAll(){ return tx('outbox','readonly').then(function(s){ return new Promise(function(res){ var r=s.getAll(); r.onsuccess=function(){res(r.result||[]);}; r.onerror=function(){res([]);}; }); }); }
   function obDel(id){ return tx('outbox','readwrite').then(function(s){ return new Promise(function(res){ var r=s.delete(id); r.onsuccess=function(){res();}; r.onerror=function(){res();}; }); }); }
+  function obPut(item){ return tx('outbox','readwrite').then(function(s){ return new Promise(function(res){ var r=s.put(item); r.onsuccess=function(){res(r.result);}; r.onerror=function(){res();}; }); }); }
 
   /* ---------- token ---------- */
   function getToken(){ try{ return localStorage.getItem('nk_tok')||''; }catch(e){ return ''; } }
@@ -60,6 +61,10 @@
     createTask:1,updateTask:1,setTaskStatus:1,deleteTask:1,createCalEntry:1,updateCalEntry:1,startInstance:1,advanceStage:1};
   /* Writes that MUST stay online (auth, server-computed, exact-time, bulk). */
   var NOQUEUE={login:1,validate:1,logout:1,changePassword:1,resetPassword:1,checkIn:1,checkOut:1,runPayroll:1,uploadFile:1,importOldCards:1,submitQuiz:1};
+  /* Writes where even a normal server response of {ok:false} (not just a dropped connection) should still
+     be retried — e.g. attachSelfie: a busy check-in window can make the Drive upload fail on the server
+     side without the HTTP call itself throwing, and losing a selfie silently is worse than retrying it. */
+  var RETRY_ON_ERROR={attachSelfie:1};
   function rk(action,payload){ var p=Object.assign({},payload||{}); delete p.token; return 'rc:'+action+':'+JSON.stringify(p); }
   function noTok(payload){ var p=Object.assign({},payload||{}); delete p.token; return p; }
   function enqueue(action,payload){ return obAdd({action:action,payload:noTok(payload),ts:Date.now()}).then(function(){ emit(); return {ok:true,offline:true}; }); }
@@ -71,7 +76,10 @@
       return NET(action,payload).then(function(r){ if(r&&r.ok){ kvSet(rk(action,payload),r); } return r; }).catch(function(){ return readGet(action,payload); });
     }
     if(queueable && !navigator.onLine) return enqueue(action,payload);     /* WRITE offline: save instantly to outbox */
-    if(queueable) return NET(action,payload).catch(function(){ return enqueue(action,payload); });
+    if(queueable) return NET(action,payload).then(function(r){
+      if(r && r.ok===false && RETRY_ON_ERROR[action]) return enqueue(action,payload);
+      return r;
+    }).catch(function(){ return enqueue(action,payload); });
     return NET(action,payload);                      /* self-queued (method handles) or online-only */
   }
 
@@ -449,6 +457,13 @@
         else { payload={}; if(it.action==='createEmployee') payload.data=it.data; if(it.action==='updateEmployee'){ payload.empId=it.empId; payload.data=it.data; } if(it.action==='setStatus'){ payload.empId=it.empId; payload.status=it.status; } }
         payload.token=token;
         return NET(it.action,payload).then(function(r){
+          // attachSelfie: a logical failure (e.g. Drive briefly rejecting the upload) should keep
+          // retrying instead of vanishing — bump an attempt counter and leave it queued until it
+          // succeeds or hits the retry cap, rather than deleting it after one failed retry.
+          if(it.action==='attachSelfie' && r && r.ok===false){
+            var tries=(it.tries||0)+1;
+            if(tries<8) return obPut(Object.assign({},it,{tries:tries})).then(function(){ return next(i+1); });
+          }
           // remove on success OR on a logical (non-network) rejection so the queue never jams
           return obDel(it.id).then(function(){ return next(i+1); });
         }).catch(function(){
