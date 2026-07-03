@@ -212,6 +212,7 @@
       '<div class="field"><label>Amount (₹)</label><input id="exAmt" class="in" type="number"></div>'+
       '<div class="field"><label>Mode</label><select id="exMode" class="in"><option>Cash</option><option>Bank</option><option>UPI</option></select></div>'+
       '<div class="field"><label>Paid to / party</label><input id="exParty" class="in"></div>'+
+      '<div class="field"><label>Bill date</label><input id="exBillDate" class="in" type="date"></div>'+
       '<div class="field"><label>Vendor IFSC (for payout)</label><input id="exIfsc" class="in"></div><div class="field"><label>Vendor A/C</label><input id="exAcct" class="in"></div>'+
       '<div class="field full"><label>Attach bill (photo/PDF)</label><input type="file" id="exBill" accept="image/*,application/pdf"><div id="exBillSt" class="upst" style="font-size:11px;color:#888"></div></div>'+
       '<div class="field full"><label>Note</label><input id="exNote" class="in"></div></div><div id="exMsg"></div>';
@@ -219,7 +220,7 @@
     $id('exType').onchange=function(){ var inc=this.value==='income'; $id('exCat').innerHTML=(inc?INC_CATS:EXP_CATS).map(function(c){return '<option>'+c+'</option>';}).join(''); };
     $id('exBill').onchange=function(){ var f=this.files[0]; if(!f) return; var s2=$id('exBillSt'); s2.textContent='Reading…'; var fr=new FileReader(); fr.onload=function(){ var s=fr.result,i=s.indexOf(','); st.bill=s.slice(i+1); st.billMime=f.type; s2.innerHTML='Attached ✓'; }; fr.readAsDataURL(f); };
     $id('exSave').onclick=function(){ var amt=$id('exAmt').value; if(!amt){ $id('exMsg').innerHTML='<div class="msg error">Amount required.</div>'; return; } this.disabled=true;
-      API.addLedger({branchId:ACC.branch,type:$id('exType').value,category:$id('exCat').value,amount:amt,mode:$id('exMode').value,party:$id('exParty').value,date:$id('exDate').value,ifsc:$id('exIfsc').value,acct:$id('exAcct').value,bill:st.bill,billMime:st.billMime,note:$id('exNote').value}).then(function(r){ if(r&&r.ok){ closeModal(); toast('Saved'); loadExpenses(); } else $id('exMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; }); };
+      API.addLedger({branchId:ACC.branch,type:$id('exType').value,category:$id('exCat').value,amount:amt,mode:$id('exMode').value,party:$id('exParty').value,date:$id('exDate').value,billDate:$id('exBillDate').value,ifsc:$id('exIfsc').value,acct:$id('exAcct').value,bill:st.bill,billMime:st.billMime,note:$id('exNote').value}).then(function(r){ if(r&&r.ok){ closeModal(); toast('Saved'); loadExpenses(); } else $id('exMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; }); };
   }
 
   /* ---- Bank import + reconciliation ---- */
