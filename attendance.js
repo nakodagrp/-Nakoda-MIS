@@ -64,13 +64,28 @@
       var sunLeft=Math.max(0,2-sunWorked);
       sundayNote='<div class="att-note" style="color:'+(sunLeft>0?'#1a8f4c':'#b23b3b')+';font-weight:600">📅 Alternate Sunday: '+sunWorked+'/2 Sundays worked this month'+(sunLeft>0?' · '+sunLeft+' remaining':' · limit reached — no more Sunday check-ins this month')+'</div>';
     }
+    // Recovery path: if a punch went through but its selfie never made it to Drive (closed the app too
+    // fast, storage cleared, repeated upload failures), don't leave it stuck blank forever — let the
+    // employee attach one themselves straight from this screen.
+    var missingKind = (rec && rec.checkIn && !rec.selfieInUrl && rec.attId) ? 'in' : ((rec && rec.checkOut && !rec.selfieOutUrl && rec.attId) ? 'out' : '');
+    var missingNote = missingKind ? '<div class="att-note" style="color:#b23b3b;font-weight:600">⚠ Your '+(missingKind==='in'?'check-in':'check-out')+' selfie didn\'t save — <span id="attFixSelfie" style="text-decoration:underline;cursor:pointer">tap to add it</span></div>' : '';
     box.innerHTML='<div class="att-card"><div class="att-day">'+['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][now.getDay()]+', '+now.getDate()+' '+MON[now.getMonth()]+'</div>'+
       '<div class="att-sub">'+esc(dutyTxt)+'</div>'+btn+
       '<div class="att-stat">'+esc(stat)+'</div>'+
       '<div class="att-note">'+[ (needSelfie()?'📷 selfie':''), ('📍 location'+(isFenced()?' verified at your branch':'')) ].filter(Boolean).join(' + ')+' · Late after shift+15 min = half day.</div>'+
+      missingNote+
       sundayNote+'</div>'+
       monthStrip();
     var b=$id('attBtn'); if(b) b.onclick=function(){ doMark(inb?'in':'out'); };
+    var fix=$id('attFixSelfie'); if(fix) fix.onclick=function(){
+      fix.textContent='Opening camera…';
+      captureSelfie(function(b64){
+        API.attachSelfie({attId:rec.attId, kind:missingKind, base64:b64}).then(function(r){
+          toast((r&&r.ok)?'Selfie added':'Saved on device — will sync');
+          API.myAttendance(ymNow()).then(function(x){ if(x&&x.ok){ ATT.recs=x.records||[]; paintMe(); } });
+        });
+      });
+    };
   }
   function monthStrip(){
     var by={}; (ATT.recs||[]).forEach(function(r){ by[r.date]=r; });
@@ -182,18 +197,18 @@
     if(n) n.onclick=function(){ closeModal(); cb(false); };
   }
   function submitMark(kind, selfie){
-    // PERFORMANCE: the selfie is no longer sent in this call — the row gets written and the response comes
-    // back as soon as the (fast) Sheets write finishes. The photo itself uploads right after, in the
-    // background, via attachSelfie — the user already sees "Checked in/out" before that finishes.
-    var c=ATT.coords||{}, payload={hasSelfie:!!selfie, lat:c.lat, lng:c.lng, wfh:!!ATT.wfh, altShift:!!ATT.altShift, remark:(kind==='out'?(ATT.outRemark||''):'')};
-    toast('Marking…');
+    // Selfie goes in the same call as the punch (uploaded synchronously server-side) so it can never go
+    // missing — a background/queued upload was tried and lost photos when the app closed too soon after
+    // check-in. Location+camera still run in parallel beforehand (startMark), and the photo is resized
+    // before it gets here, so this is still much faster than the original version despite waiting on it.
+    var c=ATT.coords||{}, payload={selfie:selfie, lat:c.lat, lng:c.lng, wfh:!!ATT.wfh, altShift:!!ATT.altShift, remark:(kind==='out'?(ATT.outRemark||''):'')};
+    toast(selfie?'Marking… uploading photo':'Marking…');
     var p = kind==='in' ? API.checkIn(payload) : API.checkOut(payload);
     p.then(function(r){
       if(r&&r.ok){
         ATT.wfh=false;
         toast(kind==='in'?('Checked in '+r.checkIn+(r.late?' (late)':'')):('Checked out '+r.checkOut+(r.half?' · half day':'')));
         API.myAttendance(ymNow()).then(function(x){ if(x&&x.ok){ ATT.recs=x.records||[]; paintMe(); } });
-        if(selfie && r.attId) API.attachSelfie({attId:r.attId, kind:kind, base64:selfie});   // fire-and-forget — queues in the offline outbox automatically if it fails
       }
       else if(r&&r.wfhPrompt){ promptWfh(r, function(yes){ if(yes){ ATT.wfh=true; submitMark(kind, selfie); } else { ATT.wfh=false; toast('You are not at the centre — '+(kind==='in'?'check-in':'check-out')+' not allowed.',true); } }); }
       else toast((r&&r.error)||'Could not mark — needs internet & location.',true); })
