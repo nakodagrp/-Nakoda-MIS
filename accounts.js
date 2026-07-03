@@ -1,6 +1,6 @@
 /* Nakoda MIS — Accounts: Finance Sheet (P&L), Daily Entry, Invoices/Receivables, Expenses. */
 (function(){
-  var EXP_CATS=['Material Purchased','Outsourced Services','Professional fees','Rent','Light bill','Petrol','Miscellaneous','Management cost','Software cost','Sales','Marketing','Other'];
+  var EXP_CATS=['Material Purchased','Outsourced Services','Professional fees','Rent','Light bill','Petrol','Mahavir Express Services','Miscellaneous','Management cost','Software cost','Sales','Marketing','Other'];
   var INC_CATS=['B2Camp','Other income'];
   var ACC={branch:'',ym:ymNowA(),tab:'finance',dailyPage:0};
   function $id(i){ return document.getElementById(i); }
@@ -207,9 +207,11 @@
   function openExpenseForm(){
     var st={bill:''};
     var body='<div class="grid2"><div class="field"><label>Type</label><select id="exType" class="in"><option value="expense">Expense</option><option value="income">Income</option></select></div>'+
+      '<div class="field"><label>Date</label><input id="exDate" class="in" type="date" value="'+(new Date().toISOString().slice(0,10))+'"></div>'+
       '<div class="field"><label>Category</label><select id="exCat" class="in">'+EXP_CATS.map(function(c){return '<option>'+c+'</option>';}).join('')+'</select></div>'+
-      '<div class="field"><label>Amount (₹)</label><input id="exAmt" class="in" type="number"></div><div class="field"><label>Mode</label><select id="exMode" class="in"><option>Cash</option><option>Bank</option><option>UPI</option></select></div>'+
-      '<div class="field"><label>Paid to / party</label><input id="exParty" class="in"></div><div class="field"><label>Date</label><input id="exDate" class="in" type="date" value="'+(new Date().toISOString().slice(0,10))+'"></div>'+
+      '<div class="field"><label>Amount (₹)</label><input id="exAmt" class="in" type="number"></div>'+
+      '<div class="field"><label>Mode</label><select id="exMode" class="in"><option>Cash</option><option>Bank</option><option>UPI</option></select></div>'+
+      '<div class="field"><label>Paid to / party</label><input id="exParty" class="in"></div>'+
       '<div class="field"><label>Vendor IFSC (for payout)</label><input id="exIfsc" class="in"></div><div class="field"><label>Vendor A/C</label><input id="exAcct" class="in"></div>'+
       '<div class="field full"><label>Attach bill (photo/PDF)</label><input type="file" id="exBill" accept="image/*,application/pdf"><div id="exBillSt" class="upst" style="font-size:11px;color:#888"></div></div>'+
       '<div class="field full"><label>Note</label><input id="exNote" class="in"></div></div><div id="exMsg"></div>';
