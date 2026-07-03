@@ -58,13 +58,9 @@
     submitSuggestion:1,replySuggestion:1,saveFixedAsset:1,deleteFixedAsset:1};
   /* Writes that already do their own optimistic queueing inside the method (don't double-queue here). */
   var SELF_QUEUE={createEmployee:1,updateEmployee:1,setStatus:1,issueCard:1,renewCard:1,cancelCard:1,markCardSent:1,markCardActivated:1,
-    createTask:1,updateTask:1,setTaskStatus:1,deleteTask:1,createCalEntry:1,updateCalEntry:1,startInstance:1,advanceStage:1};
+    createTask:1,updateTask:1,setTaskStatus:1,deleteTask:1,createCalEntry:1,updateCalEntry:1,startInstance:1,advanceStage:1,attachSelfie:1};
   /* Writes that MUST stay online (auth, server-computed, exact-time, bulk). */
   var NOQUEUE={login:1,validate:1,logout:1,changePassword:1,resetPassword:1,checkIn:1,checkOut:1,runPayroll:1,uploadFile:1,importOldCards:1,submitQuiz:1};
-  /* Writes where even a normal server response of {ok:false} (not just a dropped connection) should still
-     be retried — e.g. attachSelfie: a busy check-in window can make the Drive upload fail on the server
-     side without the HTTP call itself throwing, and losing a selfie silently is worse than retrying it. */
-  var RETRY_ON_ERROR={attachSelfie:1};
   function rk(action,payload){ var p=Object.assign({},payload||{}); delete p.token; return 'rc:'+action+':'+JSON.stringify(p); }
   function noTok(payload){ var p=Object.assign({},payload||{}); delete p.token; return p; }
   function enqueue(action,payload){ return obAdd({action:action,payload:noTok(payload),ts:Date.now()}).then(function(){ emit(); return {ok:true,offline:true}; }); }
@@ -76,10 +72,7 @@
       return NET(action,payload).then(function(r){ if(r&&r.ok){ kvSet(rk(action,payload),r); } return r; }).catch(function(){ return readGet(action,payload); });
     }
     if(queueable && !navigator.onLine) return enqueue(action,payload);     /* WRITE offline: save instantly to outbox */
-    if(queueable) return NET(action,payload).then(function(r){
-      if(r && r.ok===false && RETRY_ON_ERROR[action]) return enqueue(action,payload);
-      return r;
-    }).catch(function(){ return enqueue(action,payload); });
+    if(queueable) return NET(action,payload).catch(function(){ return enqueue(action,payload); });
     return NET(action,payload);                      /* self-queued (method handles) or online-only */
   }
 
@@ -301,10 +294,11 @@
     deleteField:function(id){ return call('deleteField',{token:getToken(),fieldId:id}); },
     checkIn:function(d){ return call('checkIn',{token:getToken(),data:d}); },
     checkOut:function(d){ return call('checkOut',{token:getToken(),data:d}); },
-    // Fire-and-forget: uploads the selfie after check-in/out already succeeded, so the punch itself
-    // doesn't wait on Drive. If it fails (or the device is offline), it queues in the same outbox as
-    // every other write and retries automatically once back online.
-    attachSelfie:function(d){ return call('attachSelfie',{token:getToken(),attId:d.attId,kind:d.kind,base64:d.base64}); },
+    // Uploads the selfie after check-in/out already succeeded, so the punch itself doesn't wait on
+    // Drive. Queued to IndexedDB first (durable) before attempting the live call — see queueSelfie —
+    // so the photo survives even if the app is backgrounded/closed right after check-in, and retries
+    // automatically once back online either way.
+    attachSelfie:function(d){ return queueSelfie(d.attId,d.kind,d.base64); },
     cachedAttendance:function(){ return kvGet('myatt'); },
     myAttendance:function(ym){ return call('myAttendance',{token:getToken(),ym:ym}).then(function(r){ if(r.ok) kvSet('myatt',r); return r; }).catch(function(){ return kvGet('myatt').then(function(x){ return x||{ok:true,records:[],offline:true}; }); }); },
     listAttendance:function(branch,date){ return call('listAttendance',{token:getToken(),branch:branch,date:date}); },
@@ -415,6 +409,25 @@
   }
   function queueUpdate(empId,data){ return obAdd({action:'updateEmployee',empId:empId,data:data,ts:Date.now()}).then(function(){ emit(); return {ok:true,offline:true}; }); }
   function queueStatus(empId,status){ return obAdd({action:'setStatus',empId:empId,status:status,ts:Date.now()}).then(function(){ emit(); return {ok:true,offline:true}; }); }
+  /* Selfie upload: write-behind, not write-through. This fires right after check-in, right when the
+     user is most likely to background or close the app ("Checked in ✓" -> phone goes in a pocket).
+     A live-attempt-then-catch-enqueue approach loses the photo silently if the JS context is suspended
+     or killed before the fetch settles — nothing ever runs the .catch. Queuing to IndexedDB FIRST makes
+     the photo durable no matter what happens to the tab next; the immediate live attempt below is purely
+     an optimization for a fast result when the app stays open, and deletes the queued copy once the
+     server confirms it. If that never gets to run, syncOutbox()'s online/focus/30s triggers pick it up
+     on the next app open regardless. */
+  function queueSelfie(attId,kind,base64){
+    var payload={attId:attId,kind:kind,base64:base64};
+    return obAdd({action:'attachSelfie',payload:payload,ts:Date.now()}).then(function(id){
+      emit();
+      if(!navigator.onLine) return {ok:true,offline:true};
+      return NET('attachSelfie',Object.assign({token:getToken()},payload)).then(function(r){
+        if(r && r.ok) return obDel(id).then(function(){ return r; });
+        return r;   // left queued — syncOutbox will retry it (capped there)
+      }).catch(function(){ return {ok:true,offline:true}; });   // left queued — network blip
+    });
+  }
 
   /* ---------- card writes offline ---------- */
   function cardsCache(){ return kvGet('cards').then(function(c){ return c||[]; }); }
