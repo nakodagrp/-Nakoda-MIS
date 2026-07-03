@@ -200,12 +200,12 @@
     var rows=(r.ledger||[]).slice().sort(function(a,b){return a.date<b.date?1:-1;});
     box.innerHTML=(canEnter()?'<div class="fin-actions"><button class="btn" id="exAdd">+ Expense / vendor bill</button></div>':'')+
       '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Category</th><th>Party</th><th>Amount</th><th>Mode</th><th>Status</th></tr></thead><tbody>'+
-      (rows.length?rows.map(function(l){ return '<tr><td>'+esc(l.date)+'</td><td>'+esc(l.category)+(l.billUrl?' <a href="'+esc(l.billUrl)+'" target="_blank">📎</a>':'')+'</td><td>'+esc(l.party||'')+'</td><td>₹'+money(l.amount)+'</td><td>'+esc(l.mode)+'</td><td>'+(String(l.status)==='approved'?'<span class="chip paid">approved</span>':(r.canVerify?'<button class="btn ghost sm" data-ap="'+esc(l.ledId)+'">Approve</button>':'<span class="chip partial">pending</span>'))+'</td></tr>'; }).join(''):'<tr><td class="empty" colspan="6">No entries this month.</td></tr>')+'</tbody></table></div>';
+      (rows.length?rows.map(function(l){ return '<tr><td>'+esc(l.date)+'</td><td>'+esc(l.category)+(l.billUrl?' <a href="'+esc(l.billUrl)+'" target="_blank" title="Bill">📎</a>':'')+(l.qrUrl?' <a href="'+esc(l.qrUrl)+'" target="_blank" title="QR code">▦</a>':'')+'</td><td>'+esc(l.party||'')+'</td><td>₹'+money(l.amount)+'</td><td>'+esc(l.mode)+'</td><td>'+(String(l.status)==='approved'?'<span class="chip paid">approved</span>':(r.canVerify?'<button class="btn ghost sm" data-ap="'+esc(l.ledId)+'">Approve</button>':'<span class="chip partial">pending</span>'))+'</td></tr>'; }).join(''):'<tr><td class="empty" colspan="6">No entries this month.</td></tr>')+'</tbody></table></div>';
     var a=$id('exAdd'); if(a) a.onclick=openExpenseForm;
     box.querySelectorAll('[data-ap]').forEach(function(b){ b.onclick=function(){ API.setLedger(b.getAttribute('data-ap'),'approve').then(function(x){ if(x&&x.ok){ toast('Approved'); loadExpenses(); } }); }; });
   }); }
   function openExpenseForm(){
-    var st={bill:''};
+    var st={bill:'',qr:''};
     var body='<div class="grid2"><div class="field"><label>Type</label><select id="exType" class="in"><option value="expense">Expense</option><option value="income">Income</option></select></div>'+
       '<div class="field"><label>Date</label><input id="exDate" class="in" type="date" value="'+(new Date().toISOString().slice(0,10))+'"></div>'+
       '<div class="field"><label>Category</label><select id="exCat" class="in">'+EXP_CATS.map(function(c){return '<option>'+c+'</option>';}).join('')+'</select></div>'+
@@ -214,13 +214,15 @@
       '<div class="field"><label>Paid to / party</label><input id="exParty" class="in"></div>'+
       '<div class="field"><label>Bill date</label><input id="exBillDate" class="in" type="date"></div>'+
       '<div class="field"><label>Vendor IFSC (for payout)</label><input id="exIfsc" class="in"></div><div class="field"><label>Vendor A/C</label><input id="exAcct" class="in"></div>'+
+      '<div class="field"><label>QR code (UPI)</label><input type="file" id="exQr" accept="image/*"><div id="exQrSt" class="upst" style="font-size:11px;color:#888"></div></div>'+
       '<div class="field full"><label>Attach bill (photo/PDF)</label><input type="file" id="exBill" accept="image/*,application/pdf"><div id="exBillSt" class="upst" style="font-size:11px;color:#888"></div></div>'+
       '<div class="field full"><label>Note</label><input id="exNote" class="in"></div></div><div id="exMsg"></div>';
     openModal('Expense / vendor bill', body, '<button class="btn" id="exSave">Save</button>');
     $id('exType').onchange=function(){ var inc=this.value==='income'; $id('exCat').innerHTML=(inc?INC_CATS:EXP_CATS).map(function(c){return '<option>'+c+'</option>';}).join(''); };
     $id('exBill').onchange=function(){ var f=this.files[0]; if(!f) return; var s2=$id('exBillSt'); s2.textContent='Reading…'; var fr=new FileReader(); fr.onload=function(){ var s=fr.result,i=s.indexOf(','); st.bill=s.slice(i+1); st.billMime=f.type; s2.innerHTML='Attached ✓'; }; fr.readAsDataURL(f); };
+    $id('exQr').onchange=function(){ var f=this.files[0]; if(!f) return; var s2=$id('exQrSt'); s2.textContent='Reading…'; var fr=new FileReader(); fr.onload=function(){ var s=fr.result,i=s.indexOf(','); st.qr=s.slice(i+1); st.qrMime=f.type; s2.innerHTML='Attached ✓'; }; fr.readAsDataURL(f); };
     $id('exSave').onclick=function(){ var amt=$id('exAmt').value; if(!amt){ $id('exMsg').innerHTML='<div class="msg error">Amount required.</div>'; return; } this.disabled=true;
-      API.addLedger({branchId:ACC.branch,type:$id('exType').value,category:$id('exCat').value,amount:amt,mode:$id('exMode').value,party:$id('exParty').value,date:$id('exDate').value,billDate:$id('exBillDate').value,ifsc:$id('exIfsc').value,acct:$id('exAcct').value,bill:st.bill,billMime:st.billMime,note:$id('exNote').value}).then(function(r){ if(r&&r.ok){ closeModal(); toast('Saved'); loadExpenses(); } else $id('exMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; }); };
+      API.addLedger({branchId:ACC.branch,type:$id('exType').value,category:$id('exCat').value,amount:amt,mode:$id('exMode').value,party:$id('exParty').value,date:$id('exDate').value,billDate:$id('exBillDate').value,ifsc:$id('exIfsc').value,acct:$id('exAcct').value,bill:st.bill,billMime:st.billMime,qr:st.qr,qrMime:st.qrMime,note:$id('exNote').value}).then(function(r){ if(r&&r.ok){ closeModal(); toast('Saved'); loadExpenses(); } else $id('exMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; }); };
   }
 
   /* ---- Bank import + reconciliation ---- */
