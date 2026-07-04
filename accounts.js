@@ -78,13 +78,13 @@
     var start=ACC.dailyPage*PAGE, rows=all.slice(start,start+PAGE);
     var actions=canEnter()?'<div class="fin-actions"><button class="btn" id="dlyAdd">+ Daily entry</button><button class="btn ghost" id="dlyDep">🏦 Bank deposit</button></div>':'';
     box.innerHTML=actions+
-      '<div class="table-wrap"><table><thead><tr><th>Branch</th><th>Date</th><th>B2C cash</th><th>B2C bank</th><th>Expense</th><th>Other</th><th>Patients</th><th>Tests</th><th>Collection</th><th>Docs</th><th>Status</th><th>Reject</th></tr></thead><tbody>'+
+      '<div class="table-wrap"><table><thead><tr><th>Branch</th><th>Date</th><th>B2C cash</th><th>B2C bank</th><th>Other</th><th>Patients</th><th>Tests</th><th>Collection</th><th>Docs</th><th>Status</th><th>Reject</th></tr></thead><tbody>'+
       (rows.length?rows.map(function(d){ var coll=(Number(d.cashIn)||0)+(Number(d.bankIn)||0)+(Number(d.other)||0); var stt=String(d.status);
         var statusCell = stt==='verified' ? '<span class="chip paid">✓ verified</span>'
           : stt==='rejected' ? '<span class="chip" style="background:#fdecec;color:#b23b3b">✗ rejected</span>'
           : (r.canVerify ? '<button class="btn ghost sm" data-vf="'+esc(d.dayId)+'">Verify</button>' : '<span class="chip partial">pending</span>');
         var rejectCell = (stt!=='verified' && stt!=='rejected' && r.canVerify) ? '<button class="btn ghost sm" data-rj="'+esc(d.dayId)+'" style="color:#b23b3b">Reject</button>' : '';
-        return '<tr><td>'+esc(branchName(d.branchId))+'</td><td>'+esc(d.date)+'</td><td>₹'+money(d.b2cCash)+'</td><td>₹'+money(d.b2cBank)+'</td><td>₹'+money(d.expense)+'</td><td>₹'+money(d.other)+'</td><td>'+(d.patients||0)+'</td><td>'+(d.tests||0)+'</td><td>₹'+money(coll)+'</td><td>'+docLinks(d)+'</td><td>'+statusCell+'</td><td>'+rejectCell+'</td></tr>'; }).join(''):'<tr><td class="empty" colspan="12">No entries this month.</td></tr>')+'</tbody></table></div>'+
+        return '<tr><td>'+esc(branchName(d.branchId))+'</td><td>'+esc(d.date)+'</td><td>₹'+money(d.b2cCash)+'</td><td>₹'+money(d.b2cBank)+'</td><td>₹'+money(d.other)+'</td><td>'+(d.patients||0)+'</td><td>'+(d.tests||0)+'</td><td>₹'+money(coll)+'</td><td>'+docLinks(d)+'</td><td>'+statusCell+'</td><td>'+rejectCell+'</td></tr>'; }).join(''):'<tr><td class="empty" colspan="11">No entries this month.</td></tr>')+'</tbody></table></div>'+
       (total>PAGE?'<div class="acc-pager">'+(ACC.dailyPage>0?'<button class="btn ghost sm" id="dlyPrev">‹ Prev</button>':'<span></span>')+'<span>'+(start+1)+'–'+Math.min(start+PAGE,total)+' of '+total+'</span>'+(ACC.dailyPage<pages-1?'<button class="btn ghost sm" id="dlyNext">Next ›</button>':'<span></span>')+'</div>':'');
     var a=$id('dlyAdd'); if(a) a.onclick=openDailyForm;
     var dp=$id('dlyDep'); if(dp) dp.onclick=openDepositForm;
@@ -197,12 +197,14 @@
 
   /* ---- Expenses / vendor bills ---- */
   function loadExpenses(){ API.listLedger(ACC.branch,ACC.ym,false).then(function(r){ var box=$id('accBody'); if(!box) return; if(!r||!r.ok){ box.innerHTML='<div class="empty">'+esc((r&&r.error)||'')+'</div>'; return; }
-    var rows=(r.ledger||[]).slice().sort(function(a,b){return a.date<b.date?1:-1;});
+    function fmtLedDate(d){ var s=String(d||''); var m=s.match(/^(\d{4}-\d{2}-\d{2})/); return m?m[1]:s.slice(0,10); }
+    var rows=(r.ledger||[]).slice().sort(function(a,b){return fmtLedDate(a.date)<fmtLedDate(b.date)?1:-1;});
     box.innerHTML=(canEnter()?'<div class="fin-actions"><button class="btn" id="exAdd">+ Expense / vendor bill</button></div>':'')+
-      '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Category</th><th>Party</th><th>Amount</th><th>Mode</th><th>Status</th></tr></thead><tbody>'+
-      (rows.length?rows.map(function(l){ return '<tr><td>'+esc(l.date)+'</td><td>'+esc(l.category)+(l.billUrl?' <a href="'+esc(l.billUrl)+'" target="_blank" title="Bill">📎</a>':'')+(l.qrUrl?' <a href="'+esc(l.qrUrl)+'" target="_blank" title="QR code">▦</a>':'')+'</td><td>'+esc(l.party||'')+'</td><td>₹'+money(l.amount)+'</td><td>'+esc(l.mode)+'</td><td>'+(String(l.status)==='approved'?'<span class="chip paid">approved</span>':(r.canVerify?'<button class="btn ghost sm" data-ap="'+esc(l.ledId)+'">Approve</button>':'<span class="chip partial">pending</span>'))+'</td></tr>'; }).join(''):'<tr><td class="empty" colspan="6">No entries this month.</td></tr>')+'</tbody></table></div>';
+      '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Category</th><th>Party</th><th>Amount</th><th>Mode</th><th>Status</th><th>Reject</th></tr></thead><tbody>'+
+      (rows.length?rows.map(function(l){ var isPending=String(l.status)!=='approved'&&String(l.status)!=='rejected'; var statusCell=String(l.status)==='approved'?'<span class="chip paid">approved</span>':String(l.status)==='rejected'?'<span class="chip" style="background:#fdecec;color:#b23b3b">rejected</span>':(r.canVerify?'<button class="btn ghost sm" data-ap="'+esc(l.ledId)+'">Approve</button>':'<span class="chip partial">pending</span>'); var rejectCell=(isPending&&r.canVerify)?'<button class="btn ghost sm" data-rj="'+esc(l.ledId)+'" style="color:#b23b3b">Reject</button>':''; return '<tr><td>'+esc(fmtLedDate(l.date))+'</td><td>'+esc(l.category)+(l.billUrl?' <a href="'+esc(l.billUrl)+'" target="_blank" title="Bill">📎</a>':'')+(l.qrUrl?' <a href="'+esc(l.qrUrl)+'" target="_blank" title="QR code">▦</a>':'')+'</td><td>'+esc(l.party||'')+'</td><td>₹'+money(l.amount)+'</td><td>'+esc(l.mode)+'</td><td>'+statusCell+'</td><td>'+rejectCell+'</td></tr>'; }).join(''):'<tr><td class="empty" colspan="7">No entries this month.</td></tr>')+'</tbody></table></div>';
     var a=$id('exAdd'); if(a) a.onclick=openExpenseForm;
     box.querySelectorAll('[data-ap]').forEach(function(b){ b.onclick=function(){ API.setLedger(b.getAttribute('data-ap'),'approve').then(function(x){ if(x&&x.ok){ toast('Approved'); loadExpenses(); } }); }; });
+    box.querySelectorAll('[data-rj]').forEach(function(b){ b.onclick=function(){ var reason=prompt('Reason for rejecting? (optional)'); if(reason===null) return; API.setLedger(b.getAttribute('data-rj'),'reject').then(function(x){ if(x&&x.ok){ toast('Rejected'); loadExpenses(); } else toast((x&&x.error)||'Failed',true); }); }; });
   }); }
   function openExpenseForm(){
     var st={bill:'',qr:''};
