@@ -78,13 +78,13 @@
     var start=ACC.dailyPage*PAGE, rows=all.slice(start,start+PAGE);
     var actions=canEnter()?'<div class="fin-actions"><button class="btn" id="dlyAdd">+ Daily entry</button><button class="btn ghost" id="dlyDep">🏦 Bank deposit</button></div>':'';
     box.innerHTML=actions+
-      '<div class="table-wrap"><table><thead><tr><th>Branch</th><th>Date</th><th>B2C cash</th><th>B2C bank</th><th>Other</th><th>Patients</th><th>Tests</th><th>Collection</th><th>Docs</th><th>Status</th><th>Reject</th></tr></thead><tbody>'+
-      (rows.length?rows.map(function(d){ var coll=(Number(d.cashIn)||0)+(Number(d.bankIn)||0)+(Number(d.other)||0); var stt=String(d.status);
+      '<div class="table-wrap"><table><thead><tr><th>Branch</th><th>Date</th><th>B2C cash</th><th>B2C bank</th><th>B2D</th><th>Other</th><th>Patients</th><th>Tests</th><th>Collection</th><th>Docs</th><th>Status</th><th>Reject</th></tr></thead><tbody>'+
+      (rows.length?rows.map(function(d){ var coll=(Number(d.cashIn)||0)+(Number(d.bankIn)||0)+(Number(d.other)||0); var b2d=(Number(d.b2dCash)||0)+(Number(d.b2dBank)||0); var stt=String(d.status);
         var statusCell = stt==='verified' ? '<span class="chip paid">✓ verified</span>'
           : stt==='rejected' ? '<span class="chip" style="background:#fdecec;color:#b23b3b">✗ rejected</span>'
           : (r.canVerify ? '<button class="btn ghost sm" data-vf="'+esc(d.dayId)+'">Verify</button>' : '<span class="chip partial">pending</span>');
         var rejectCell = (stt!=='verified' && stt!=='rejected' && r.canVerify) ? '<button class="btn ghost sm" data-rj="'+esc(d.dayId)+'" style="color:#b23b3b">Reject</button>' : '';
-        return '<tr><td>'+esc(branchName(d.branchId))+'</td><td>'+esc(d.date)+'</td><td>₹'+money(d.b2cCash)+'</td><td>₹'+money(d.b2cBank)+'</td><td>₹'+money(d.other)+'</td><td>'+(d.patients||0)+'</td><td>'+(d.tests||0)+'</td><td>₹'+money(coll)+'</td><td>'+docLinks(d)+'</td><td>'+statusCell+'</td><td>'+rejectCell+'</td></tr>'; }).join(''):'<tr><td class="empty" colspan="11">No entries this month.</td></tr>')+'</tbody></table></div>'+
+        return '<tr><td>'+esc(branchName(d.branchId))+'</td><td>'+esc(d.date)+'</td><td>₹'+money(d.b2cCash)+'</td><td>₹'+money(d.b2cBank)+'</td><td>₹'+money(b2d)+'</td><td>₹'+money(d.other)+'</td><td>'+(d.patients||0)+'</td><td>'+(d.tests||0)+'</td><td>₹'+money(coll)+'</td><td>'+docLinks(d)+'</td><td>'+statusCell+'</td><td>'+rejectCell+'</td></tr>'; }).join(''):'<tr><td class="empty" colspan="12">No entries this month.</td></tr>')+'</tbody></table></div>'+
       (total>PAGE?'<div class="acc-pager">'+(ACC.dailyPage>0?'<button class="btn ghost sm" id="dlyPrev">‹ Prev</button>':'<span></span>')+'<span>'+(start+1)+'–'+Math.min(start+PAGE,total)+' of '+total+'</span>'+(ACC.dailyPage<pages-1?'<button class="btn ghost sm" id="dlyNext">Next ›</button>':'<span></span>')+'</div>':'');
     var a=$id('dlyAdd'); if(a) a.onclick=openDailyForm;
     var dp=$id('dlyDep'); if(dp) dp.onclick=openDepositForm;
