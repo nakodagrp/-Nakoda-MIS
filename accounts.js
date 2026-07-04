@@ -8,7 +8,7 @@
   function money(n){ return Math.round(Number(n)||0).toLocaleString('en-IN'); }
   function lvl(){ return (S.perms&&S.perms.level)||''; }
   function isInvestor(){ return lvl()==='BRANCH_VIEW'; }
-  function canEnter(){ return lvl()==='SUPER'||lvl()==='BRANCH_MGR'||['CRM','Accounts'].indexOf(S.user&&S.user.Role)>=0; }
+  function canEnter(){ return lvl()==='SUPER'||lvl()==='HR_ADMIN'||lvl()==='BRANCH_MGR'||lvl()==='MANAGER'||['CRM','Accounts','Operations Manager','Process Coordinator'].indexOf(S.user&&S.user.Role)>=0; }
   function canVerify(){ return lvl()==='SUPER'||lvl()==='HR_ADMIN'||(S.user&&(S.user.Role==='Accounts'||S.user.Role==='Process Coordinator')); }
   function canViewAll(){ return S.perms&&S.perms.canViewAll; }
 
