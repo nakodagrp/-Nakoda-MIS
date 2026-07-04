@@ -335,7 +335,7 @@
     listDeposits:function(b,ym){ return call('listDeposits',{token:getToken(),branch:b,ym:ym}); },
     addLedger:function(d){ return call('addLedger',{token:getToken(),data:d}); },
     listLedger:function(b,ym,op){ return call('listLedger',{token:getToken(),branch:b,ym:ym,onlyPending:op}); },
-    setLedger:function(id,a){ return call('setLedger',{token:getToken(),ledId:id,action:a}); },
+    setLedger:function(id,a){ return call('setLedger',{token:getToken(),ledId:id,act:a}); },
     saveInvoice:function(d){ return call('saveInvoice',{token:getToken(),data:d}); },
     listInvoices:function(b,s){ return call('listInvoices',{token:getToken(),branch:b,status:s}); },
     recordPayment:function(id,a){ return call('recordPayment',{token:getToken(),invId:id,amount:a}); },
