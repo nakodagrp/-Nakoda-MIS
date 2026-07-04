@@ -303,6 +303,7 @@
     myAttendance:function(ym){ return call('myAttendance',{token:getToken(),ym:ym}).then(function(r){ if(r.ok) kvSet('myatt',r); return r; }).catch(function(){ return kvGet('myatt').then(function(x){ return x||{ok:true,records:[],offline:true}; }); }); },
     listAttendance:function(branch,date){ return call('listAttendance',{token:getToken(),branch:branch,date:date}); },
     staffMonthAttendance:function(empId,ym){ return call('staffMonthAttendance',{token:getToken(),empId:empId,ym:ym}); },
+    monthlyAttendance:function(branch,ym){ return call('monthlyAttendance',{token:getToken(),branch:branch,ym:ym}); },
     setAttendance:function(attId,d){ return call('setAttendance',{token:getToken(),attId:attId,data:d}); },
     applyLeave:function(d){ return call('applyLeave',{token:getToken(),data:d}); },
     cachedMyLeaves:function(){ return kvGet('myleaves'); },

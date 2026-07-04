@@ -24,6 +24,7 @@
         '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0 10px">'+
           '<input type="date" id="attApDate" value="'+todayS()+'" style="border:1px solid #d9d9d9;border-radius:8px;padding:6px 8px;font-size:13px">'+
           '<button class="btn sm" id="attApGo">Show</button>'+
+          '<button class="btn sm ghost" id="attPdfBtn" style="display:inline-flex;align-items:center;gap:5px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg> Monthly PDF</button>'+
         '</div>'+
         '<div id="attApprove"></div>':'')+
       '<div style="height:110px"></div>';   // bottom spacer so the last approve card clears the mobile bottom nav
@@ -43,7 +44,81 @@
     if(canApprove()){
       loadApprove(todayS());
       var apGo=$id('attApGo'); if(apGo) apGo.onclick=function(){ loadApprove($id('attApDate').value||todayS()); };
+      var pdfBtn=$id('attPdfBtn'); if(pdfBtn) pdfBtn.onclick=function(){ downloadAttPdf(); };
     }
+  }
+
+  function downloadAttPdf(){
+    var btn=$id('attPdfBtn'); if(btn){ btn.textContent='Generating…'; btn.disabled=true; }
+    var dateVal=($id('attApDate')&&$id('attApDate').value)||todayS();
+    var ym=dateVal.slice(0,7);
+    API.monthlyAttendance('',ym).then(function(r){
+      if(btn){ btn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg> Monthly PDF'; btn.disabled=false; }
+      if(!r||!r.ok){ toast((r&&r.error)||'Failed',true); return; }
+      loadJsPDFAndGenerate(r.attendance||[], r.employees||[], ym);
+    }).catch(function(){ if(btn){ btn.innerHTML='Monthly PDF'; btn.disabled=false; } toast('Failed to fetch data',true); });
+  }
+
+  function loadJsPDFAndGenerate(attRows, employees, ym){
+    if(window.jspdf&&window.jspdf.jsPDF){ generateAttPdf(attRows,employees,ym); return; }
+    var s1=document.createElement('script');
+    s1.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+    s1.onload=function(){
+      var s2=document.createElement('script');
+      s2.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';
+      s2.onload=function(){ generateAttPdf(attRows,employees,ym); };
+      document.head.appendChild(s2);
+    };
+    document.head.appendChild(s1);
+  }
+
+  function generateAttPdf(attRows, employees, ym){
+    var jsPDF=window.jspdf.jsPDF;
+    var parts=ym.split('-'), yr=parseInt(parts[0]), mo=parseInt(parts[1]);
+    var daysInMonth=new Date(yr,mo,0).getDate();
+    var attMap={};
+    attRows.forEach(function(r){
+      var day=parseInt((r.date||'').split('-')[2]||0); if(!day) return;
+      if(!attMap[r.empId]) attMap[r.empId]={};
+      var st=String(r.status||'').toLowerCase();
+      attMap[r.empId][day]=st==='present'?'P':st==='half'?'P/2':st==='leave'?'L':st==='holiday'?'WO':'A';
+    });
+    var days=[]; for(var i=1;i<=daysInMonth;i++) days.push(i);
+    var head=[['Emp','Name'].concat(days.map(String)).concat(['Pre','Abs'])];
+    var body=employees.map(function(e){
+      var row=[e.EmpID||'',e.FullName||''], pre=0, abs=0;
+      for(var d=1;d<=daysInMonth;d++){
+        var s=(attMap[e.EmpID]&&attMap[e.EmpID][d])||'A';
+        if(s==='P') pre++; else if(s==='P/2') pre+=0.5; else if(s==='A') abs++;
+        row.push(s);
+      }
+      row.push(String(pre),String(abs)); return row;
+    });
+    var doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+    doc.setFontSize(11); doc.setTextColor(218,16,23);
+    doc.text('Nakoda Diagnostics And Research Center',10,8);
+    doc.setTextColor(60,60,60); doc.setFontSize(9);
+    doc.text('Attendance Report — '+ym,10,14);
+    var colStyles={0:{cellWidth:12},1:{cellWidth:28}};
+    for(var c=2;c<daysInMonth+2;c++) colStyles[c]={cellWidth:5.5};
+    colStyles[daysInMonth+2]={cellWidth:8}; colStyles[daysInMonth+3]={cellWidth:8};
+    doc.autoTable({
+      head:head, body:body, startY:18,
+      styles:{fontSize:5.5,cellPadding:1,halign:'center'},
+      headStyles:{fillColor:[218,16,23],textColor:255,fontStyle:'bold'},
+      columnStyles:colStyles,
+      didParseCell:function(d){
+        if(d.section==='body'&&d.column.index>=2&&d.column.index<=daysInMonth+1){
+          var v=d.cell.text[0];
+          if(v==='P') d.cell.styles.fillColor=[234,247,239];
+          else if(v==='A') d.cell.styles.fillColor=[253,236,236];
+          else if(v==='P/2') d.cell.styles.fillColor=[255,248,225];
+          else if(v==='L') d.cell.styles.fillColor=[235,235,255];
+        }
+      }
+    });
+    doc.save('attendance-'+ym+'.pdf');
+    toast('PDF downloaded');
   }
 
   function paintMe(){
