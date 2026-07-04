@@ -84,15 +84,15 @@
       attMap[r.empId][day]=st==='present'?'P':st==='half'?'P/2':st==='leave'?'L':st==='holiday'?'WO':'A';
     });
     var days=[]; for(var i=1;i<=daysInMonth;i++) days.push(i);
-    var head=[['Emp','Name'].concat(days.map(String)).concat(['Pre','Abs'])];
+    var head=[['Emp','Name'].concat(days.map(String)).concat(['Pre','HL','Abs'])];
     var body=employees.map(function(e){
-      var row=[e.EmpID||'',e.FullName||''], pre=0, abs=0;
+      var row=[e.EmpID||'',e.FullName||''], pre=0, hl=0, abs=0;
       for(var d=1;d<=daysInMonth;d++){
         var s=(attMap[e.EmpID]&&attMap[e.EmpID][d])||'A';
-        if(s==='P') pre++; else if(s==='P/2') pre+=0.5; else if(s==='A') abs++;
+        if(s==='P') pre++; else if(s==='P/2'){ hl++; pre+=0.5; } else if(s==='A') abs++;
         row.push(s);
       }
-      row.push(String(pre),String(abs)); return row;
+      row.push(String(pre),String(hl),String(abs)); return row;
     });
     var doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
     doc.setFontSize(11); doc.setTextColor(218,16,23);
@@ -101,7 +101,7 @@
     doc.text('Attendance Report — '+ym,10,14);
     var colStyles={0:{cellWidth:12},1:{cellWidth:28}};
     for(var c=2;c<daysInMonth+2;c++) colStyles[c]={cellWidth:5.5};
-    colStyles[daysInMonth+2]={cellWidth:8}; colStyles[daysInMonth+3]={cellWidth:8};
+    colStyles[daysInMonth+2]={cellWidth:8}; colStyles[daysInMonth+3]={cellWidth:8}; colStyles[daysInMonth+4]={cellWidth:8};
     doc.autoTable({
       head:head, body:body, startY:18,
       styles:{fontSize:5.5,cellPadding:1,halign:'center'},
@@ -417,7 +417,7 @@
     // Use cached data if fresh (within 45 s) AND for the same date — avoids repeated API calls on re-render
     var now=Date.now();
     if(_approveCache.recs && _approveCache.date===date && (now-_approveCache.ts)<45000){ renderApproveRecs(_approveCache.recs); return; }
-    box.innerHTML='<div class="empty">Loading…</div>';
+    box.innerHTML='<div class="center-load"><span class="loader dark"></span></div>';
     API.listAttendance('',date).then(function(r){
       if(!r||!r.ok){ box.innerHTML='<div class="empty">'+esc((r&&r.error)||'')+'</div>'; return; }
       var recs=(r.records||[]).slice().sort(function(a,b){ var ta=String(a.checkIn||''),tb=String(b.checkIn||''); return tb>ta?1:tb<ta?-1:0; });
