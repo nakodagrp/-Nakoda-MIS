@@ -70,7 +70,7 @@
   }
 
   /* ---- Daily Entry ---- */
-  function docLinks(d){ var a=[]; if(d.b2cDocUrl)a.push('<a href="'+esc(d.b2cDocUrl)+'" target="_blank" rel="noopener">B2C</a>'); if(d.b2dDocUrl)a.push('<a href="'+esc(d.b2dDocUrl)+'" target="_blank" rel="noopener">B2D</a>'); if(d.testXlUrl)a.push('<a href="'+esc(d.testXlUrl)+'" target="_blank" rel="noopener">Tests</a>'); return a.length?a.join(' · '):'—'; }
+  function docLinks(d){ var a=[]; if(d.b2cDocUrl)a.push('<a href="'+esc(d.b2cDocUrl)+'" target="_blank" rel="noopener">B2C</a>'); if(d.b2dDocUrl)a.push('<a href="'+esc(d.b2dDocUrl)+'" target="_blank" rel="noopener">B2D</a>'); if(d.otherDocUrl)a.push('<a href="'+esc(d.otherDocUrl)+'" target="_blank" rel="noopener">Others</a>'); if(d.testXlUrl)a.push('<a href="'+esc(d.testXlUrl)+'" target="_blank" rel="noopener">Tests</a>'); return a.length?a.join(' · '):'—'; }
   function loadDaily(){ API.listDaily(ACC.branch,ACC.ym).then(function(r){ var box=$id('accBody'); if(!box) return; if(!r||!r.ok){ box.innerHTML='<div class="empty">'+esc((r&&r.error)||'')+'</div>'; return; }
     var all=(r.daily||[]).slice().sort(function(a,b){return a.date<b.date?1:-1;});
     var PAGE=15, total=all.length, pages=Math.max(1,Math.ceil(total/PAGE));
@@ -123,14 +123,15 @@
       incBlock('B2d','B2D income (doctor / referral)','')+
       '<div class="dl-blk"><div class="dl-blk-h">Other income (B2B — credit, billed monthly)</div>'+
         '<div class="field"><label>Amount (₹)</label><input id="dlOther" class="in dl-amt" type="number" inputmode="numeric"></div>'+
-        '<div style="font-size:11px;color:#888;margin-top:4px">At month-end this is replaced by your B2B invoice total.</div></div>'+
+        '<div style="font-size:11px;color:#888;margin-top:4px">At month-end this is replaced by your B2B invoice total.</div>'+
+        '<label class="dl-file"><span id="dlOtherDocSt">📎 Attach Other document (PDF)</span><input id="dlOtherDoc" type="file" accept="application/pdf,image/*" hidden></label></div>'+
       '<div class="dl-total"><span>Total business (Cash + Bank + Other)</span><b id="dlTotal">₹0</b></div>'+
       '<div class="grid2"><div class="field"><label>Tests done (count)</label><input id="dlTests" class="in" type="number" inputmode="numeric"></div>'+
       '<div class="field"><label>Tests Excel (.xlsx)</label><label class="dl-file"><span id="dlXlSt">📎 Attach Excel</span><input id="dlXl" type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden></label></div></div>'+
       '<div id="dlMsg"></div>';
     openModal('Daily business entry', body, '<button class="btn" id="dlSave">Submit to Accountant</button>');
 
-    var st={b2cDocUrl:'',b2dDocUrl:'',testXlUrl:''};
+    var st={b2cDocUrl:'',b2dDocUrl:'',otherDocUrl:'',testXlUrl:''};
     function recalc(){ var t=0; ['dlB2cCash','dlB2cBank','dlB2dCash','dlB2dBank','dlOther'].forEach(function(id){ t+=Number(($id(id)||{}).value)||0; }); $id('dlTotal').textContent='₹'+money(t); }
     ['dlB2cCash','dlB2cBank','dlB2dCash','dlB2dBank','dlOther'].forEach(function(id){ var el=$id(id); if(el) el.addEventListener('input',recalc); });
     function bindUpload(inputId,stEl,stKey,label){ var inp=$id(inputId); if(!inp) return; inp.onchange=function(){ var f=this.files[0]; if(!f) return; if(f.size>8*1024*1024){ toast('File too large (max 8MB)',true); this.value=''; return; }
@@ -140,6 +141,7 @@
       fr.readAsDataURL(f); }; }
     bindUpload('dlB2cDoc','dlB2cDocSt','b2cDocUrl');
     bindUpload('dlB2dDoc','dlB2dDocSt','b2dDocUrl');
+    bindUpload('dlOtherDoc','dlOtherDocSt','otherDocUrl');
     bindUpload('dlXl','dlXlSt','testXlUrl');
 
     $id('dlSave').onclick=function(){
@@ -148,7 +150,7 @@
       this.disabled=true;
       API.saveDaily({branchId:bid,date:$id('dlDate').value,patients:$id('dlPat').value,tests:$id('dlTests').value,
         b2cCash:$id('dlB2cCash').value,b2cBank:$id('dlB2cBank').value,b2dCash:$id('dlB2dCash').value,b2dBank:$id('dlB2dBank').value,other:$id('dlOther').value,expense:($id('dlExpense')||{}).value,
-        b2cDocUrl:st.b2cDocUrl,b2dDocUrl:st.b2dDocUrl,testXlUrl:st.testXlUrl}).then(function(r){ if(r&&r.ok){ closeModal(); toast('Saved'); loadDaily(); } else { $id('dlMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; var b=$id('dlSave'); if(b) b.disabled=false; } });
+        b2cDocUrl:st.b2cDocUrl,b2dDocUrl:st.b2dDocUrl,otherDocUrl:st.otherDocUrl,testXlUrl:st.testXlUrl}).then(function(r){ if(r&&r.ok){ closeModal(); toast('Saved'); loadDaily(); } else { $id('dlMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; var b=$id('dlSave'); if(b) b.disabled=false; } });
     };
   }
 
