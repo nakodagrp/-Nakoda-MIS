@@ -276,13 +276,18 @@ body.modal-open #mobileBottomNav{display:none!important}
 .tm-chip{font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:5px}
 .tm-chip.task{background:#fdeaec;color:var(--red)}
 .tm-chip.sch{background:#ECEAFB;color:#5046b8}
+.tm-chip.dc{background:#fdf3e0;color:#a06a08}
+.tm-chip.attc{background:#e6f1fb;color:#185fa5}
+.tm-chip.ver{background:#fdeaea;color:#a3271f}
 .tm-it{font-size:12.5px;color:#33373d;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tm-late{color:var(--red);font-weight:600}
 .tm-acts{display:flex;gap:7px;flex:none}
 .tm-acts a{display:flex;align-items:center;gap:5px;padding:7px 11px;border-radius:8px;font-size:11.5px;font-weight:600;text-decoration:none}
 .tm-call{background:#eef6f0;color:var(--ok)}
 .tm-wa{background:#e7f6ed;color:#128c4b}
-@media(max-width:560px){ .tm-acts a span{display:none} .tm-acts a{padding:8px 10px} }
+.tm-donebtn{display:flex;align-items:center;gap:5px;padding:7px 11px;border-radius:8px;font-size:11.5px;font-weight:600;background:#1a7f37;color:#fff;border:none;cursor:pointer;font-family:inherit}
+.tm-donebtn:active{transform:scale(.97)}
+@media(max-width:560px){ .tm-acts a span{display:none} .tm-acts a{padding:8px 10px} .tm-donebtn span{display:none} .tm-donebtn{padding:8px 10px} }
 
 /* ===================== RECURRING TASKS ===================== */
 .rec-row{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--line);border-radius:11px;padding:11px 13px;margin-bottom:8px;cursor:pointer}

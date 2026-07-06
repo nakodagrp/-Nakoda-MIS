@@ -55,7 +55,7 @@
     saveItem:1,deleteItem:1,saveVendor:1,deleteVendor:1,saveConsumption:1,raiseIndent:1,advanceIndent:1,saveAudit:1,approveAudit:1,
     saveSection:1,deleteSection:1,saveVideo:1,deleteVideo:1,submitQuiz:1,saveAsset:1,deleteAsset:1,
     login:1,validate:1,logout:1,uploadFile:1,importOldCards:1,attachSelfie:1,
-    submitSuggestion:1,replySuggestion:1,saveFixedAsset:1,deleteFixedAsset:1};
+    submitSuggestion:1,replySuggestion:1,saveFixedAsset:1,deleteFixedAsset:1,completeFollowup:1};
   /* Writes that already do their own optimistic queueing inside the method (don't double-queue here). */
   var SELF_QUEUE={createEmployee:1,updateEmployee:1,setStatus:1,issueCard:1,renewCard:1,cancelCard:1,markCardSent:1,markCardActivated:1,
     createTask:1,updateTask:1,setTaskStatus:1,deleteTask:1,createCalEntry:1,updateCalEntry:1,startInstance:1,advanceStage:1,attachSelfie:1};
@@ -249,6 +249,9 @@
     updateTask:function(taskId,data){ var f=function(){ return queueTask('updateTask',{taskId:taskId,data:data},function(){ return patchTask(taskId,data); }); }; if(navigator.onLine) return call('updateTask',{token:getToken(),taskId:taskId,data:data}).then(function(r){ if(r.ok) API.refreshTasks(); return r; }).catch(f); return f(); },
     setTaskStatus:function(taskId,status,note){ return API.updateTask(taskId,{status:status,completionNote:note||''}); },
     deleteTask:function(taskId){ return API.updateTask(taskId,{status:'deleted'}); },
+    cachedFollowups:function(){ return kvGet('pcfu'); },
+    pcFollowups:function(){ return call('pcFollowups',{token:getToken()}).then(function(r){ if(r.ok) kvSet('pcfu',r.items); return r; }).catch(function(){ return kvGet('pcfu').then(function(i){ return {ok:true,items:i||[],offline:true}; }); }); },
+    completeFollowup:function(data){ return call('completeFollowup',{token:getToken(),data:data}); },
     cachedAllTasks:function(){ return kvGet('alltasks'); },
     listAllTasks:function(filter){ return call('listAllTasks',{token:getToken(),filter:filter||{}}).then(function(r){ if(r.ok) kvSet('alltasks',r.tasks); return r; }).catch(function(){ return kvGet('alltasks').then(function(t){ return {ok:true,tasks:t||[],offline:true}; }); }); },
     calendarTargets:function(){ return call('calendarTargets',{token:getToken()}).then(function(r){ if(r.ok) kvSet('caltargets',r.targets); return r; }).catch(function(){ return kvGet('caltargets').then(function(t){ return {ok:true,targets:t||[]}; }); }); },

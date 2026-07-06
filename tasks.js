@@ -248,7 +248,7 @@
     return 'late, not done';
   }
   function renderTaskMonitor(){
-    var v=document.getElementById('page-taskmon'), ALLT=[], ALLC=[], FILT='all', EMP='';
+    var v=document.getElementById('page-taskmon'), ALLT=[], ALLC=[], FUP=[], FILT='all', EMP='';
     var canPick=S.perms&&S.perms.canViewAll, branches=(S.meta&&S.meta.branches)||[];
     var brOpts='<option value="">All branches</option>'+branches.map(function(b){return '<option value="'+esc(b.BranchID)+'">'+esc(b.BranchName)+'</option>';}).join('');
     v.innerHTML='<div class="page-head"><h1>Process Flow Monitor</h1></div>'+
@@ -290,8 +290,30 @@
         items.push({kind:'sch', id:c.entryId, title:c.title, name:c.assigneeName, phone:c.assigneePhone, branchId:c.branchId,
           when:(c.date||'')+' '+(c.startTime||'')+(c.endTime?'–'+c.endTime:''), sortKey:(c.date||'')+(c.startTime||'00:00'), date:c.date, startTime:c.startTime, endTime:c.endTime});
       });
+      // Auto follow-ups (daily cash report + attendance) — pinned on top; PC can complete them with a note
+      FUP.forEach(function(f){
+        if(br && String(f.branchId)!==String(br)) return;
+        items.push({kind:(f.kind==='dailycash'?'dc':'att'), fu:f, id:f.fuKey, title:f.title, name:f.name, phone:f.phone, branchId:f.branchId,
+          when:f.detail||'', sortKey:'0000'+(f.date||''), date:f.date, state:f.state});
+      });
       items.sort(function(a,b){ return a.sortKey<b.sortKey?-1:1; });
       return items;
+    }
+    function openCompleteFu(key){
+      var f=FUP.filter(function(x){ return String(x.fuKey)===String(key); })[0]; if(!f) return;
+      var body='<div style="font-size:13px;color:#666;margin-bottom:8px"><b>'+esc(f.title)+'</b>'+(f.name?(' · '+esc(f.name)):'')+'</div>'+
+        '<div class="field full"><label>Notes (what was done)</label><textarea id="fuNote" class="in" rows="3" placeholder="e.g. Called the branch — report entered now"></textarea></div>'+
+        '<div style="font-size:11.5px;color:#999;margin-top:6px">'+(f.kind==='dailycash'
+          ?'The entry itself is still verified by Accounts in Accounts → Daily Entry. If an uploaded report stays unverified for 3 hours it comes back here automatically.'
+          :'Attendance approval still happens on the Attendance → Approve screen. If a punch stays unapproved for 24 hours it comes back here automatically.')+'</div><div id="fuMsg"></div>';
+      openModal('Complete follow-up', body, '<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="fuDone">✓ Completed</button>');
+      document.getElementById('fuDone').onclick=function(){
+        var btn=this; btn.disabled=true; btn.innerHTML='<span class="loader"></span>';
+        API.completeFollowup({fuKey:f.fuKey,kind:f.kind,title:f.title,branchId:f.branchId,empId:f.empId,note:(document.getElementById('fuNote')||{}).value||''}).then(function(r){
+          if(r&&r.ok){ FUP=FUP.filter(function(x){ return String(x.fuKey)!==String(f.fuKey); }); closeModal(); toast('Marked completed'); paint(); }
+          else { btn.disabled=false; btn.textContent='✓ Completed'; var m=document.getElementById('fuMsg'); if(m) m.innerHTML='<div class="msg error">'+esc((r&&r.error)||'Could not save — check internet.')+'</div>'; }
+        });
+      };
     }
     function paint(){
       var base=collect();
@@ -303,29 +325,39 @@
         esel.value=EMP; }
       var all = EMP ? base.filter(function(i){ return i.name===EMP; }) : base;
       var tasks=all.filter(function(i){return i.kind==='task';}), sch=all.filter(function(i){return i.kind==='sch';});
+      var dc=all.filter(function(i){return i.kind==='dc';}), att=all.filter(function(i){return i.kind==='att';});
       var staff={}; all.forEach(function(i){ staff[i.name]=1; });
       document.getElementById('tmKpis').innerHTML=
         '<div class="kpi" style="background:#fdecec"><div class="n" style="color:#C0392B">'+tasks.length+'</div><div class="l">Overdue tasks</div></div>'+
         '<div class="kpi" style="background:#f1effc"><div class="n" style="color:#6f63d6">'+sch.length+'</div><div class="l">Missed schedule</div></div>'+
         '<div class="kpi" style="background:#fff7e6"><div class="n" style="color:#b08900">'+Object.keys(staff).length+'</div><div class="l">People to chase</div></div>';
-      var fdef=[['all','All ('+all.length+')'],['task','Tasks ('+tasks.length+')'],['sch','Schedule ('+sch.length+')']];
+      var fdef=[['all','All ('+all.length+')'],['task','Tasks ('+tasks.length+')'],['sch','Schedule ('+sch.length+')'],['dc','Daily cash ('+dc.length+')'],['att','Attendance ('+att.length+')']];
       document.getElementById('tmFilt').innerHTML=fdef.map(function(f){ return '<button data-f="'+f[0]+'" class="'+(FILT===f[0]?'on':'')+'">'+f[1]+'</button>'; }).join('');
       document.querySelectorAll('#tmFilt button').forEach(function(b){ b.onclick=function(){ FILT=b.getAttribute('data-f'); paint(); }; });
-      var list = FILT==='task'?tasks : FILT==='sch'?sch : all;
+      var list = FILT==='task'?tasks : FILT==='sch'?sch : FILT==='dc'?dc : FILT==='att'?att : all;
       var box=document.getElementById('tmList');
       if(!list.length){ box.innerHTML='<div class="empty">Nothing overdue right now. 🎉</div>'; return; }
       box.innerHTML=list.map(function(i){
         var ph=String(i.phone||'').replace(/\D/g,'');
-        var msg=encodeURIComponent('Reminder from Nakoda: please '+(i.kind==='task'?'complete your task':'attend/close your scheduled item')+' “'+i.title+'” — it is overdue.');
-        var chip=i.kind==='task'?'<span class="tm-chip task">TASK</span>':'<span class="tm-chip sch">SCHEDULE</span>';
+        var isFu=(i.kind==='dc'||i.kind==='att');
+        var msg=encodeURIComponent('Reminder from Nakoda: '+(i.kind==='task'?'please complete your task “'+i.title+'” — it is overdue.'
+          :i.kind==='sch'?'please attend/close your scheduled item “'+i.title+'” — it is overdue.'
+          :i.kind==='dc'?(i.state==='verify'?'the daily cash report is waiting for verification ('+i.title+').':'please enter the daily cash report — '+i.title+'.')
+          :'please punch in your attendance — it is past your shift start.'));
+        var chip=i.kind==='task'?'<span class="tm-chip task">TASK</span>'
+                :i.kind==='sch'?'<span class="tm-chip sch">SCHEDULE</span>'
+                :i.kind==='dc'?'<span class="tm-chip dc">DAILY CASH</span>':'<span class="tm-chip attc">ATTENDANCE</span>';
+        if(isFu && i.state==='verify') chip+=' <span class="tm-chip ver">VERIFY OVERDUE</span>';
         return '<div class="tm-row">'+
           '<div class="tm-av">'+esc(initials(i.name))+'</div>'+
           '<div class="tm-mid"><div class="tm-nm"><b>'+esc(i.name)+'</b><span class="tm-brn">'+esc(tbn(i.branchId))+'</span>'+chip+'</div>'+
-          '<div class="tm-it">'+esc(i.title)+' · '+esc(i.when.trim())+' · <span class="tm-late">'+esc(lateLabel(i))+'</span></div></div>'+
+          '<div class="tm-it">'+esc(i.title)+' · '+esc(String(i.when||'').trim())+(isFu?'':' · <span class="tm-late">'+esc(lateLabel(i))+'</span>')+'</div></div>'+
           '<div class="tm-acts">'+
             (ph?('<a href="tel:'+ph+'" class="tm-call">📞 <span>Call</span></a><a href="https://wa.me/91'+ph+'?text='+msg+'" target="_blank" class="tm-wa">💬 <span>WhatsApp</span></a>'):'<span style="font-size:10px;color:#aaa">No phone</span>')+
+            (isFu?'<button class="tm-donebtn" data-fu="'+esc(i.id)+'">✓ <span>Completed</span></button>':'')+
           '</div></div>';
       }).join('');
+      box.querySelectorAll('[data-fu]').forEach(function(b){ b.onclick=function(){ openCompleteFu(b.getAttribute('data-fu')); }; });
     }
     function renderScorecard(box){
       var d0=new Date(); d0.setDate(d0.getDate()-30);
@@ -356,9 +388,10 @@
       }
       var g=document.getElementById('scGo'); if(g) g.onclick=load; load();
     }
-    Promise.all([API.cachedAllTasks(),API.cachedAllCalendar()]).then(function(a){ if(a[0]) ALLT=a[0]; if(a[1]) ALLC=a[1]; if((a[0]&&a[0].length)||(a[1]&&a[1].length)) paint(); else document.getElementById('tmList').innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>'; });
+    Promise.all([API.cachedAllTasks(),API.cachedAllCalendar(),API.cachedFollowups()]).then(function(a){ if(a[0]) ALLT=a[0]; if(a[1]) ALLC=a[1]; if(a[2]) FUP=a[2]; if((a[0]&&a[0].length)||(a[1]&&a[1].length)||(a[2]&&a[2].length)) paint(); else document.getElementById('tmList').innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>'; });
     API.listAllTasks().then(function(r){ if(r.ok){ ALLT=r.tasks||[]; paint(); } });
     API.listAllCalendar().then(function(r){ if(r.ok){ ALLC=r.entries||[]; paint(); } });
+    API.pcFollowups().then(function(r){ if(r.ok){ FUP=r.items||[]; paint(); } });
   }
 
   window.renderMyTasks=renderMyTasks;
