@@ -91,13 +91,13 @@
     var start=ACC.dailyPage*PAGE, rows=all.slice(start,start+PAGE);
     var actions=canEnter()?'<div class="fin-actions"><button class="btn" id="dlyAdd">+ Daily entry</button><button class="btn ghost" id="dlyDep">🏦 Bank deposit</button></div>':'';
     box.innerHTML=actions+
-      '<div class="table-wrap"><table><thead><tr><th>Branch</th><th>Date</th><th>B2C cash</th><th>B2C bank</th><th>B2D</th><th>Other</th><th>Patients</th><th>Tests</th><th>Collection</th><th>Docs</th><th>Status</th><th>Reject</th></tr></thead><tbody>'+
-      (rows.length?rows.map(function(d){ var coll=(Number(d.cashIn)||0)+(Number(d.bankIn)||0)+(Number(d.other)||0); var b2d=(Number(d.b2dCash)||0)+(Number(d.b2dBank)||0); var stt=String(d.status);
+      '<div class="table-wrap"><table><thead><tr><th>Branch</th><th>Date</th><th>B2C cash</th><th>B2C bank</th><th>Other</th><th>Patients</th><th>Tests</th><th>Collection</th><th>Docs</th><th>Status</th><th>Reject</th></tr></thead><tbody>'+
+      (rows.length?rows.map(function(d){ var coll=(Number(d.cashIn)||0)+(Number(d.bankIn)||0)+(Number(d.other)||0); var stt=String(d.status);
         var statusCell = stt==='verified' ? '<span class="chip paid">✓ verified</span>'
           : stt==='rejected' ? '<span class="chip" style="background:#fdecec;color:#b23b3b">✗ rejected</span>'
           : (r.canVerify ? '<button class="btn ghost sm" data-vf="'+esc(d.dayId)+'">Verify</button>' : '<span class="chip partial">pending</span>');
         var rejectCell = (stt!=='verified' && stt!=='rejected' && r.canVerify) ? '<button class="btn ghost sm" data-rj="'+esc(d.dayId)+'" style="color:#b23b3b">Reject</button>' : '';
-        return '<tr><td>'+esc(branchName(d.branchId))+'</td><td>'+esc(d.date)+'</td><td>₹'+money(d.b2cCash)+'</td><td>₹'+money(d.b2cBank)+'</td><td>₹'+money(b2d)+'</td><td>₹'+money(d.other)+'</td><td>'+(d.patients||0)+'</td><td>'+(d.tests||0)+'</td><td>₹'+money(coll)+'</td><td>'+docLinks(d)+'</td><td>'+statusCell+'</td><td>'+rejectCell+'</td></tr>'; }).join(''):'<tr><td class="empty" colspan="12">No entries this month.</td></tr>')+'</tbody></table></div>'+
+        return '<tr><td>'+esc(branchName(d.branchId))+'</td><td>'+esc(d.date)+'</td><td>₹'+money(d.b2cCash)+'</td><td>₹'+money(d.b2cBank)+'</td><td>₹'+money(d.other)+'</td><td>'+(d.patients||0)+'</td><td>'+(d.tests||0)+'</td><td>₹'+money(coll)+'</td><td>'+docLinks(d)+'</td><td>'+statusCell+'</td><td>'+rejectCell+'</td></tr>'; }).join(''):'<tr><td class="empty" colspan="11">No entries this month.</td></tr>')+'</tbody></table></div>'+
       (total>PAGE?'<div class="acc-pager">'+(ACC.dailyPage>0?'<button class="btn ghost sm" id="dlyPrev">‹ Prev</button>':'<span></span>')+'<span>'+(start+1)+'–'+Math.min(start+PAGE,total)+' of '+total+'</span>'+(ACC.dailyPage<pages-1?'<button class="btn ghost sm" id="dlyNext">Next ›</button>':'<span></span>')+'</div>':'');
     var a=$id('dlyAdd'); if(a) a.onclick=openDailyForm;
     var dp=$id('dlyDep'); if(dp) dp.onclick=openDepositForm;
@@ -133,7 +133,6 @@
       '<div class="field"><label>Date</label><input id="dlDate" class="in" type="date" value="'+(new Date().toISOString().slice(0,10))+'"></div>'+
       '<div class="field"><label>Patients served</label><input id="dlPat" class="in" type="number" inputmode="numeric"></div></div>'+
       incBlock('B2c','B2C income (walk-in / patient)','')+
-      incBlock('B2d','B2D income (doctor / referral)','')+
       '<div class="dl-blk"><div class="dl-blk-h">Other income (B2B — credit, billed monthly)</div>'+
         '<div class="field"><label>Amount (₹)</label><input id="dlOther" class="in dl-amt" type="number" inputmode="numeric"></div>'+
         '<div style="font-size:11px;color:#888;margin-top:4px">At month-end this is replaced by your B2B invoice total.</div>'+
@@ -145,15 +144,14 @@
     openModal('Daily business entry', body, '<button class="btn" id="dlSave">Submit to Accountant</button>');
 
     var st={b2cDocUrl:'',b2dDocUrl:'',otherDocUrl:'',testXlUrl:''};
-    function recalc(){ var t=0; ['dlB2cCash','dlB2cBank','dlB2dCash','dlB2dBank','dlOther'].forEach(function(id){ t+=Number(($id(id)||{}).value)||0; }); $id('dlTotal').textContent='₹'+money(t); }
-    ['dlB2cCash','dlB2cBank','dlB2dCash','dlB2dBank','dlOther'].forEach(function(id){ var el=$id(id); if(el) el.addEventListener('input',recalc); });
+    function recalc(){ var t=0; ['dlB2cCash','dlB2cBank','dlOther'].forEach(function(id){ t+=Number(($id(id)||{}).value)||0; }); $id('dlTotal').textContent='₹'+money(t); }
+    ['dlB2cCash','dlB2cBank','dlOther'].forEach(function(id){ var el=$id(id); if(el) el.addEventListener('input',recalc); });
     function bindUpload(inputId,stEl,stKey,label){ var inp=$id(inputId); if(!inp) return; inp.onchange=function(){ var f=this.files[0]; if(!f) return; if(f.size>8*1024*1024){ toast('File too large (max 8MB)',true); this.value=''; return; }
       var s=$id(stEl); s.textContent='Uploading…'; var fr=new FileReader();
       fr.onload=function(){ var d=fr.result,i=d.indexOf(',');
         API.uploadFile({base64:d.slice(i+1),fileName:f.name,mimeType:f.type,subPath:'DailyBusiness/'+(($id('dlDate')||{}).value||'')}).then(function(r){ if(r&&r.ok){ st[stKey]=r.url; s.innerHTML='✓ '+esc(f.name)+' — tap to replace'; } else { s.textContent='Upload failed — tap to retry'; } }, function(){ s.textContent='Upload failed — tap to retry'; }); };
       fr.readAsDataURL(f); }; }
     bindUpload('dlB2cDoc','dlB2cDocSt','b2cDocUrl');
-    bindUpload('dlB2dDoc','dlB2dDocSt','b2dDocUrl');
     bindUpload('dlOtherDoc','dlOtherDocSt','otherDocUrl');
     bindUpload('dlXl','dlXlSt','testXlUrl');
 
@@ -162,7 +160,7 @@
       if(bsel && !bid){ $id('dlMsg').innerHTML='<div class="msg error">Please select a branch.</div>'; return; }
       this.disabled=true;
       API.saveDaily({branchId:bid,date:$id('dlDate').value,patients:$id('dlPat').value,tests:$id('dlTests').value,
-        b2cCash:$id('dlB2cCash').value,b2cBank:$id('dlB2cBank').value,b2dCash:$id('dlB2dCash').value,b2dBank:$id('dlB2dBank').value,other:$id('dlOther').value,expense:($id('dlExpense')||{}).value,
+        b2cCash:$id('dlB2cCash').value,b2cBank:$id('dlB2cBank').value,b2dCash:0,b2dBank:0,other:$id('dlOther').value,expense:($id('dlExpense')||{}).value,
         b2cDocUrl:st.b2cDocUrl,b2dDocUrl:st.b2dDocUrl,otherDocUrl:st.otherDocUrl,testXlUrl:st.testXlUrl}).then(function(r){ if(r&&r.ok){ closeModal(); toast('Saved'); loadDaily(); } else { $id('dlMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; var b=$id('dlSave'); if(b) b.disabled=false; } });
     };
   }
@@ -195,19 +193,75 @@
     $id('ivSave').onclick=function(){ readIt(); var party=$id('ivParty').value.trim(); if(!party){ $id('ivMsg').innerHTML='<div class="msg error">Party required.</div>'; return; } this.disabled=true;
       API.saveInvoice({branchId:ACC.branch,partyType:$id('ivType').value,party:party,gstin:$id('ivGstin').value,gstPct:$id('ivGst').value,date:$id('ivDate').value,dueDate:$id('ivDue').value,items:INVIT.filter(function(x){return x.desc;})}).then(function(r){ if(r&&r.ok){ closeModal(); toast('Invoice '+r.invId+' created'); loadInvoices(); } else $id('ivMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; }); };
   }
-  function invoicePdf(inv){ var logo=new Image(); logo.onload=function(){d(logo);}; logo.onerror=function(){d(null);}; logo.src='icons/login-logo.png';
-    function d(logo){ var items=[]; try{items=JSON.parse(inv.itemsJson||'[]');}catch(e){} var W=1000,M=55,H=360+items.length*30, c=document.createElement('canvas');c.width=W;c.height=H;var x=c.getContext('2d');
-      x.fillStyle='#fff';x.fillRect(0,0,W,H);x.fillStyle='#DA1017';x.fillRect(0,0,W,8);
-      if(logo){var lh=56,lw=Math.min(280,logo.width*(lh/logo.height));x.drawImage(logo,M,26,lw,lh);} else {x.fillStyle='#DA1017';x.font='bold 26px Arial';x.fillText('NAKODA',M,60);}
-      x.fillStyle='#1f1f1f';x.font='bold 24px Arial';x.textAlign='right';x.fillText('TAX INVOICE',W-M,44);x.fillStyle='#888';x.font='13px Arial';x.fillText(inv.invId+' · '+inv.date,W-M,66);x.textAlign='left';
-      x.fillStyle='#444';x.font='15px Arial';x.fillText('Bill to: '+inv.party+(inv.gstin?(' · GSTIN '+inv.gstin):''),M,120);
-      var y=160; x.fillStyle='#f3f4f7';x.fillRect(M,y-18,W-2*M,26);x.fillStyle='#555';x.font='bold 13px Arial';x.fillText('Item',M+8,y);x.fillText('Qty',W-360,y);x.fillText('Rate',W-260,y);x.textAlign='right';x.fillText('Amount',W-M-8,y);x.textAlign='left';y+=30;
-      x.font='14px Arial';x.fillStyle='#222'; items.forEach(function(it){ x.fillText(String(it.desc||''),M+8,y); x.fillText(String(it.qty),W-360,y); x.fillText('₹'+money(it.rate),W-260,y); x.textAlign='right';x.fillText('₹'+money(it.qty*it.rate),W-M-8,y);x.textAlign='left'; y+=30; });
-      y+=10; x.textAlign='right'; x.fillStyle='#555';x.fillText('Subtotal: ₹'+money(inv.subtotal),W-M-8,y);y+=26; x.fillText('GST ('+inv.gstPct+'%): ₹'+money(inv.gstAmt),W-M-8,y);y+=30;
-      x.fillStyle='#1a7f37';x.font='bold 20px Arial';x.fillText('Total: ₹'+money(inv.total),W-M-8,y);x.textAlign='left';
-      x.fillStyle='#999';x.font='italic 12px Arial';x.textAlign='center';x.fillText('Nakoda Diagnostics And Research Center',W/2,H-22);x.textAlign='left';
-      c.toBlob(function(bb){var u=URL.createObjectURL(bb),a=document.createElement('a');a.href=u;a.download=inv.invId+'.png';a.click();setTimeout(function(){URL.revokeObjectURL(u);},2000);toast('Invoice saved');});
-    }
+  /* Amount in words (Indian system) — e.g. 12000 -> "Indian Rupee Twelve Thousand Only" */
+  function inWords(n){
+    n=Math.round(Number(n)||0); if(!n) return 'Indian Rupee Zero Only';
+    var a=['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+    var b=['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+    function two(x){ return x<20?a[x]:(b[Math.floor(x/10)]+(x%10?' '+a[x%10]:'')); }
+    function three(x){ return (x>99?a[Math.floor(x/100)]+' Hundred'+(x%100?' ':''):'')+(x%100?two(x%100):''); }
+    var out='', cr=Math.floor(n/10000000), lk=Math.floor(n/100000)%100, th=Math.floor(n/1000)%100, re=n%1000;
+    if(cr) out+=three(cr)+' Crore ';
+    if(lk) out+=two(lk)+' Lakh ';
+    if(th) out+=two(th)+' Thousand ';
+    if(re) out+=three(re);
+    return 'Indian Rupee '+out.replace(/\s+/g,' ').trim()+' Only';
+  }
+  function fmtDMY(ds){ var p=String(ds||'').slice(0,10).split('-'); return p.length===3?(p[2]+'/'+p[1]+'/'+p[0]):String(ds||''); }
+  /* Invoice download — matches the Tirupati Lab reference layout: meta block top-right, dark item
+     table (# / Description / Qty / Rate / Amount), Sub Total / Total / Balance Due, amount in
+     words, "Thanks for your business." */
+  function invoicePdf(inv){
+    var items=[]; try{items=JSON.parse(inv.itemsJson||'[]');}catch(e){}
+    var W=1240,H=1754,M=90, c=document.createElement('canvas');c.width=W;c.height=H;var x=c.getContext('2d');
+    x.fillStyle='#fff';x.fillRect(0,0,W,H);
+    // meta block, top-right
+    var due=inv.dueDate?fmtDMY(inv.dueDate):fmtDMY(inv.date);
+    x.font='15px Arial'; x.textAlign='right';
+    var metaY=150, rows=[['Invoice Date :',fmtDMY(inv.date)],['Terms :','Due on Receipt'],['Due Date :',due]];
+    rows.forEach(function(r){ x.fillStyle='#555'; x.fillText(r[0], W-M-170, metaY); x.fillStyle='#1f1f1f'; x.fillText(r[1], W-M, metaY); metaY+=30; });
+    x.textAlign='left';
+    // party name, left — level with the bottom of the meta block
+    x.fillStyle='#1f1f1f'; x.font='bold 17px Arial'; x.fillText(String(inv.party||'').toUpperCase(), M, 226);
+    if(inv.gstin){ x.font='13px Arial'; x.fillStyle='#777'; x.fillText('GSTIN: '+inv.gstin, M, 248); }
+    // item table
+    var y=290, rowH=64;
+    x.fillStyle='#3d3d3d'; x.fillRect(M,y,W-2*M,40);
+    x.fillStyle='#fff'; x.font='bold 14px Arial';
+    x.fillText('#',M+16,y+26); x.fillText('Description',M+60,y+26);
+    x.textAlign='right'; x.fillText('Qty',W-M-330,y+26); x.fillText('Rate',W-M-170,y+26); x.fillText('Amount',W-M-16,y+26); x.textAlign='left';
+    y+=40;
+    items.forEach(function(it,i){
+      x.fillStyle='#1f1f1f'; x.font='15px Arial';
+      x.fillText(String(i+1), M+16, y+28);
+      x.fillText(String(it.desc||''), M+60, y+28);
+      if(it.note){ x.font='12px Arial'; x.fillStyle='#777'; x.fillText(String(it.note), M+60, y+48); }
+      x.fillStyle='#1f1f1f'; x.font='15px Arial'; x.textAlign='right';
+      x.fillText(Number(it.qty).toFixed(2), W-M-330, y+28);
+      x.fillText(money(it.rate)+'.00', W-M-170, y+28);
+      x.fillText(money(it.qty*it.rate)+'.00', W-M-16, y+28);
+      x.textAlign='left';
+      y+=rowH; x.strokeStyle='#333'; x.beginPath(); x.moveTo(M,y); x.lineTo(W-M,y); x.stroke();
+    });
+    // totals block, right-aligned
+    y+=36; var lx=W-M-360;
+    x.font='15px Arial'; x.textAlign='right';
+    x.fillStyle='#555'; x.fillText('Sub Total', W-M-170, y); x.fillStyle='#1f1f1f'; x.fillText(money(inv.subtotal)+'.00', W-M-16, y);
+    if(Number(inv.gstAmt)>0){ y+=34; x.fillStyle='#555'; x.fillText('GST ('+inv.gstPct+'%)', W-M-170, y); x.fillStyle='#1f1f1f'; x.fillText(money(inv.gstAmt)+'.00', W-M-16, y); }
+    y+=34; x.font='bold 16px Arial'; x.fillStyle='#1f1f1f'; x.fillText('Total', W-M-170, y); x.fillText('₹'+money(inv.total)+'.00', W-M-16, y);
+    y+=18; x.fillStyle='#f5f5f5'; x.fillRect(lx, y, W-M-lx, 42);
+    x.fillStyle='#1f1f1f'; x.font='bold 16px Arial'; x.fillText('Balance Due', W-M-170, y+28); x.fillText('₹'+money((Number(inv.total)||0)-(Number(inv.paid)||0))+'.00', W-M-16, y+28);
+    // amount in words
+    y+=84; x.font='13px Arial'; x.fillStyle='#555'; x.fillText('Total In Words:', W-M-330, y);
+    x.font='bold italic 14px Arial'; x.fillStyle='#1f1f1f';
+    var words=inWords(inv.total), wl=words.length>46?[words.slice(0,words.lastIndexOf(' ',46)),words.slice(words.lastIndexOf(' ',46)+1)]:[words];
+    wl.forEach(function(l){ x.fillText(l, W-M, y); y+=22; });
+    x.textAlign='left';
+    // footer
+    y=Math.max(y+80, H-320);
+    x.font='14px Arial'; x.fillStyle='#333'; x.fillText('Thanks for your business.', M, y);
+    x.font='italic 12px Arial'; x.fillStyle='#999'; x.textAlign='center'; x.fillText('Nakoda Diagnostics And Research Center', W/2, H-46); x.textAlign='left';
+    c.toBlob(function(bb){var u=URL.createObjectURL(bb),a=document.createElement('a');a.href=u;a.download=inv.invId+'.png';a.click();setTimeout(function(){URL.revokeObjectURL(u);},2000);toast('Invoice saved');});
   }
 
   /* ---- Expenses / vendor bills ---- */

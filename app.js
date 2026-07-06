@@ -5,7 +5,12 @@ function $(id){ return document.getElementById(id); }
 function el(h){ var d=document.createElement('div'); d.innerHTML=h.trim(); return d.firstChild; }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
 function toast(m,err){ var t=$('toast'); t.textContent=m; t.className='show'+(err?' err':''); setTimeout(function(){t.className='';},2800); }
-function show(id){ ['view-login','view-changepw','view-app'].forEach(function(v){ $(v).classList.toggle('hidden',v!==id); }); var sp=$('app-splash'); if(sp&&!sp.classList.contains('hidden')){ sp.classList.add('hidden'); setTimeout(function(){ sp.style.display='none'; },450); } }
+var _splashStart=Date.now(), _splashDone=false;
+function show(id){
+  function doShow(){ ['view-login','view-changepw','view-app'].forEach(function(v){ $(v).classList.toggle('hidden',v!==id); }); var sp=$('app-splash'); if(sp){ sp.classList.add('hidden'); setTimeout(function(){ sp.style.display='none'; },450); } }
+  if(!_splashDone){ _splashDone=true; var wait=1500-(Date.now()-_splashStart); if(wait>0) setTimeout(doShow,wait); else doShow(); }
+  else doShow();
+}
 function setMsg(id,t,ty){ var e=$(id); e.innerHTML=t?('<div class="msg '+(ty||'error')+'">'+esc(t)+'</div>'):''; }
 function initials(n){ var p=String(n||'N').trim().split(/\s+/); return ((p[0]||'')[0]||'N').toUpperCase()+(p.length>1?(p[p.length-1][0]||'').toUpperCase():''); }
 
@@ -330,6 +335,10 @@ function loadDashboard(){
   }
 }
 function renderDashboard(){
+  /* SCROLL STABILITY: this repaints as each background load resolves (tasks, cards, daily, training…).
+     Replacing large chunks of DOM makes the page height dip for a frame, so the browser clamps the
+     scroll and the user gets yanked back up. Remember where they were and restore it after painting. */
+  var _se=document.scrollingElement||document.documentElement, _sy=_se?_se.scrollTop:0;
   var u=S.user||{}, lvl=S.perms&&S.perms.level, isManager=S.perms&&S.perms.canViewAll, isBranchMgr=lvl==='BRANCH_MGR', isMon=isMonitorRole();
   var tdy=todayD();
   var myT=(DASH.tasks||[]).filter(function(t){return t.status!=='deleted';});
@@ -450,6 +459,7 @@ function renderDashboard(){
   if(!recent.length){ rhtml='<tr><td class="empty">No staff yet.</td></tr>'; }
   else recent.forEach(function(e){ rhtml+='<tr><td><b>'+esc(e.FullName)+'</b>'+pend(e)+'</td><td>'+esc(e.Role)+'</td><td>'+officeBadge(e)+'</td><td>'+statusBadge(e.Status)+'</td></tr>'; });
   tb.innerHTML=rhtml;
+  if(_se && _sy>0){ _se.scrollTop=_sy; requestAnimationFrame(function(){ if(Math.abs(_se.scrollTop-_sy)>2) _se.scrollTop=_sy; }); }
 }
 function kpi(n,l){ return '<div class="kpi"><div class="n">'+n+'</div><div class="l">'+esc(l)+'</div></div>'; }
 function kpiC(n,l,cls){ return '<div class="kpi k-'+(cls||'')+'"><div class="n">'+n+'</div><div class="l">'+esc(l)+'</div></div>'; }

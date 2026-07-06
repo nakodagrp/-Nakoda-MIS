@@ -176,7 +176,7 @@
   // Selfies only need to be big enough to identify someone in an 80x80 thumbnail — shrinking before upload
   // cuts the payload from a multi-MB camera frame down to well under 100KB, which is most of what made
   // punch-in/out feel slow on a normal mobile connection.
-  var SELFIE_MAX_DIM=640, SELFIE_QUALITY=0.7;
+  var SELFIE_MAX_DIM=560, SELFIE_QUALITY=0.62;   // smaller payload = faster punch on slow phones/networks
   function resizeDataUrl(dataUrl, cb){
     var img=new Image();
     img.onload=function(){
@@ -276,18 +276,36 @@
     // missing — a background/queued upload was tried and lost photos when the app closed too soon after
     // check-in. Location+camera still run in parallel beforehand (startMark), and the photo is resized
     // before it gets here, so this is still much faster than the original version despite waiting on it.
+    // RELIABILITY (slow phones/networks, e.g. Vivo V40E on weak data): the punch often LANDS on the
+    // server but the reply times out, so the app used to show "failed" and force a 2nd–3rd tap.
+    // Now: (1) a lost reply auto-retries once; (2) "Already checked in/out" counts as SUCCESS — it
+    // means the first tap worked; (3) after a final network failure we double-check the server before
+    // telling the user it failed. One tap is enough.
     var c=ATT.coords||{}, payload={selfie:selfie, lat:c.lat, lng:c.lng, wfh:!!ATT.wfh, altShift:!!ATT.altShift, remark:(kind==='out'?(ATT.outRemark||''):'')};
+    function tdy(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+    function success(msg){ ATT.wfh=false; toast(msg); API.myAttendance(ymNow()).then(function(x){ if(x&&x.ok){ ATT.recs=x.records||[]; paintMe(); } }); }
     toast(selfie?'Marking… uploading photo':'Marking…');
-    var p = kind==='in' ? API.checkIn(payload) : API.checkOut(payload);
-    p.then(function(r){
-      if(r&&r.ok){
-        ATT.wfh=false;
-        toast(kind==='in'?('Checked in '+r.checkIn+(r.late?' (late)':'')):('Checked out '+r.checkOut+(r.half?' · half day':'')));
-        API.myAttendance(ymNow()).then(function(x){ if(x&&x.ok){ ATT.recs=x.records||[]; paintMe(); } });
-      }
-      else if(r&&r.wfhPrompt){ promptWfh(r, function(yes){ if(yes){ ATT.wfh=true; submitMark(kind, selfie); } else { ATT.wfh=false; toast('You are not at the centre — '+(kind==='in'?'check-in':'check-out')+' not allowed.',true); } }); }
-      else toast((r&&r.error)||'Could not mark — needs internet & location.',true); })
-      .catch(function(){ toast('Marking attendance needs an internet connection.',true); });
+    var tries=0;
+    function attempt(){
+      tries++;
+      var p = kind==='in' ? API.checkIn(payload) : API.checkOut(payload);
+      p.then(function(r){
+        if(r&&r.ok){ success(kind==='in'?('Checked in '+r.checkIn+(r.late?' (late)':'')):('Checked out '+r.checkOut+(r.half?' · half day':''))); return; }
+        if(r&&r.wfhPrompt){ promptWfh(r, function(yes){ if(yes){ ATT.wfh=true; submitMark(kind, selfie); } else { ATT.wfh=false; toast('You are not at the centre — '+(kind==='in'?'check-in':'check-out')+' not allowed.',true); } }); return; }
+        var em=String((r&&r.error)||'');
+        if(/already checked/i.test(em)){ success(kind==='in'?'Checked in ✓ (your earlier tap worked)':'Checked out ✓ (your earlier tap worked)'); return; }
+        toast(em||'Could not mark — needs internet & location.',true);
+      }).catch(function(){
+        if(tries<2){ toast('Slow connection — retrying…'); setTimeout(attempt,1500); return; }
+        // Reply lost twice — the punch may still have landed. Ask the server before claiming failure.
+        API.myAttendance(ymNow()).then(function(x){
+          var rec=((x&&x.records)||[]).filter(function(r){ return String(r.date).slice(0,10)===tdy(); })[0];
+          if(rec && ((kind==='in'&&rec.checkIn)||(kind==='out'&&rec.checkOut))){ ATT.recs=x.records||[]; success(kind==='in'?('Checked in '+rec.checkIn+' ✓'):('Checked out '+rec.checkOut+' ✓')); return; }
+          toast('Marking attendance needs an internet connection — please try again.',true);
+        },function(){ toast('Marking attendance needs an internet connection — please try again.',true); });
+      });
+    }
+    attempt();
   }
 
   /* ---------- approver ---------- */
