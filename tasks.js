@@ -293,6 +293,7 @@
       // Auto follow-ups (daily cash report + attendance) — pinned on top; PC can complete them with a note
       FUP.forEach(function(f){
         if(br && String(f.branchId)!==String(br)) return;
+        if(f.kind==='dailycash' && String(tbn(f.branchId)||'').toUpperCase().indexOf('DIGITAL')>=0) return;   // DIGITAL has no daily cash business
         items.push({kind:(f.kind==='dailycash'?'dc':'att'), fu:f, id:f.fuKey, title:f.title, name:f.name, phone:f.phone, branchId:f.branchId,
           when:f.detail||'', sortKey:'0000'+(f.date||''), date:f.date, state:f.state});
       });
