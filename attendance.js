@@ -329,10 +329,12 @@
     // L = active staff in scope minus (Full day + Half day) — anyone with no punch today at all, not just explicit "leave" records
     var activeStaff=_approveCache.activeStaff||0;
     var leaveCount=Math.max(0, activeStaff-c.present-c.half);
+    var wfhCount=(recs||[]).filter(function(r){ return /work from home/i.test(String(r.notes||'')); }).length;
     box.innerHTML='<span style="display:inline-flex;gap:6px;flex-wrap:wrap">'+
       chip('#eaf7ef','#1a8f4c','P',c.present,'present',true)+
       chip('#faeeda','#854F0B','H',c.half,'half',true)+
       chip('#e9f1fb','#185FA5','L',leaveCount,'leave',true)+
+      chip('#eeedfe','#534AB7','W',wfhCount,'wfh',true)+
       (c.absent?chip('#fdecec','#b23b3b','A',c.absent,'absent',true):'')+
       '</span>';
     box.querySelectorAll('[data-f]').forEach(function(s){
@@ -366,8 +368,10 @@
     var box=$id('attApprove'); if(!box) return;
     renderApSummary(recs);
     if(ATT.apFilter==='leave'){ renderNotPunched(); return; }
-    var shown=ATT.apFilter ? recs.filter(function(r){ return String(r.status||'present')===ATT.apFilter; }) : recs;
-    if(!shown.length){ box.innerHTML='<div class="empty">No '+(ATT.apFilter?(stLabel(ATT.apFilter)+' '):'')+'attendance marked for this date.</div>'; return; }
+    var shown=ATT.apFilter ? (ATT.apFilter==='wfh'
+      ? recs.filter(function(r){ return /work from home/i.test(String(r.notes||'')); })
+      : recs.filter(function(r){ return String(r.status||'present')===ATT.apFilter; })) : recs;
+    if(!shown.length){ box.innerHTML='<div class="empty">No '+(ATT.apFilter==='wfh'?'work-from-home ':ATT.apFilter?(stLabel(ATT.apFilter)+' '):'')+'attendance marked for this date.</div>'; return; }
     box.innerHTML=shown.map(function(a){
       var ap=String(a.approvalStatus)==='approved';
       // Inline selfie thumbnails — punch-in (IN) and punch-out (OUT) side by side, no PDF link.
@@ -386,7 +390,7 @@
       return '<div class="att-row" data-id="'+esc(a.attId)+'" style="align-items:flex-start">'+
         '<div class="att-av" style="margin-top:4px">'+esc(initials(a.empName))+'</div>'+
         '<div class="att-mid" style="flex:1">'+
-          '<div class="att-nm"><b>'+esc(a.empName)+'</b>'+dayBadge(a.status)+(String(a.late)==='yes'?' <span class="att-late">late</span>':'')+'</div>'+
+          '<div class="att-nm"><b>'+esc(a.empName)+'</b>'+dayBadge(a.status)+(String(a.late)==='yes'?' <span class="att-late">late</span>':'')+(/work from home/i.test(String(a.notes||''))?' <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:#eeedfe;color:#534AB7">🏠 WFH</span>':'')+'</div>'+
           '<div class="att-m">In '+esc(a.checkIn||'—')+(a.checkOut?(' · Out '+esc(a.checkOut)):'')+((a.workHours&&!isNaN(Number(a.workHours)))?(' · '+esc(a.workHours)+'h'):'')+' · '+esc(stLabel(a.status))+((a.latIn&&a.lngIn)?' · <a href="https://maps.google.com/?q='+esc(a.latIn)+','+esc(a.lngIn)+'" target="_blank">📍 '+esc(a.addrIn||'location')+'</a>':'')+'</div>'+
           '<div class="att-m">ID '+esc(a.empId||'')+(a.dutyStart?(' · Duty '+esc(a.dutyStart)+(a.dutyEnd?('–'+esc(a.dutyEnd)):'')):'')+(a.attMode?(' · '+esc(a.attMode)):'')+'</div>'+
           (a.notes?'<div class="att-m" style="color:#a3271f;font-weight:600">📝 '+esc(a.notes)+'</div>':'')+

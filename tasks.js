@@ -287,7 +287,7 @@
         var missed=(c.date<tdy) || (c.date===tdy && endMin && endMin<nowMin);
         if(!missed) return;
         if(br && String(c.branchId)!==String(br)) return;
-        items.push({kind:'sch', id:c.entryId, title:c.title, name:c.assigneeName, phone:c.assigneePhone, branchId:c.branchId,
+        items.push({kind:'sch', id:c.entryId, title:c.title, name:c.assigneeName, phone:c.assigneePhone, branchId:c.branchId, owner:c.ownerEmpId,
           when:(c.date||'')+' '+(c.startTime||'')+(c.endTime?'–'+c.endTime:''), sortKey:(c.date||'')+(c.startTime||'00:00'), date:c.date, startTime:c.startTime, endTime:c.endTime});
       });
       // Auto follow-ups (daily cash report + attendance) — pinned on top; PC can complete them with a note
@@ -300,20 +300,35 @@
       items.sort(function(a,b){ return a.sortKey<b.sortKey?-1:1; });
       return items;
     }
-    function openCompleteFu(key){
-      var f=FUP.filter(function(x){ return String(x.fuKey)===String(key); })[0]; if(!f) return;
-      var body='<div style="font-size:13px;color:#666;margin-bottom:8px"><b>'+esc(f.title)+'</b>'+(f.name?(' · '+esc(f.name)):'')+'</div>'+
-        '<div class="field full"><label>Notes (what was done)</label><textarea id="fuNote" class="in" rows="3" placeholder="e.g. Called the branch — report entered now"></textarea></div>'+
-        '<div style="font-size:11.5px;color:#999;margin-top:6px">'+(f.kind==='dailycash'
-          ?'The entry itself is still verified by Accounts in Accounts → Daily Entry. If an uploaded report stays unverified for 3 hours it comes back here automatically.'
-          :'Attendance approval still happens on the Attendance → Approve screen. If a punch stays unapproved for 24 hours it comes back here automatically.')+'</div><div id="fuMsg"></div>';
-      openModal('Complete follow-up', body, '<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="fuDone">✓ Completed</button>');
+    /* Completed (with a notes popup) works on EVERY monitor row:
+       task → marks the task done (note saved as completion note)
+       sch  → closes the calendar item
+       dc/att follow-ups → stored in PC_Followups as before */
+    function openCompleteItem(i){
+      if(!i) return;
+      var hint = i.kind==='dc' ? 'The entry itself is still verified by Accounts in Accounts → Daily Entry. If an uploaded report stays unverified for 3 hours it comes back here automatically.'
+        : i.kind==='att' ? 'Attendance approval still happens on the Attendance → Approve screen. If a punch stays unapproved for 24 hours it comes back here automatically.'
+        : i.kind==='task' ? 'This marks the task itself as done — it also disappears from the assignee’s My Tasks.'
+        : 'This closes the scheduled item on the owner’s calendar.';
+      var body='<div style="font-size:13px;color:#666;margin-bottom:8px"><b>'+esc(i.title)+'</b>'+(i.name?(' · '+esc(i.name)):'')+'</div>'+
+        '<div class="field full"><label>Notes (what was done)</label><textarea id="fuNote" class="in" rows="3" placeholder="e.g. Spoke to them — done now"></textarea></div>'+
+        '<div style="font-size:11.5px;color:#999;margin-top:6px">'+hint+'</div><div id="fuMsg"></div>';
+      openModal('Complete', body, '<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="fuDone">✓ Completed</button>');
       document.getElementById('fuDone').onclick=function(){
         var btn=this; btn.disabled=true; btn.innerHTML='<span class="loader"></span>';
-        API.completeFollowup({fuKey:f.fuKey,kind:f.kind,title:f.title,branchId:f.branchId,empId:f.empId,note:(document.getElementById('fuNote')||{}).value||''}).then(function(r){
-          if(r&&r.ok){ FUP=FUP.filter(function(x){ return String(x.fuKey)!==String(f.fuKey); }); closeModal(); toast('Marked completed'); paint(); }
-          else { btn.disabled=false; btn.textContent='✓ Completed'; var m=document.getElementById('fuMsg'); if(m) m.innerHTML='<div class="msg error">'+esc((r&&r.error)||'Could not save — check internet.')+'</div>'; }
-        });
+        var note=(document.getElementById('fuNote')||{}).value||'';
+        function fail(r){ btn.disabled=false; btn.textContent='✓ Completed'; var m=document.getElementById('fuMsg'); if(m) m.innerHTML='<div class="msg error">'+esc((r&&r.error)||'Could not save — check internet.')+'</div>'; }
+        function done(){ closeModal(); toast('Marked completed'); paint(); }
+        if(i.kind==='task'){
+          API.setTaskStatus(i.id,'done',note).then(function(r){ if(r&&(r.ok||r.offline)){ ALLT=ALLT.filter(function(t){ return String(t.taskId)!==String(i.id); }); done(); } else fail(r); });
+        } else if(i.kind==='sch'){
+          API.updateCalEntry(i.id,{status:'done'},i.owner).then(function(r){ if(r&&(r.ok||r.offline)){ ALLC=ALLC.filter(function(c){ return String(c.entryId)!==String(i.id); }); done(); } else fail(r); });
+        } else {
+          var f=i.fu||{};
+          API.completeFollowup({fuKey:f.fuKey,kind:f.kind,title:f.title,branchId:f.branchId,empId:f.empId,note:note}).then(function(r){
+            if(r&&r.ok){ FUP=FUP.filter(function(x){ return String(x.fuKey)!==String(f.fuKey); }); done(); } else fail(r);
+          });
+        }
       };
     }
     function paint(){
@@ -338,7 +353,7 @@
       var list = FILT==='task'?tasks : FILT==='sch'?sch : FILT==='dc'?dc : FILT==='att'?att : all;
       var box=document.getElementById('tmList');
       if(!list.length){ box.innerHTML='<div class="empty">Nothing overdue right now. 🎉</div>'; return; }
-      box.innerHTML=list.map(function(i){
+      box.innerHTML=list.map(function(i,idx){
         var ph=String(i.phone||'').replace(/\D/g,'');
         var isFu=(i.kind==='dc'||i.kind==='att');
         var msg=encodeURIComponent('Reminder from Nakoda: '+(i.kind==='task'?'please complete your task “'+i.title+'” — it is overdue.'
@@ -355,10 +370,10 @@
           '<div class="tm-it">'+esc(i.title)+' · '+esc(String(i.when||'').trim())+(isFu?'':' · <span class="tm-late">'+esc(lateLabel(i))+'</span>')+'</div></div>'+
           '<div class="tm-acts">'+
             (ph?('<a href="tel:'+ph+'" class="tm-call">📞 <span>Call</span></a><a href="https://wa.me/91'+ph+'?text='+msg+'" target="_blank" class="tm-wa">💬 <span>WhatsApp</span></a>'):'<span style="font-size:10px;color:#aaa">No phone</span>')+
-            (isFu?'<button class="tm-donebtn" data-fu="'+esc(i.id)+'">✓ <span>Completed</span></button>':'')+
+            '<button class="tm-donebtn" data-di="'+idx+'">✓ <span>Completed</span></button>'+
           '</div></div>';
       }).join('');
-      box.querySelectorAll('[data-fu]').forEach(function(b){ b.onclick=function(){ openCompleteFu(b.getAttribute('data-fu')); }; });
+      box.querySelectorAll('[data-di]').forEach(function(b){ b.onclick=function(){ openCompleteItem(list[parseInt(b.getAttribute('data-di'),10)]); }; });
     }
     function renderScorecard(box){
       var d0=new Date(); d0.setDate(d0.getDate()-30);

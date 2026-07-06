@@ -67,6 +67,7 @@
     if(!pols.length){ box.innerHTML='<div class="empty">No policies yet.</div>'; return; }
     box.innerHTML=pols.map(function(p){ return '<div class="pol-card"><div class="pol-h"><b>'+esc(p.title)+'</b> <span style="font-size:10px;color:#aaa">v'+p.version+'</span>'+(p.acked?'<span class="att-ok" style="margin-left:auto">✓ Understood</span>':'<span style="margin-left:auto;font-size:10px;color:#c47f00;font-weight:700">NEW</span>')+'</div>'+
       '<div class="pol-body">'+esc(p.body||'').replace(/\n/g,'<br>')+'</div>'+
+      (p.fileUrl?'<div style="margin:8px 0"><a href="'+esc(p.fileUrl)+'" target="_blank" rel="noopener" style="color:var(--red);font-weight:600;font-size:13px">📎 Policy document (PDF) — tap to open</a></div>':'')+
       (p.acked?'':'<button class="und-btn" data-ack="'+esc(p.policyId)+'">I have read &amp; UNDERSTOOD</button>')+
       (r.canManage?'<div class="pol-admin"><a href="javascript:void(0)" data-edit="'+esc(p.policyId)+'">✎ Edit</a> · <a href="javascript:void(0)" data-acks="'+esc(p.policyId)+'">Who acknowledged</a></div>':'')+'</div>'; }).join('');
     box.querySelectorAll('[data-ack]').forEach(function(b){ b.onclick=function(){ API.ackPolicy(b.getAttribute('data-ack')).then(function(x){ if(x&&x.ok){ toast('Acknowledged'); renderPolicy(); } }); }; });
@@ -74,11 +75,21 @@
     box.querySelectorAll('[data-acks]').forEach(function(b){ b.onclick=function(){ showAcks(b.getAttribute('data-acks')); }; });
   }
   function openPolicyForm(p){ p=p||{};
+    var fileUrl=p.fileUrl||'';
     var body='<div class="grid2"><div class="field full"><label>Title</label><input id="poT" class="in" value="'+esc(p.title||'')+'"></div>'+
-      '<div class="field full"><label>Policy text</label><textarea id="poB" class="in" rows="8">'+esc(p.body||'')+'</textarea></div></div><div style="font-size:11px;color:#888">Saving notifies all staff &amp; resets the UNDERSTOOD acknowledgement.</div><div id="poMsg"></div>';
+      '<div class="field full"><label>Policy text</label><textarea id="poB" class="in" rows="8">'+esc(p.body||'')+'</textarea></div>'+
+      '<div class="field full"><label>Policy document (PDF) — optional</label>'+
+        '<label class="dl-file"><span id="poFileSt">'+(fileUrl?'✓ Document attached — tap to replace':'📎 Upload policy file (PDF)')+'</span><input id="poFile" type="file" accept="application/pdf,image/*" hidden></label></div>'+
+      '</div><div style="font-size:11px;color:#888">Saving notifies all staff &amp; resets the UNDERSTOOD acknowledgement.</div><div id="poMsg"></div>';
     openModal(p.policyId?'Edit policy':'New policy', body, '<button class="btn" id="poSave">'+(p.policyId?'Save (new version)':'Post')+'</button>');
+    var pf=$id('poFile');
+    if(pf) pf.onchange=function(){ var f=this.files[0]; if(!f) return; if(f.size>8*1024*1024){ toast('File too large (max 8MB)',true); this.value=''; return; }
+      var s=$id('poFileSt'); s.textContent='Uploading…'; var fr=new FileReader();
+      fr.onload=function(){ var d=fr.result,i=d.indexOf(',');
+        API.uploadFile({base64:d.slice(i+1),fileName:f.name,mimeType:f.type,subPath:'Policies'}).then(function(r){ if(r&&r.ok){ fileUrl=r.url; s.textContent='✓ '+f.name+' — tap to replace'; } else { s.textContent='Upload failed — tap to retry'; } },function(){ s.textContent='Upload failed — tap to retry'; }); };
+      fr.readAsDataURL(f); };
     $id('poSave').onclick=function(){ var t=$id('poT').value.trim(); if(!t){ $id('poMsg').innerHTML='<div class="msg error">Title required.</div>'; return; } this.disabled=true;
-      API.savePolicy({policyId:p.policyId,title:t,body:$id('poB').value}).then(function(r){ if(r&&r.ok){ closeModal(); toast('Policy posted'); renderPolicy(); } else $id('poMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; }); };
+      API.savePolicy({policyId:p.policyId,title:t,body:$id('poB').value,fileUrl:fileUrl}).then(function(r){ if(r&&r.ok){ closeModal(); toast('Policy posted'); renderPolicy(); } else $id('poMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; }); };
   }
   function showAcks(pid){
     openModal('Acknowledgements','<div id="akBody"><div class="center-load"><span class="loader dark"></span> Loading…</div></div>','');
