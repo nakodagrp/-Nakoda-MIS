@@ -55,21 +55,25 @@
   }
 
   /* ---------------- COMPANY POLICY ---------------- */
+  /* HR sees the upload button INSTANTLY from the local role — no waiting on the network. */
+  function canManagePolicy(){ return (S.perms&&(S.perms.level==='SUPER'||S.perms.level==='HR_ADMIN'))||String((S.user||{}).Role)==='HR'; }
   function renderPolicy(){
     var v=$id('page-policy');
-    v.innerHTML='<div class="page-head"><h1>Company Policy</h1><div class="spacer"></div><button class="btn" id="polAdd" style="display:none">+ New policy</button></div><div id="polList"></div>';
+    v.innerHTML='<div class="page-head"><h1>Company Policy</h1><div class="spacer"></div><button class="btn" id="polAdd" style="display:'+(canManagePolicy()?'':'none')+'">⬆ Upload policy (PDF)</button></div><div id="polList"><div class="center-load"><span class="loader dark"></span> Loading…</div></div>';
+    var add0=$id('polAdd'); if(add0) add0.onclick=function(){ openPolicyForm(null); };
     API.cachedPolicies().then(function(r){ if(r) paintPolicies(r); });
-    API.listPolicies().then(function(r){ if(r&&r.ok) paintPolicies(r); });
+    API.listPolicies().then(function(r){ if(r&&r.ok) paintPolicies(r); else { var b=$id('polList'); if(b&&b.querySelector('.center-load')) b.innerHTML='<div class="empty">'+esc((r&&r.error)||'Could not load policies — check internet.')+'</div>'; } });
   }
   function paintPolicies(r){
-    var add=$id('polAdd'); if(add){ add.style.display=r.canManage?'':'none'; add.onclick=function(){ openPolicyForm(null); }; }
+    var can=!!(r.canManage||canManagePolicy());
+    var add=$id('polAdd'); if(add){ add.style.display=can?'':'none'; add.onclick=function(){ openPolicyForm(null); }; }
     var box=$id('polList'); if(!box) return; var pols=r.policies||[];
-    if(!pols.length){ box.innerHTML='<div class="empty">No policies yet.</div>'; return; }
+    if(!pols.length){ box.innerHTML='<div class="empty">No policies yet.'+(can?' Tap “⬆ Upload policy (PDF)” to post the first one.':'')+'</div>'; return; }
     box.innerHTML=pols.map(function(p){ return '<div class="pol-card"><div class="pol-h"><b>'+esc(p.title)+'</b> <span style="font-size:10px;color:#aaa">v'+p.version+'</span>'+(p.acked?'<span class="att-ok" style="margin-left:auto">✓ Understood</span>':'<span style="margin-left:auto;font-size:10px;color:#c47f00;font-weight:700">NEW</span>')+'</div>'+
       '<div class="pol-body">'+esc(p.body||'').replace(/\n/g,'<br>')+'</div>'+
       (p.fileUrl?'<div style="margin:8px 0"><a href="'+esc(p.fileUrl)+'" target="_blank" rel="noopener" style="color:var(--red);font-weight:600;font-size:13px">📎 Policy document (PDF) — tap to open</a></div>':'')+
       (p.acked?'':'<button class="und-btn" data-ack="'+esc(p.policyId)+'">I have read &amp; UNDERSTOOD</button>')+
-      (r.canManage?'<div class="pol-admin"><a href="javascript:void(0)" data-edit="'+esc(p.policyId)+'">✎ Edit</a> · <a href="javascript:void(0)" data-acks="'+esc(p.policyId)+'">Who acknowledged</a></div>':'')+'</div>'; }).join('');
+      (can?'<div class="pol-admin"><a href="javascript:void(0)" data-edit="'+esc(p.policyId)+'">✎ Edit</a> · <a href="javascript:void(0)" data-acks="'+esc(p.policyId)+'">Who acknowledged</a></div>':'')+'</div>'; }).join('');
     box.querySelectorAll('[data-ack]').forEach(function(b){ b.onclick=function(){ API.ackPolicy(b.getAttribute('data-ack')).then(function(x){ if(x&&x.ok){ toast('Acknowledged'); renderPolicy(); } }); }; });
     box.querySelectorAll('[data-edit]').forEach(function(b){ b.onclick=function(){ var p=pols.filter(function(x){return x.policyId===b.getAttribute('data-edit');})[0]; openPolicyForm(p); }; });
     box.querySelectorAll('[data-acks]').forEach(function(b){ b.onclick=function(){ showAcks(b.getAttribute('data-acks')); }; });
