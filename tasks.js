@@ -350,7 +350,7 @@
         if(isFu && i.state==='verify') chip+=' <span class="tm-chip ver">VERIFY OVERDUE</span>';
         return '<div class="tm-row">'+
           '<div class="tm-av">'+esc(initials(i.name))+'</div>'+
-          '<div class="tm-mid"><div class="tm-nm"><b>'+esc(i.name)+'</b><span class="tm-brn">'+esc(tbn(i.branchId))+'</span>'+chip+'</div>'+
+          '<div class="tm-mid"><div class="tm-nm"><b>'+esc(i.name)+'</b><span class="tm-brn">'+esc(tbn(i.branchId))+'</span>'+chip+(ph?'<span class="tm-ph">📞 '+esc(i.phone)+'</span>':'')+'</div>'+
           '<div class="tm-it">'+esc(i.title)+' · '+esc(String(i.when||'').trim())+(isFu?'':' · <span class="tm-late">'+esc(lateLabel(i))+'</span>')+'</div></div>'+
           '<div class="tm-acts">'+
             (ph?('<a href="tel:'+ph+'" class="tm-call">📞 <span>Call</span></a><a href="https://wa.me/91'+ph+'?text='+msg+'" target="_blank" class="tm-wa">💬 <span>WhatsApp</span></a>'):'<span style="font-size:10px;color:#aaa">No phone</span>')+
