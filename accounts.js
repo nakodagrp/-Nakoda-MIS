@@ -70,7 +70,20 @@
   }
 
   /* ---- Daily Entry ---- */
-  function docLinks(d){ var a=[]; if(d.b2cDocUrl)a.push('<a href="'+esc(d.b2cDocUrl)+'" target="_blank" rel="noopener">B2C</a>'); if(d.b2dDocUrl)a.push('<a href="'+esc(d.b2dDocUrl)+'" target="_blank" rel="noopener">B2D</a>'); if(d.otherDocUrl)a.push('<a href="'+esc(d.otherDocUrl)+'" target="_blank" rel="noopener">Others</a>'); if(d.testXlUrl)a.push('<a href="'+esc(d.testXlUrl)+'" target="_blank" rel="noopener">Tests</a>'); return a.length?a.join(' · '):'—'; }
+  function docLinks(d){
+    var a=[];
+    var b2cAmt=(Number(d.b2cCash)||0)+(Number(d.b2cBank)||0);
+    var b2dAmt=(Number(d.b2dCash)||0)+(Number(d.b2dBank)||0);
+    var otherAmt=Number(d.other)||0;
+    if(d.b2cDocUrl) a.push('<a href="'+esc(d.b2cDocUrl)+'" target="_blank" rel="noopener">B2C</a>');
+    else if(b2cAmt>0) a.push('<span style="color:#9aa0a6">B2C</span>');
+    if(d.b2dDocUrl) a.push('<a href="'+esc(d.b2dDocUrl)+'" target="_blank" rel="noopener">B2D</a>');
+    else if(b2dAmt>0) a.push('<span style="color:#9aa0a6">B2D</span>');
+    if(d.otherDocUrl) a.push('<a href="'+esc(d.otherDocUrl)+'" target="_blank" rel="noopener">Others</a>');
+    else if(otherAmt>0) a.push('<span style="color:#9aa0a6">Others</span>');
+    if(d.testXlUrl) a.push('<a href="'+esc(d.testXlUrl)+'" target="_blank" rel="noopener">Tests</a>');
+    return a.length?a.join(' · '):'—';
+  }
   function loadDaily(){ API.listDaily(ACC.branch,ACC.ym).then(function(r){ var box=$id('accBody'); if(!box) return; if(!r||!r.ok){ box.innerHTML='<div class="empty">'+esc((r&&r.error)||'')+'</div>'; return; }
     var all=(r.daily||[]).slice().sort(function(a,b){return a.date<b.date?1:-1;});
     var PAGE=15, total=all.length, pages=Math.max(1,Math.ceil(total/PAGE));
