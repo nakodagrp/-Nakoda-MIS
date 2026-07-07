@@ -57,6 +57,10 @@
   /* ---------------- COMPANY POLICY ---------------- */
   /* HR sees the upload button INSTANTLY from the local role — no waiting on the network. */
   function canManagePolicy(){ return (S.perms&&(S.perms.level==='SUPER'||S.perms.level==='HR_ADMIN'))||String((S.user||{}).Role)==='HR'; }
+  /* Download PDF is for HR / Admin / Director / MIS only (staff just open/read the 📎 link). */
+  function canDownloadPolicy(){ if(S.perms&&(S.perms.level==='SUPER'||S.perms.level==='HR_ADMIN')) return true; var r=String((S.user||{}).Role||'').toLowerCase(); return ['hr','admin','director','mis'].indexOf(r)>=0; }
+  /* Turn any Drive link into a direct-download URL — works any number of times. */
+  function policyDlUrl(u){ var m=String(u||'').match(/[\/=]([a-zA-Z0-9_-]{25,})/); return m?('https://drive.google.com/uc?export=download&id='+m[1]):u; }
   function renderPolicy(){
     var v=$id('page-policy');
     v.innerHTML='<div class="page-head"><h1>Company Policy</h1><div class="spacer"></div><button class="btn" id="polAdd" style="display:'+(canManagePolicy()?'':'none')+'">⬆ Upload policy (PDF)</button></div><div id="polList"><div class="center-load"><span class="loader dark"></span> Loading…</div></div>';
@@ -72,6 +76,7 @@
     box.innerHTML=pols.map(function(p){ return '<div class="pol-card"><div class="pol-h"><b>'+esc(p.title)+'</b> <span style="font-size:10px;color:#aaa">v'+p.version+'</span>'+(p.acked?'<span class="att-ok" style="margin-left:auto">✓ Understood</span>':'<span style="margin-left:auto;font-size:10px;color:#c47f00;font-weight:700">NEW</span>')+'</div>'+
       '<div class="pol-body">'+esc(p.body||'').replace(/\n/g,'<br>')+'</div>'+
       (p.fileUrl?'<div style="margin:8px 0"><a href="'+esc(p.fileUrl)+'" target="_blank" rel="noopener" style="color:var(--red);font-weight:600;font-size:13px">📎 Policy document (PDF) — tap to open</a></div>':'')+
+      (p.fileUrl&&canDownloadPolicy()?'<div style="margin:8px 0"><a class="btn" href="'+esc(policyDlUrl(p.fileUrl))+'" target="_blank" rel="noopener" download style="display:inline-block;text-decoration:none;font-size:13px">⬇ Download PDF</a></div>':'')+
       (p.acked?'':'<button class="und-btn" data-ack="'+esc(p.policyId)+'">I have read &amp; UNDERSTOOD</button>')+
       (can?'<div class="pol-admin"><a href="javascript:void(0)" data-edit="'+esc(p.policyId)+'">✎ Edit</a> · <a href="javascript:void(0)" data-acks="'+esc(p.policyId)+'">Who acknowledged</a></div>':'')+'</div>'; }).join('');
     box.querySelectorAll('[data-ack]').forEach(function(b){ b.onclick=function(){ API.ackPolicy(b.getAttribute('data-ack')).then(function(x){ if(x&&x.ok){ toast('Acknowledged'); renderPolicy(); } }); }; });
@@ -159,4 +164,15 @@
     var cols=['Client_Code','Product_Code','Payment_Type','Payment_Ref_No.','Payment_Date','Instrument Date','Dr_Ac_No','Amount','Bank_Code_Indicator','Beneficiary_Code','Beneficiary_Name','Beneficiary_Bank','IFSC Code','Beneficiary_Acc_No','Location','Print_Location','Instrument_Number','Ben_Add1','Ben_Add2','Ben_Add3','Ben_Add4','Beneficiary_Email','Beneficiary_Mobile','Debit_Narration','Credit_Narration'];
     var today=new Date(),dt=today.getDate()+'/'+(today.getMonth()+1)+'/'+today.getFullYear();
     var head='<tr>'+cols.map(function(c){return '<th>'+c+'</th>';}).join('')+'</tr>';
-    var rows=slips.filter(function(s){return Number(s.net)>0;}).map(functio
+    var rows=slips.filter(function(s){return Number(s.net)>0;}).map(function(s){
+      var vals=['','','NEFT','',dt,dt,'',Number(s.net).toFixed(2),'M','',s.name||'','',s.ifsc||'',s.acct||'','','','','','','','','',s.mobile||'','SALARY '+month,'Salary '+month+' '+(s.name||'')];
+      return '<tr>'+vals.map(function(v){return '<td>'+esc(String(v))+'</td>';}).join('')+'</tr>';
+    }).join('');
+    if(!rows){ toast('No payslips with net pay to export.',true); return; }
+    xlsDownload('<table>'+head+rows+'</table>','Bank-Salary-'+month+'.xls');
+  }
+
+  window.renderField=renderField;
+  window.renderPolicy=renderPolicy;
+  window.renderPayroll=renderPayroll;
+})();

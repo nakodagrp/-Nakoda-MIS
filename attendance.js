@@ -123,6 +123,7 @@
 
   function paintMe(){
     var box=$id('attMe'); if(!box) return;
+    warmGeo();   // start GPS early so the fix is ready before the punch button is tapped
     var rec=todayRec(), now=new Date();
     var dutyTxt=(S.user&&S.user.DutyStart)?('Shift '+fmtDutyTime(S.user.DutyStart)+(S.user.DutyEnd?('–'+fmtDutyTime(S.user.DutyEnd)):'')+((S.user.AltDutyStart)?(' (or alt shift '+fmtDutyTime(S.user.AltDutyStart)+(S.user.AltDutyEnd?('–'+fmtDutyTime(S.user.AltDutyEnd)):'')+')'):'')):'';
     var inb = !rec || !rec.checkIn;
@@ -213,10 +214,34 @@
   // Location and the selfie camera don't depend on each other, so fetch/open them at the same time instead
   // of waiting for GPS to resolve before even showing the camera — this alone can save several seconds,
   // especially on a weak signal (enableHighAccuracy can take up to 15s).
+  // GPS WARM-UP (Vivo & similar phones need 2-3 taps because the FIRST high-accuracy fix from a cold
+  // GPS chip takes longer than the 15s timeout — by the 2nd/3rd tap the chip is warm and it works).
+  // Fix: start watching position as soon as the attendance screen opens (only if permission is already
+  // granted — never pop the permission prompt early), so a fix is ready before the punch button is tapped.
+  var _geoWatch=null, _lastFix=null;
+  function warmGeo(){
+    if(!navigator.geolocation || _geoWatch!=null) return;
+    function start(){
+      try{
+        _geoWatch=navigator.geolocation.watchPosition(function(pos){ _lastFix={lat:pos.coords.latitude,lng:pos.coords.longitude,ts:Date.now()}; },function(){},{enableHighAccuracy:true,maximumAge:30000});
+        setTimeout(function(){ if(_geoWatch!=null){ navigator.geolocation.clearWatch(_geoWatch); _geoWatch=null; } },120000);  // stop after 2 min — don't drain battery
+      }catch(e){}
+    }
+    if(navigator.permissions&&navigator.permissions.query){ navigator.permissions.query({name:'geolocation'}).then(function(st){ if(st.state==='granted') start(); },function(){}); }
+  }
+  function getOnce_(hiAcc,timeoutMs){
+    return new Promise(function(resolve,reject){
+      navigator.geolocation.getCurrentPosition(function(pos){ resolve({lat:pos.coords.latitude,lng:pos.coords.longitude}); }, reject, {enableHighAccuracy:hiAcc, timeout:timeoutMs, maximumAge:60000});
+    });
+  }
   function getLocation_(){
     return new Promise(function(resolve,reject){
       if(!navigator.geolocation){ reject({code:0}); return; }
-      navigator.geolocation.getCurrentPosition(function(pos){ resolve({lat:pos.coords.latitude,lng:pos.coords.longitude}); }, reject, {enableHighAccuracy:true, timeout:15000});
+      if(_lastFix && (Date.now()-_lastFix.ts)<60000){ resolve({lat:_lastFix.lat,lng:_lastFix.lng}); return; }   // warm-up already got a recent fix — instant
+      getOnce_(true,15000).then(resolve, function(err){
+        if(err&&err.code===1){ reject(err); return; }   // permission denied — retrying won't help
+        getOnce_(false,10000).then(resolve,reject);      // GPS timed out — fall back to network/cell location
+      });
     });
   }
   function startMark(kind){
@@ -239,7 +264,14 @@
     });
     selfieP.then(function(b64){
       // Wait for location too (usually already done by the time the selfie is captured) before submitting.
-      geoP.then(function(){ submitMark(kind,b64); }, function(){});   // location error already toasted above — don't submit without it
+      geoP.then(function(){ submitMark(kind,b64); }, function(err){
+        if(err&&err.code===1) return;   // permission blocked — guidance already toasted above
+        // Location failed but the selfie is already taken — retry location automatically instead of
+        // making her tap punch (and retake the selfie) all over again.
+        toast('Retrying location — keep the app open…');
+        getLocation_().then(function(loc){ ATT.coords=loc; submitMark(kind,b64); },
+          function(){ toast('Location still not available — move near a window/open area and tap once more.',true); });
+      });
     });
   }
   function doMark(kind){
