@@ -32,7 +32,7 @@ document.addEventListener('DOMContentLoaded', function(){
       }).catch(function(){});
     } else if(token){
       API.validate().then(function(r){ if(r.ok){ afterAuth(r.mustChange); } else { show('view-login'); } }).catch(function(){ show('view-login'); });
-    } else { show('view-login'); }
+    } else { show('view-login'); if(navigator.onLine&&API.warm) API.warm(); }   // v187: wake the server while the user types
   });
 });
 function kvRead(k){ return new Promise(function(res){ var r=indexedDB.open('nakoda_mis');r.onsuccess=function(){try{var s=r.result.transaction('kv','readonly').objectStore('kv').get(k);s.onsuccess=function(){res(s.result);};s.onerror=function(){res(null);};}catch(e){res(null);}};r.onerror=function(){res(null);}; }); }
@@ -139,6 +139,8 @@ function bindAuth(){
     var b=$('loginBtn'); b.disabled=true; b.innerHTML='<span class="loader"></span> Signing in…';
     API.login($('loginId').value, $('loginPw').value).then(function(r){
       if(!r.ok){ setMsg('loginMsg', r.error||'Login failed.'); return; }
+      /* v187: metadata rides along with the login reply — no second server round-trip needed */
+      if(r.perms){ S.user=r.me||r.user; S.meta={roles:r.roles||[],branches:r.branches||[]}; S.perms=r.perms; }
       afterAuth(r.mustChange);
     }).catch(function(){ setMsg('loginMsg','Could not reach the server. Check your internet.'); })
       .then(function(){ b.disabled=false; b.textContent='Sign in'; });
@@ -157,7 +159,7 @@ function bindAuth(){
 }
 function forcePw(){ $('oldPwField').classList.add('hidden'); show('view-changepw'); }
 function afterAuth(mustChange){ if(mustChange){ forcePw(); } else { enterApp(); } }
-function enterApp(){ show('view-app'); refreshMeta(true); }
+function enterApp(){ show('view-app'); if(S.meta&&S.perms){ renderIdentity(); populateSelectors(); applyPerms(); go('dashboard'); } else refreshMeta(true); }   // v187: enter instantly when login already delivered metadata
 function enterAppInstant(){ renderIdentity(); show('view-app'); populateSelectors(); applyPerms(); go('dashboard'); }
 function refreshMeta(goDash){
   API.getMetadata().then(function(r){

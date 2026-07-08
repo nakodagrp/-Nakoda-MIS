@@ -130,7 +130,8 @@
 
     login:function(loginId,password){
       return call('login',{loginId:loginId,password:password}).then(function(r){
-        if(r.ok){ setToken(r.token); }
+        /* v187: server now sends metadata with the login reply — cache it so the app can enter instantly */
+        if(r.ok){ setToken(r.token); if(r.perms){ kvSet('meta',{roles:r.roles||[],branches:r.branches||[]}); kvSet('me',r.me||r.user); kvSet('perms',r.perms); } }
         return r;
       });
     },
@@ -138,6 +139,9 @@
       var t=getToken(); if(!t) return Promise.resolve({ok:false,error:'No session'});
       return call('validate',{token:t});
     },
+    /* v187: fire-and-forget ping that wakes the Apps Script container while the user is still
+       typing their password — first real call (login) then lands on a warm server. */
+    warm:function(){ try{ return call('validate',{token:''}).catch(function(){}); }catch(e){ return Promise.resolve(); } },
     logout:function(){ var t=getToken(); setToken(''); return call('logout',{token:t}).catch(function(){return {ok:true};}); },
     changePassword:function(oldPw,newPw){
       if(!navigator.onLine) return Promise.resolve({ok:false,error:'Changing password needs an internet connection.'});
