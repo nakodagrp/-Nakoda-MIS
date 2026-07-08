@@ -332,11 +332,24 @@
     $id('bkFile').onchange=function(){ var f=this.files[0]; if(!f) return; var wrap=$id('bkTableWrap'); wrap.innerHTML='<div class="center-load"><span class="loader dark"></span> Parsing…</div>';
       var isCsv=/\.csv$/i.test(f.name); var fr=new FileReader();
       fr.onload=function(){ var grid;
-        try{ if(isCsv){ grid=parseCSV(fr.result); } else { if(typeof XLSX==='undefined'){ wrap.innerHTML='<div class="empty">Excel parser needs internet (or upload CSV).</div>'; return; } var wb=XLSX.read(new Uint8Array(fr.result),{type:'array'}); grid=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1}); } }
-        catch(e){ wrap.innerHTML='<div class="empty">Could not read file.</div>'; return; }
-        BANKROWS=normalizeBank(grid);
-        if(!BANKROWS.length){ wrap.innerHTML='<div class="empty">No transactions detected. Make sure it\'s the bank\'s statement export.</div>'; return; }
-        paintBankTable(brs);
+        function parseGrid(){
+          try{ if(isCsv){ grid=parseCSV(fr.result); } else { var wb=XLSX.read(new Uint8Array(fr.result),{type:'array'}); grid=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1}); } }
+          catch(e){ wrap.innerHTML='<div class="empty">Could not read file.</div>'; return; }
+          BANKROWS=normalizeBank(grid);
+          if(!BANKROWS.length){ wrap.innerHTML='<div class="empty">No transactions detected. Make sure it\'s the bank\'s statement export.</div>'; return; }
+          paintBankTable(brs);
+        }
+        /* v188: the 900KB Excel library is no longer loaded at app startup — fetch it here, only
+           when someone actually imports an .xlsx (same on-demand pattern as the attendance PDF). */
+        if(!isCsv && typeof XLSX==='undefined'){
+          var s=document.createElement('script');
+          s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+          s.onload=parseGrid;
+          s.onerror=function(){ wrap.innerHTML='<div class="empty">Excel parser needs internet (or upload CSV).</div>'; };
+          document.head.appendChild(s);
+          return;
+        }
+        parseGrid();
       };
       if(isCsv) fr.readAsText(f); else fr.readAsArrayBuffer(f);
     };

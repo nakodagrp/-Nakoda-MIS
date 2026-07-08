@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Nakoda MIS</title>
   <meta name="theme-color" content="#DA1017">
+  <!-- v188: open the TLS connection to the API server while the page is still loading -->
+  <link rel="preconnect" href="https://script.google.com" crossorigin>
+  <link rel="dns-prefetch" href="https://script.google.com">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/favicon.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -219,31 +222,33 @@
 <div id="toast"></div>
 <div id="modalRoot"></div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="config.js"></script>
-<script src="api.js"></script>
-<script src="app.js"></script>
-<script src="branches.js"></script>
-<script src="membership.js"></script>
-<script src="cardadmin.js"></script>
-<script src="tasks.js"></script>
-<script src="calendar.js"></script>
-<script src="attendance.js"></script>
-<script src="hrmodules.js"></script>
-<script src="leave.js"></script>
-<script src="accounts.js"></script>
-<script src="training.js"></script>
-<script src="assets.js"></script>
-<script src="inventory.js"></script>
-<script src="recurring.js"></script>
-<script src="process.js"></script>
-<script src="builder.js"></script>
-<script src="staffperf.js"></script>
-<script src="marketing.js"></script>
-<script src="finance.js"></script>
-<script src="quicklog.js"></script>
-<script src="kpiadmin.js"></script>
-<script src="qc.js"></script>
-<script src="extras.js"></script>
+<!-- v188: xlsx library removed from startup (≈900KB!) — accounts.js now loads it on demand.
+     All scripts run with defer: the splash/login paints first, scripts parse without blocking,
+     execution order is preserved. -->
+<script defer src="config.js"></script>
+<script defer src="api.js"></script>
+<script defer src="app.js"></script>
+<script defer src="branches.js"></script>
+<script defer src="membership.js"></script>
+<script defer src="cardadmin.js"></script>
+<script defer src="tasks.js"></script>
+<script defer src="calendar.js"></script>
+<script defer src="attendance.js"></script>
+<script defer src="hrmodules.js"></script>
+<script defer src="leave.js"></script>
+<script defer src="accounts.js"></script>
+<script defer src="training.js"></script>
+<script defer src="assets.js"></script>
+<script defer src="inventory.js"></script>
+<script defer src="recurring.js"></script>
+<script defer src="process.js"></script>
+<script defer src="builder.js"></script>
+<script defer src="staffperf.js"></script>
+<script defer src="marketing.js"></script>
+<script defer src="finance.js"></script>
+<script defer src="quicklog.js"></script>
+<script defer src="kpiadmin.js"></script>
+<script defer src="qc.js"></script>
+<script defer src="extras.js"></script>
 </body>
 </html>
