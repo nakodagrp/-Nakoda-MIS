@@ -137,13 +137,25 @@ function bindAuth(){
     e.preventDefault(); setMsg('loginMsg','');
     if(!navigator.onLine){ setMsg('loginMsg','You need internet for the first login. After that the app works offline.'); return; }
     var b=$('loginBtn'); b.disabled=true; b.innerHTML='<span class="loader"></span> Signing in…';
-    API.login($('loginId').value, $('loginPw').value).then(function(r){
-      if(!r.ok){ setMsg('loginMsg', r.error||'Login failed.'); return; }
-      /* v187: metadata rides along with the login reply — no second server round-trip needed */
-      if(r.perms){ S.user=r.me||r.user; S.meta={roles:r.roles||[],branches:r.branches||[]}; S.perms=r.perms; }
-      afterAuth(r.mustChange);
-    }).catch(function(){ setMsg('loginMsg','Could not reach the server. Check your internet.'); })
-      .then(function(){ b.disabled=false; b.textContent='Sign in'; });
+    /* v191: Apps Script allows only 30 simultaneous requests — during the morning punch-in rush a
+       login can get dropped and used to show "Could not reach the server" immediately. Now it quietly
+       retries twice (1.5s / 3s apart) and only shows the error if all three attempts fail. */
+    var _lTries=0;
+    function tryLogin(){
+      _lTries++;
+      API.login($('loginId').value, $('loginPw').value).then(function(r){
+        if(!r.ok){ setMsg('loginMsg', r.error||'Login failed.'); b.disabled=false; b.textContent='Sign in'; return; }
+        /* v187: metadata rides along with the login reply — no second server round-trip needed */
+        if(r.perms){ S.user=r.me||r.user; S.meta={roles:r.roles||[],branches:r.branches||[]}; S.perms=r.perms; }
+        afterAuth(r.mustChange);
+        b.disabled=false; b.textContent='Sign in';
+      }).catch(function(){
+        if(_lTries<3){ setTimeout(tryLogin, _lTries===1?1500:3000); return; }
+        setMsg('loginMsg','Could not reach the server. Check your internet.');
+        b.disabled=false; b.textContent='Sign in';
+      });
+    }
+    tryLogin();
   });
   $('cpwForm').addEventListener('submit', function(e){
     e.preventDefault(); setMsg('cpwMsg','');
@@ -293,6 +305,10 @@ function dd10(v){ return String(v||'').slice(0,10); }
    looked EMPTY on reopen — and re-saving then wiped the stored value. Convert to local yyyy-mm-dd. */
 function dateInp(v){ if(!v) return ''; var s=String(v); if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s; var d=new Date(s); if(isNaN(d.getTime())) return ''; return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function dateNice(v){ var s=dateInp(v); if(!s) return ''; var p=s.split('-'); return p[2]+'-'+p[1]+'-'+p[0]; }
+/* Same fix for TIME cells: Sheets returns duty times as timestamps like 1899-12-30T04:08:50Z,
+   which <input type="time"> rejects — the Work & pay shift boxes looked empty and re-saving wiped
+   them. Convert to clean HH:MM (attendance.js has long done this; the employee form never did). */
+function timeInp(v){ if(!v) return ''; var s=String(v).trim(); var m=s.match(/^(\d{1,2}):(\d{2})/); if(m&&s.indexOf('T')<0) return ('0'+m[1]).slice(-2)+':'+m[2]; var d=new Date(s); if(!isNaN(d.getTime())) return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); return ''; }
 /* "To chase" only counts items overdue within the last CHASE_WINDOW_DAYS so the KPI
    stays actionable instead of accumulating every stale task/event since launch.
    Change this one number to widen/narrow the window. */
@@ -632,8 +648,8 @@ function openEmpModal(empId){
       '<div class="section-title full">Bank</div>'+
       fld('Bank name / prefix','f_BankPrefix',e.BankPrefix)+fld('IFSC','f_IFSC',e.IFSC)+fld('Account number','f_AccountNo',e.AccountNo)+
       '<div class="section-title full">Work &amp; pay</div>'+
-      fld('Duty start','f_DutyStart',e.DutyStart,'time')+fld('Duty end','f_DutyEnd',e.DutyEnd,'time')+
-      fld('Alt shift start','f_AltDutyStart',e.AltDutyStart,'time')+fld('Alt shift end','f_AltDutyEnd',e.AltDutyEnd,'time')+
+      fld('Duty start','f_DutyStart',timeInp(e.DutyStart),'time')+fld('Duty end','f_DutyEnd',timeInp(e.DutyEnd),'time')+
+      fld('Alt shift start','f_AltDutyStart',timeInp(e.AltDutyStart),'time')+fld('Alt shift end','f_AltDutyEnd',timeInp(e.AltDutyEnd),'time')+
       fld('Basic salary (₹)','f_BasicSalary',e.BasicSalary,'number')+
       sel('Attendance mode','f_AttendanceMode',['Geo only — lab staff','Selfie only — field staff','Geo + Selfie — both required'],e.AttendanceMode)+
       '<div class="field"><label>Punch in/out required</label><select id="f_PunchRequired"><option value="">Yes — normal staff</option><option value="no"'+(String(e.PunchRequired)==='no'?' selected':'')+'>No — partner / exempt</option></select><div style="font-size:11px;color:#9aa0a6;margin-top:3px">"No" = never chased for punch-in, never counted in the L (not punched) list.</div></div>'+
