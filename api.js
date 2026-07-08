@@ -266,6 +266,22 @@
     updateCalEntry:function(entryId,data,owner){ var f=function(){ return queueCal('updateCalEntry',{entryId:entryId,data:data},function(){ return patchCal(owner,entryId,data); }); }; if(navigator.onLine) return call('updateCalEntry',{token:getToken(),entryId:entryId,data:data}).then(function(r){ if(r.ok) API.refreshCal(owner); return r; }).catch(f); return f(); },
     cachedProcesses:function(){ return kvGet('processes'); },
     listProcesses:function(){ return call('listProcesses',{token:getToken()}).then(function(r){ if(r.ok) kvSet('processes',r.processes); return r; }).catch(function(){ return kvGet('processes').then(function(x){ return {ok:true,processes:x||[],offline:true}; }); }); },
+    /* v189: ONE round-trip for everything the dashboard needs. Feeds the same caches the individual
+       list* calls use, so every other page's instant cache-first paint benefits too. */
+    dashboard:function(){
+      return call('dashboard',{token:getToken()}).then(function(r){
+        if(r&&r.ok){
+          if(r.employees) kvSet('employees',r.employees);
+          if(r.perms) kvSet('perms',r.perms);
+          if(r.cards) kvSet('cards',r.cards);
+          if(r.prices) kvSet('cardprices',r.prices);
+          if(r.tasks) kvSet('tasks',r.tasks);
+          if(r.processes) kvSet('processes',r.processes);
+          if(r.entries) kvSet('cal_'+(r.owner||''),r.entries);
+        }
+        return r;
+      });
+    },
     getProcess:function(pid){ return call('getProcess',{token:getToken(),processId:pid}).then(function(r){ if(r.ok) kvSet('procdef_'+pid,r); return r; }).catch(function(){ return kvGet('procdef_'+pid).then(function(x){ return x||{ok:false,offline:true}; }); }); },
     cachedInstances:function(pid,status){ return kvGet('inst_'+pid+'_'+(status||'running')); },
     listInstances:function(pid,status){ var sf=status||'running', k='inst_'+pid+'_'+sf; return call('listInstances',{token:getToken(),processId:pid,status:sf}).then(function(r){ if(r.ok) kvSet(k,r); return r; }).catch(function(){ return kvGet(k).then(function(x){ return x||{ok:true,instances:[],stages:[],offline:true}; }); }); },

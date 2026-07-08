@@ -288,6 +288,11 @@ function priceMap(arr){ var m={}; (arr||[]).forEach(function(p){ m[p.typeId+'|'+
 function fmtMoney(n){ return Math.round(n||0).toLocaleString('en-IN'); }
 function todayD(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function dd10(v){ return String(v||'').slice(0,10); }
+/* DATE-FIELD FIX: Sheets returns saved dates as full ISO timestamps (e.g. 2026-07-07T18:30:00.000Z
+   for 8 July IST). <input type="date"> rejects that format, so Joining date / DOB / Anniversary
+   looked EMPTY on reopen — and re-saving then wiped the stored value. Convert to local yyyy-mm-dd. */
+function dateInp(v){ if(!v) return ''; var s=String(v); if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s; var d=new Date(s); if(isNaN(d.getTime())) return ''; return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function dateNice(v){ var s=dateInp(v); if(!s) return ''; var p=s.split('-'); return p[2]+'-'+p[1]+'-'+p[0]; }
 /* "To chase" only counts items overdue within the last CHASE_WINDOW_DAYS so the KPI
    stays actionable instead of accumulating every stale task/event since launch.
    Change this one number to widen/narrow the window. */
@@ -307,15 +312,31 @@ function loadDashboard(){
     if(a[0]) DASH.emps=a[0]; if(a[1]) DASH.cards=a[1]; DASH.prices=priceMap(a[2]||[]); if(a[3]) DASH.tasks=a[3]; if(a[4]) DASH.cal=a[4]; if(a[5]) DASH.procs=a[5];
     renderDashboard();
   });
-  Promise.all([API.listEmployees().catch(e0),API.listCards({}).catch(e0),API.listCardPrices().catch(e0),API.listMyTasks().catch(e0),API.listProcesses().catch(e0),API.listCalendar(u.EmpID).catch(e0)]).then(function(a){
-    if(a[0]&&a[0].ok){ DASH.emps=a[0].employees; S.employees=a[0].employees; S.perms=a[0].perms||S.perms; }
-    if(a[1]&&a[1].ok){ DASH.cards=a[1].cards; }
-    if(a[2]&&a[2].ok){ DASH.prices=priceMap(a[2].prices); }
-    if(a[3]&&a[3].ok){ DASH.tasks=a[3].tasks||[]; }
-    if(a[4]&&a[4].ok){ DASH.procs=a[4].processes||[]; }
-    if(a[5]&&a[5].ok){ DASH.cal=a[5].entries||[]; }
-    renderDashboard();
-  });
+  /* v189: one combined server call instead of six parallel ones — falls back to the old
+     six-call path automatically if the Apps Script hasn't been redeployed yet. */
+  function legacyDashLoad(){
+    Promise.all([API.listEmployees().catch(e0),API.listCards({}).catch(e0),API.listCardPrices().catch(e0),API.listMyTasks().catch(e0),API.listProcesses().catch(e0),API.listCalendar(u.EmpID).catch(e0)]).then(function(a){
+      if(a[0]&&a[0].ok){ DASH.emps=a[0].employees; S.employees=a[0].employees; S.perms=a[0].perms||S.perms; }
+      if(a[1]&&a[1].ok){ DASH.cards=a[1].cards; }
+      if(a[2]&&a[2].ok){ DASH.prices=priceMap(a[2].prices); }
+      if(a[3]&&a[3].ok){ DASH.tasks=a[3].tasks||[]; }
+      if(a[4]&&a[4].ok){ DASH.procs=a[4].processes||[]; }
+      if(a[5]&&a[5].ok){ DASH.cal=a[5].entries||[]; }
+      renderDashboard();
+    });
+  }
+  API.dashboard().then(function(r){
+    if(r&&r.ok){
+      if(r.employees&&r.employees.length){ DASH.emps=r.employees; S.employees=r.employees; }
+      if(r.perms) S.perms=r.perms;
+      if(r.cards) DASH.cards=r.cards;
+      if(r.prices) DASH.prices=priceMap(r.prices);
+      if(r.tasks) DASH.tasks=r.tasks;
+      if(r.processes) DASH.procs=r.processes;
+      if(r.entries) DASH.cal=r.entries;
+      renderDashboard();
+    } else legacyDashLoad();
+  }).catch(function(){ legacyDashLoad(); });
   if(isMonitorRole()){
     Promise.all([API.listAllTasks().catch(e0),API.listAllCalendar().catch(e0)]).then(function(a){
       var tdy=todayD(), nowMin=new Date().getHours()*60+new Date().getMinutes(), floor=daysAgoD(CHASE_WINDOW_DAYS);
@@ -573,7 +594,7 @@ function viewEmp(empId){
     var e=r.employee;
     var rows=[['Employee ID',e.EmpID],['Login ID',e.LoginID],['Full name',e.FullName],['Role',e.Role],['Office',e.OfficeType],
       ['Branch',branchName(e.Branch)],['Reports to',e.ReportsTo],['Phone',e.Phone],['Email',e.Email],['Gender',e.Gender],
-      ['Date of birth',e.DOB],['Joining date',e.JoiningDate],['Address',e.Address],
+      ['Date of birth',dateNice(e.DOB)],['Joining date',dateNice(e.JoiningDate)],['Address',e.Address],
       ['Emergency contact',(e.EmergencyName||'')+(e.EmergencyPhone?(' · '+e.EmergencyPhone):'')],['Status',e.Status]];
     var body='<div class="grid2">'+rows.map(function(p){return '<div class="field"><label>'+esc(p[0])+'</label><div>'+esc(p[1]||'—')+'</div></div>';}).join('')+'</div>';
     var foot=r.canEdit?'<button class="btn" onclick="closeModal();openEmpModal(\''+e.EmpID+'\')">Edit</button>':'';
@@ -597,7 +618,7 @@ function openEmpModal(empId){
       '<div class="field full"><label>Reports to (name/role)</label><input id="f_ReportsTo" value="'+esc(e.ReportsTo||'')+'"></div>'
     ):'';
     var nameField=manage?'<div class="field"><label>Full name *</label><input id="f_FullName" value="'+esc(e.FullName||'')+'"></div>':'<div class="field"><label>Full name</label><div>'+esc(e.FullName||'')+'</div></div>';
-    var joinField=manage?'<div class="field"><label>Joining date</label><input id="f_JoiningDate" type="date" value="'+esc(e.JoiningDate||'')+'"></div>':'';
+    var joinField=manage?'<div class="field"><label>Joining date</label><input id="f_JoiningDate" type="date" value="'+esc(dateInp(e.JoiningDate))+'"></div>':'';
     function fld(lbl,id,v,t){ return '<div class="field"><label>'+lbl+'</label><input id="'+id+'"'+(t?(' type="'+t+'"'):'')+' value="'+esc(v||'')+'"></div>'; }
     function sel(lbl,id,arr,v){ return '<div class="field"><label>'+lbl+'</label><select id="'+id+'"><option value=""></option>'+arr.map(function(o){return '<option'+(String(o)===String(v)?' selected':'')+'>'+esc(o)+'</option>';}).join('')+'</select></div>'; }
     var eduArr=e.EduDocsUrl?String(e.EduDocsUrl).split(',').filter(Boolean):[];
@@ -607,7 +628,7 @@ function openEmpModal(empId){
       fld('Father name','f_FatherName',e.FatherName)+fld('Father phone','f_FatherPhone',e.FatherPhone)+
       fld('Mother name','f_MotherName',e.MotherName)+fld('Mother phone','f_MotherPhone',e.MotherPhone)+
       fld('Spouse name','f_SpouseName',e.SpouseName)+fld('Spouse phone','f_SpousePhone',e.SpousePhone)+
-      '<div class="field"><label>Anniversary</label><input id="f_Anniversary" type="date" value="'+esc(e.Anniversary||'')+'"></div>'+
+      '<div class="field"><label>Anniversary</label><input id="f_Anniversary" type="date" value="'+esc(dateInp(e.Anniversary))+'"></div>'+
       '<div class="section-title full">Bank</div>'+
       fld('Bank name / prefix','f_BankPrefix',e.BankPrefix)+fld('IFSC','f_IFSC',e.IFSC)+fld('Account number','f_AccountNo',e.AccountNo)+
       '<div class="section-title full">Work &amp; pay</div>'+
@@ -633,7 +654,7 @@ function openEmpModal(empId){
       '<div class="field"><label>Phone</label><input id="f_Phone" value="'+esc(e.Phone||'')+'"></div>'+
       '<div class="field"><label>Email</label><input id="f_Email" type="email" value="'+esc(e.Email||'')+'"></div>'+
       '<div class="field"><label>Gender</label><select id="f_Gender">'+genderOpts(e.Gender)+'</select></div>'+
-      '<div class="field"><label>Date of birth</label><input id="f_DOB" type="date" value="'+esc(e.DOB||'')+'"></div>'+
+      '<div class="field"><label>Date of birth</label><input id="f_DOB" type="date" value="'+esc(dateInp(e.DOB))+'"></div>'+
       adminBlock+
       '<div class="section-title full">Contact &amp; emergency</div>'+
       '<div class="field full"><label>Address</label><textarea id="f_Address" rows="2">'+esc(e.Address||'')+'</textarea></div>'+
