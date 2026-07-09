@@ -377,7 +377,7 @@ function loadDashboard(){
      "Business (MTD)" KPI and the By-branch table. Only roles that can see branch business fetch it. */
   var dm=$('dashMonth'); if(dm && !dm.value) dm.value=todayD().slice(0,7);
   var ym=(dm&&dm.value)||todayD().slice(0,7);
-  if(S.perms && !isConsultantRole() && (S.perms.canViewAll || S.perms.level==='BRANCH_MGR' || S.perms.level==='BRANCH_VIEW')){
+  if(S.perms && (S.perms.canViewAll || S.perms.level==='BRANCH_MGR' || S.perms.level==='BRANCH_VIEW')){
     API.listDaily('', ym).then(function(r){ if(r&&r.ok){ DASH.daily=r.daily||[]; renderDashboard(); } }).catch(function(){});
   }
   /* org-wide training progress for the dashboard "Staff Training" tile */
@@ -495,7 +495,7 @@ function renderDashboard(){
       }
     }
   }
-  if(isManager && !isCons && !branch && Object.keys(brs).length>1){
+  if(isManager && !branch && Object.keys(brs).length>1){
     var rows=Object.keys(brs).map(function(bid){
       var be=emp.filter(function(e){return String(e.Branch)===bid;}).length;
       var bc=activeCards.filter(function(c){return String(c.branchId)===bid;});
@@ -509,7 +509,7 @@ function renderDashboard(){
       rows.map(function(r){return '<tr><td><b>'+esc(r.name)+'</b></td><td>₹'+fmtMoney(r.biz)+'</td><td>₹'+fmtMoney(r.cash)+'</td><td>₹'+fmtMoney(r.bank)+'</td><td>₹'+fmtMoney(r.other)+'</td><td>'+r.pat+'</td><td>₹'+fmtMoney(r.avg)+'</td><td>'+r.test+'</td><td>₹'+fmtMoney(r.rTest)+'</td><td>'+r.cards+'</td><td>₹'+fmtMoney(r.rev)+'</td><td>'+r.staff+'</td><td>₹'+fmtMoney(r.rStaff)+'</td></tr>';}).join('')+'</tbody></table></div></div>';
   }
   var types={}, byBT={}, brOrder=[];
-  if(!isCons) activeCards.forEach(function(c){ var ty=String(c.typeId||'—'); types[ty]=1; var b=String(c.branchId||''); if(!byBT[b]){ byBT[b]={}; brOrder.push(b); } byBT[b][ty]=(byBT[b][ty]||0)+1; });
+  activeCards.forEach(function(c){ var ty=String(c.typeId||'—'); types[ty]=1; var b=String(c.branchId||''); if(!byBT[b]){ byBT[b]={}; brOrder.push(b); } byBT[b][ty]=(byBT[b][ty]||0)+1; });
   var typeList=Object.keys(types).sort();
   if(typeList.length){
     var colTot={}; typeList.forEach(function(t){colTot[t]=0;}); var grand=0;
@@ -527,12 +527,11 @@ function renderDashboard(){
   if(window.renderStarBlock){ try{ window.renderStarBlock(document.getElementById('starBlock')); }catch(_){} }
   if(window.renderQuickLog){ try{ window.renderQuickLog(document.getElementById('quickLog')); }catch(_){} }
   var dashBr=(S.perms&&S.perms.canViewAll)?(($('dashBranch')||{}).value||''):'';
-  if(!isCons && window.renderFinDash){ try{ window.renderFinDash(document.getElementById('finDash'), dashBr); }catch(_){} }
+  if(window.renderFinDash){ try{ window.renderFinDash(document.getElementById('finDash'), dashBr); }catch(_){} }
   if(!isCons && window.renderMktDash){ try{ window.renderMktDash(document.getElementById('mktDash'), dashBr); }catch(_){} }
   /* consultant: hide the business month picker and the "Recently added staff" block */
-  var _rt=$('recentTable'), _rc=_rt&&_rt.closest?_rt.closest('.card'):null, _rl=_rc?_rc.previousElementSibling:null, _dm2=$('dashMonth');
+  var _rt=$('recentTable'), _rc=_rt&&_rt.closest?_rt.closest('.card'):null, _rl=_rc?_rc.previousElementSibling:null;
   if(_rc){ _rc.style.display=isCons?'none':''; } if(_rl && _rl.classList && _rl.classList.contains('section-label')){ _rl.style.display=isCons?'none':''; }
-  if(_dm2){ _dm2.style.display=isCons?'none':''; }
   var recent=emp.slice().sort(function(a,b){return a.EmpID<b.EmpID?1:-1;}).slice(0,6);
   var tb=$('recentTable').querySelector('tbody'); var rhtml='';
   if(!recent.length){ rhtml='<tr><td class="empty">No staff yet.</td></tr>'; }
