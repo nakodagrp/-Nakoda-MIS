@@ -436,10 +436,9 @@ function renderDashboard(){
     else if(isBranchMgr){ boardLabel='Department health · '+branchName(u.Branch); }
     else if(isMon){ boardLabel='Department health · operations'; }
     else {
-      /* functional / self-service staff: only the pipelines where they actually have work */
-      boardProcs=procs.filter(function(p){ var c=procCounts(p,scopeBranch); return (c.open+c.dueToday+c.overdue)>0; });
-      if(!boardProcs.length) boardProcs=procs;
-      boardLabel='My department'+(boardProcs.length>1?'s':'');
+      /* staff: show EVERY pipeline they're allowed to view (backend already scopes by role),
+         so every process box is visible and tappable — not just the ones with work. */
+      boardLabel='Department health';
     }
     html+='<div class="section-label">'+esc(boardLabel)+'</div>';
     html+='<div class="dept-legend"><span><i class="ddot ok"></i>on track</span><span><i class="ddot warn"></i>watch</span><span><i class="ddot bad"></i>action needed</span></div>';
@@ -517,6 +516,7 @@ function deptIcon(n){ n=String(n||'').toLowerCase();
   if(/procure|indent|purchase|supply/.test(n)) return '🛒';
   if(/complaint|grievance|escalat/.test(n)) return '⚠️';
   if(/asset|equip|mainten|amc/.test(n)) return '🛠';
+  if(/franchis/.test(n)) return '🏪';
   return '📁';
 }
 /* Scope a pipeline's counts to a branch using the backend's byBranch breakdown.
@@ -535,11 +535,15 @@ function deptCard(p,cardRev,sc){
   var ot=open>0?Math.round((open-over)/open*100):100;
   var cls=over===0?'ok':((over/Math.max(open,1))>=0.18?'bad':'warn');
   var isCard=/member|card/i.test(p.name||'');
+  /* Clickable tile: process tiles deep-link to their pipeline board (CRM kanban);
+     the Staff Training tile opens the Training page. */
+  var click=p.processId ? ' onclick="openDept(\''+esc(p.processId)+'\')"'
+          : (/train/i.test(p.name||'') ? ' onclick="go(\'training\')"' : '');
+  var goHint=click?'<span class="go">open ›</span>':'';
   var foot=(isCard&&cardRev)
-    ? '<div class="dept-foot"><span class="rev">₹'+fmtMoney(cardRev)+'</span><span class="ot">'+ot+'% on-time</span></div>'
-    : '<div class="dept-foot"><span class="ot">'+ot+'% on-time</span></div>';
-  /* Display-only tile (not clickable) — it's a decision read-out, not a nav target. */
-  return '<div class="dept-card">'+
+    ? '<div class="dept-foot"><span class="rev">₹'+fmtMoney(cardRev)+'</span><span class="ot">'+ot+'% on-time</span>'+goHint+'</div>'
+    : '<div class="dept-foot"><span class="ot">'+ot+'% on-time</span>'+goHint+'</div>';
+  return '<div class="dept-card'+(click?' clickable':'')+'"'+click+'>'+
     '<div class="dept-top"><span class="dept-ic">'+deptIcon(p.name)+'</span><span class="dept-nm">'+esc(p.name)+'</span><span class="ddot '+cls+'"></span></div>'+
     '<div class="dept-open"><b>'+open+'</b><span>open</span></div>'+
     '<div class="dept-sub"><span class="due">'+due+' due</span><span class="over">'+over+' overdue</span></div>'+
