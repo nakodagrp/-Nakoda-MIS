@@ -78,8 +78,8 @@
     }
   }
   function typeCount(key){
-    if(key==='others') return DELEG.filter(function(t){return t.status!=='deleted';}).length;
-    return combined().filter(function(t){ if(t.status==='deleted') return false;
+    if(key==='others') return dedupTasks(DELEG).filter(function(t){return t.status!=='deleted';}).length;
+    return dedupTasks(combined()).filter(function(t){ if(t.status==='deleted') return false;
       if(key==='me') return t.source==='assigned'||t.source==='training';
       if(key==='recurring') return t.source==='recurring' && t.status!=='done';
       if(key==='calendar') return t.isCal;
@@ -87,7 +87,7 @@
       return false; }).length;
   }
   function paintChips(){
-    var ALL=combined();
+    var ALL=dedupTasks(combined());
     var defs=[['today','Today'],['upcoming','Upcoming'],['overdue','Overdue'],['done','Done'],['all','All'],
               ['me','Assigned to me'],['others','Assigned to others'],['recurring','Recurring'],['calendar','Calendar'],['process','Process']];
     document.getElementById('taskChips').innerHTML=defs.map(function(d){
@@ -99,11 +99,37 @@
     }).join('');
     document.querySelectorAll('#taskChips .tchip').forEach(function(b){ b.onclick=function(){ FILTER=b.getAttribute('data-f'); paintChips(); paintList(); }; });
   }
+  /* Collapse duplicate cards so the same lead/task never shows more than once.
+     Key: process/CRM cards by instance+stage; everything else by taskId; fall back to title+date+source.
+     When two rows share a key we keep the "best" one — an open task beats a done one, then the most
+     recently updated / most checklist progress. Fixes leads (e.g. "Prospectus — Aakash Daman") showing 3×. */
+  function dedupTasks(arr){
+    function keyOf(t){
+      if((String(t.source)==='process'||String(t.source)==='nrlead') && t.instanceId)
+        return 'proc:'+t.instanceId+'|'+(t.stageId||'');
+      if(t.taskId) return 'id:'+t.taskId;
+      return 'k:'+(t.title||'')+'|'+dd10(t)+'|'+(t.source||'');
+    }
+    function betterThan(a,b){                       // is a a better keeper than b?
+      var ad=String(a.status)==='done'?1:0, bd=String(b.status)==='done'?1:0;
+      if(ad!==bd) return ad<bd;                     // prefer not-done
+      var au=new Date(a.updatedAt||a.completedAt||0).getTime()||0, bu=new Date(b.updatedAt||b.completedAt||0).getTime()||0;
+      if(au!==bu) return au>bu;                      // prefer most recently updated
+      return pc(a).filter(function(x){return x.done;}).length >= pc(b).filter(function(x){return x.done;}).length;
+    }
+    var seen={}, out=[];
+    arr.forEach(function(t){
+      var k=keyOf(t), i=seen[k];
+      if(i===undefined){ seen[k]=out.length; out.push(t); }
+      else if(betterThan(t,out[i])){ out[i]=t; }
+    });
+    return out;
+  }
   function paintList(){
     paintChips();
     var box=document.getElementById('taskList');
     var src=(FILTER==='others')?DELEG:combined();
-    var list=src.filter(function(t){ if(t.status==='deleted') return false;
+    var list=dedupTasks(src.filter(function(t){ if(t.status==='deleted') return false;
       switch(FILTER){
         case 'all': case 'others': return true;
         case 'today': case 'upcoming': case 'overdue': case 'done': return bucket(t)===FILTER;
@@ -113,7 +139,7 @@
         case 'process': return t.source==='process' && t.status!=='done';
       }
       return true;
-    });
+    }));
     list.sort(function(a,b){
       var ad=(String(a.status)==='done')?1:0, bd=(String(b.status)==='done')?1:0;
       if(ad!==bd) return ad-bd;                                   // pending first, completed sink to bottom
