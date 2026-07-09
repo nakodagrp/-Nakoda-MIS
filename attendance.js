@@ -37,6 +37,7 @@
       if(r&&r.ok){ pqDrop(item); toast('Offline punch sent ✓ '+(item.kind==='in'?'In ':'Out ')+item.time); refreshAfterSync(); pqSync(); return; }
       if(r&&r.wfhPrompt){ item.wfh=true; var q2=pq(); q2.forEach(function(p){ if(p.ts===item.ts) p.wfh=true; }); pqSave(q2); pqSync(); return; }   // punched from outside the branch — send as WFH (goes for approval)
       if(/already checked/i.test(em)){ pqDrop(item); refreshAfterSync(); pqSync(); return; }   // an earlier tap already landed
+      if(/server busy/i.test(em)) return;   // v202: lock held right now — keep the punch, next cycle will land it
       if(em){ pqDrop(item); toast('Saved punch could not be accepted: '+em, true); refreshAfterSync(); pqSync(); return; }   // real server rejection (e.g. Sunday rule) — keeping it would retry forever
     }).catch(function(){ _pqBusy=false; });   // still no (or flaky) internet — keep it, try again later
   }
@@ -378,6 +379,7 @@
         if(r&&r.wfhPrompt){ promptWfh(r, function(yes){ if(yes){ ATT.wfh=true; submitMark(kind, selfie); } else { ATT.wfh=false; toast('You are not at the centre — '+(kind==='in'?'check-in':'check-out')+' not allowed.',true); } }); return; }
         var em=String((r&&r.error)||'');
         if(/already checked/i.test(em)){ success(kind==='in'?'Checked in ✓ (your earlier tap worked)':'Checked out ✓ (your earlier tap worked)'); return; }
+        if(/server busy/i.test(em)){ queuePunch(); return; }   // v202: server momentarily locked — save with the real tap time and auto-sync in under a minute
         toast(em||'Could not mark — needs internet & location.',true);
       }).catch(function(){
         if(tries<2){ toast('Slow connection — retrying…'); setTimeout(attempt,1500); return; }
@@ -482,7 +484,7 @@
         '</div>'+
         '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">'+
           (ap?'<span class="att-ok">✓ approved</span>':'<button class="btn sm" data-ap="'+esc(a.attId)+'">Approve</button>')+
-          '<select class="att-sel" data-st="'+esc(a.attId)+'">'+['present','half','leave','absent'].map(function(s){return '<option value="'+s+'"'+(s===a.status?' selected':'')+'>'+esc(stLabel(s))+'</option>';}).join('')+'</select>'+
+          '<select class="att-sel" data-st="'+esc(a.attId)+'" data-prev="'+esc(a.status)+'">'+['present','half','leave','absent'].map(function(s){return '<option value="'+s+'"'+(s===a.status?' selected':'')+'>'+esc(stLabel(s))+'</option>';}).join('')+'</select>'+
         '</div>'+
         '</div>';
     }).join('');
@@ -491,29 +493,51 @@
       b.onclick=function(){
         var attId=b.getAttribute('data-ap');
         b.disabled=true; b.textContent='…';
-        API.setAttendance(attId,{approvalStatus:'approved'}).then(function(x){
-          if(x&&x.ok){
-            toast('Approved');
-            var rec0=(_approveCache.recs||[]).filter(function(r){return String(r.attId)===attId;})[0]; if(rec0) rec0.approvalStatus='approved';   // keep in-memory cache in sync so a later status change re-render doesn't revert this button
-            _approveCache.ts=0; // still invalidate so the NEXT open re-fetches fresh from the server
-            var row=b.closest ? b.closest('.att-row') : null;
-            if(row){ var btn=row.querySelector('[data-ap]'); if(btn) btn.outerHTML='<span class="att-ok">✓ approved</span>'; }
-          } else { b.disabled=false; b.textContent='Approve'; toast((x&&x.error)||'Failed',true); }
-        }).catch(function(){ b.disabled=false; b.textContent='Approve'; toast('Failed',true); });
+        var retried=false;
+        function saveAp(){
+          API.setAttendance(attId,{approvalStatus:'approved'}).then(function(x){
+            if(x&&x.ok){
+              toast('Approved');
+              var rec0=(_approveCache.recs||[]).filter(function(r){return String(r.attId)===attId;})[0]; if(rec0) rec0.approvalStatus='approved';   // keep in-memory cache in sync so a later status change re-render doesn't revert this button
+              _approveCache.ts=0; // still invalidate so the NEXT open re-fetches fresh from the server
+              var row=b.closest ? b.closest('.att-row') : null;
+              if(row){ var btn=row.querySelector('[data-ap]'); if(btn) btn.outerHTML='<span class="att-ok">✓ approved</span>'; }
+              return;
+            }
+            var em=String((x&&x.error)||'');
+            if(/busy/i.test(em) && !retried){ retried=true; toast('Server busy — retrying…'); setTimeout(saveAp, 3000); return; }   // v202: one silent retry rides out a momentary lock
+            b.disabled=false; b.textContent='Approve'; toast(em||'Failed',true);
+          }).catch(function(){
+            if(!retried){ retried=true; toast('Slow connection — retrying…'); setTimeout(saveAp, 3000); return; }
+            b.disabled=false; b.textContent='Approve'; toast('Failed',true);
+          });
+        }
+        saveAp();
       };
     });
     box.querySelectorAll('[data-st]').forEach(function(s){
       s.onchange=function(){
         var attId=s.getAttribute('data-st'), val=s.value, prev=s.getAttribute('data-prev')||val;
         s.disabled=true;
-        API.setAttendance(attId,{status:val}).then(function(x){
-          s.disabled=false;
-          if(x&&x.ok){
-            toast('Updated');
-            var rec=(_approveCache.recs||[]).filter(function(r){return String(r.attId)===attId;})[0];
-            if(rec){ rec.status=val; renderApproveRecs(_approveCache.recs); }   // repaint so the badge + "· Full day/Half day" text next to the photo matches the new dropdown value
-          } else { s.value=prev; toast((x&&x.error)||'Failed',true); }
-        }).catch(function(){ s.disabled=false; s.value=prev; toast('Failed — check connection.',true); });
+        var retried=false;
+        function save(){
+          API.setAttendance(attId,{status:val}).then(function(x){
+            if(x&&x.ok){
+              s.disabled=false; s.setAttribute('data-prev',val);
+              toast('Updated');
+              var rec=(_approveCache.recs||[]).filter(function(r){return String(r.attId)===attId;})[0];
+              if(rec){ rec.status=val; renderApproveRecs(_approveCache.recs); }   // repaint so the badge + "· Full day/Half day" text next to the photo matches the new dropdown value
+              return;
+            }
+            var em=String((x&&x.error)||'');
+            if(/busy/i.test(em) && !retried){ retried=true; toast('Server busy — retrying…'); setTimeout(save, 3000); return; }   // v202: one silent retry rides out a momentary lock
+            s.disabled=false; s.value=prev; toast(em||'Failed',true);
+          }).catch(function(){
+            if(!retried){ retried=true; toast('Slow connection — retrying…'); setTimeout(save, 3000); return; }
+            s.disabled=false; s.value=prev; toast('Failed — check connection.',true);
+          });
+        }
+        save();
       };
     });
   }
