@@ -389,6 +389,7 @@ table.pm-grid{border-collapse:collapse;font-size:11px;min-width:560px}
 .dept-sub .due{color:#c47f00}.dept-sub .over{color:#DA1017}
 .dept-foot{display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:#8a9099}
 .dept-foot .rev{color:#1a7f37;font-weight:600}
+.wd.wQ{background:#faeeda!important;color:#854F0B!important;border:1.5px dashed #BA7517}   /* offline punch waiting to send */
 .dept-card.clickable{cursor:pointer;transition:border-color .12s,box-shadow .12s}
 .dept-card.clickable:hover{border-color:#c9ced6;box-shadow:0 2px 8px rgba(0,0,0,.06)}
 .dept-card.clickable:active{transform:scale(.985)}

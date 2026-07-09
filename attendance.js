@@ -15,6 +15,35 @@
   function canApprove(){ if(S.user&&String(S.user.AttApproveDenied)==='yes') return false; var p=S.perms||{}; return p.level==='SUPER'||p.level==='HR_ADMIN'||p.level==='BRANCH_MGR'||(S.user&&S.user.Role==='Operations Manager'); }
   function todayRec(){ var t=todayS(); return (ATT.recs||[]).filter(function(r){return String(r.date)===t;})[0]; }
 
+  /* ---------- offline punch queue (v201) ----------
+     No internet at punch time? The punch (selfie + GPS + ORIGINAL tap time) is saved on the phone and
+     synced automatically when the network returns. The server records the original tap time, so
+     late/half-day stays fair, and notes "Offline punch · synced HH:mm" for the manager. */
+  function pq(){ try{ return JSON.parse(localStorage.getItem('nk_att_q')||'[]'); }catch(e){ return []; } }
+  function pqSave(q){ try{ localStorage.setItem('nk_att_q', JSON.stringify(q.slice(0,8))); }catch(e){} }
+  function pqToday(kind){ var t=todayS(); return pq().filter(function(p){ return p.date===t && p.kind===kind; })[0]; }
+  function pqDrop(item){ pqSave(pq().filter(function(p){ return p.ts!==item.ts; })); }
+  var _pqBusy=false;
+  function pqSync(){
+    if(_pqBusy || !navigator.onLine) return;
+    var q=pq(); if(!q.length) return;
+    _pqBusy=true;
+    var item=q[0];
+    var payload={selfie:item.selfie, lat:item.lat, lng:item.lng, wfh:!!item.wfh, altShift:!!item.altShift, remark:item.remark||'', clientDate:item.date, clientTime:item.time, offline:1};
+    var call=(item.kind==='in')?API.checkIn(payload):API.checkOut(payload);
+    call.then(function(r){
+      _pqBusy=false;
+      var em=String((r&&r.error)||'');
+      if(r&&r.ok){ pqDrop(item); toast('Offline punch sent ✓ '+(item.kind==='in'?'In ':'Out ')+item.time); refreshAfterSync(); pqSync(); return; }
+      if(r&&r.wfhPrompt){ item.wfh=true; var q2=pq(); q2.forEach(function(p){ if(p.ts===item.ts) p.wfh=true; }); pqSave(q2); pqSync(); return; }   // punched from outside the branch — send as WFH (goes for approval)
+      if(/already checked/i.test(em)){ pqDrop(item); refreshAfterSync(); pqSync(); return; }   // an earlier tap already landed
+      if(em){ pqDrop(item); toast('Saved punch could not be accepted: '+em, true); refreshAfterSync(); pqSync(); return; }   // real server rejection (e.g. Sunday rule) — keeping it would retry forever
+    }).catch(function(){ _pqBusy=false; });   // still no (or flaky) internet — keep it, try again later
+  }
+  function refreshAfterSync(){ API.myAttendance(ymNow()).then(function(x){ if(x&&x.ok){ ATT.recs=x.records||[]; if(document.getElementById('attMe')) paintMe(); } }); }
+  try{ window.addEventListener('online', function(){ setTimeout(pqSync, 1500); }); }catch(e){}
+  try{ setInterval(pqSync, 60000); }catch(e){}
+
   function renderAttendance(){
     var v=$id('page-attendance');
     v.innerHTML='<div class="page-head"><h1>Attendance</h1></div>'+
@@ -125,12 +154,17 @@
     var box=$id('attMe'); if(!box) return;
     warmGeo();   // start GPS early so the fix is ready before the punch button is tapped
     var rec=todayRec(), now=new Date();
+    /* v201: a punch saved on the phone counts as done locally — no double punching, clear "waiting" label */
+    var qIn=pqToday('in'), qOut=pqToday('out'), qN=pq().length;
+    if(!rec && qIn) rec={checkIn:qIn.time, checkOut:(qOut?qOut.time:''), _queued:true};
+    else if(rec && rec.checkIn && !rec.checkOut && qOut) rec={checkIn:rec.checkIn, checkOut:qOut.time, attId:rec.attId, selfieInUrl:rec.selfieInUrl, selfieOutUrl:'x', _queued:true};
     var dutyTxt=(S.user&&S.user.DutyStart)?('Shift '+fmtDutyTime(S.user.DutyStart)+(S.user.DutyEnd?('–'+fmtDutyTime(S.user.DutyEnd)):'')+((S.user.AltDutyStart)?(' (or alt shift '+fmtDutyTime(S.user.AltDutyStart)+(S.user.AltDutyEnd?('–'+fmtDutyTime(S.user.AltDutyEnd)):'')+')'):'')):'';
     var inb = !rec || !rec.checkIn;
     var btn = inb
       ? '<button class="att-big in" id="attBtn">⊕ Check in</button>'
       : (!rec.checkOut ? '<button class="att-big out" id="attBtn">⊖ Check out</button>' : '<div class="att-done">✓ Done for today</div>');
-    var stat = rec ? ('In '+(rec.checkIn||'—')+(rec.checkOut?(' · Out '+rec.checkOut):'')+(rec.workHours?(' · '+rec.workHours+'h'):'')+(String(rec.late)==='yes'?' · ⚠ late (½ day)':'')) : 'Not checked in yet';
+    var stat = rec ? ('In '+(rec.checkIn||'—')+(rec.checkOut?(' · Out '+rec.checkOut):'')+(rec.workHours?(' · '+rec.workHours+'h'):'')+(String(rec.late)==='yes'?' · ⚠ late (½ day)':'')+(rec._queued?' · ☁ waiting to send':'')) : 'Not checked in yet';
+    var qNote = qN ? '<div class="att-note" style="color:#854F0B;font-weight:600">☁ '+qN+' punch'+(qN>1?'es':'')+' saved on phone — will send automatically when internet returns.</div>' : '';
     // Alternate Sunday counter
     var sundayNote='';
     var sw__=String((S.user&&S.user.SundayWork)||'').toLowerCase().trim();
@@ -150,8 +184,10 @@
       '<div class="att-stat">'+esc(stat)+'</div>'+
       '<div class="att-note">'+[ (needSelfie()?'📷 selfie':''), ('📍 location'+(isFenced()?' verified at your branch':'')) ].filter(Boolean).join(' + ')+' · Late after shift+15 min = half day.</div>'+
       missingNote+
+      qNote+
       sundayNote+'</div>'+
       monthStrip();
+    pqSync();   // v201: any saved punches get a sync chance every time this screen paints
     var b=$id('attBtn'); if(b) b.onclick=function(){ doMark(inb?'in':'out'); };
     var fix=$id('attFixSelfie'); if(fix) fix.onclick=function(){
       fix.textContent='Opening camera…';
@@ -165,9 +201,10 @@
   }
   function monthStrip(){
     var by={}; (ATT.recs||[]).forEach(function(r){ by[r.date]=r; });
+    pq().forEach(function(p){ if(!by[p.date]) by[p.date]={date:p.date, status:'present', checkIn:p.time, _queued:true}; });   // v201: phone-saved punch shows as pending P
     var now=new Date(), y=now.getFullYear(), m=now.getMonth(), days=new Date(y,m+1,0).getDate(), cells='';
     for(var d=1;d<=days;d++){ var ds=y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0'); var r=by[ds];
-      var cls='wW',ch=''+d; if(r){ var st=String(r.status); cls=st==='present'?'wP':st==='half'?'wL':st==='leave'?'wL':st==='absent'?'wA':'wP'; ch=(st==='half'?'½':(st==='leave'?'L':(st==='absent'?'A':'P'))); }
+      var cls='wW',ch=''+d; if(r){ var st=String(r.status); cls=st==='present'?'wP':st==='half'?'wL':st==='leave'?'wL':st==='absent'?'wA':'wP'; ch=(st==='half'?'½':(st==='leave'?'L':(st==='absent'?'A':'P'))); if(r._queued){ cls+=' wQ'; } }
       else if(new Date(ds)>now){ cls='wF'; ch=''+d; }
       cells+='<span class="wd '+cls+'" title="'+ds+'">'+ch+'</span>';
     }
@@ -279,7 +316,8 @@
     });
   }
   function doMark(kind){
-    ATT.kind=kind; ATT.outRemark='';   // under 4 hours auto-marks half day on the server — no reason prompt
+    if(pqToday(kind)){ toast('Already saved on phone — will send automatically when internet returns. ✓'); return; }
+    ATT.kind=kind; ATT.outRemark=''; ATT.tapTs=Date.now();   // remember the REAL tap time for offline punches; under 4 hours auto-marks half day on the server — no reason prompt
     if(kind==='in'){ ATT.altShift=false; maybeAltShiftPrompt(function(){ startMark(kind); }); }
     else startMark(kind);
   }
@@ -320,6 +358,16 @@
     var c=ATT.coords||{}, payload={selfie:selfie, lat:c.lat, lng:c.lng, wfh:!!ATT.wfh, altShift:!!ATT.altShift, remark:(kind==='out'?(ATT.outRemark||''):'')};
     function tdy(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
     function success(msg){ ATT.wfh=false; toast(msg); API.myAttendance(ymNow()).then(function(x){ if(x&&x.ok){ ATT.recs=x.records||[]; paintMe(); } }); }
+    /* v201: no internet (or network died) → save the punch on the phone with the ORIGINAL tap time. */
+    function queuePunch(){
+      var d=new Date(ATT.tapTs||Date.now());
+      var q=pq(); q.push({ts:Date.now(), kind:kind, date:tdy(), time:String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'),
+        selfie:selfie, lat:c.lat, lng:c.lng, wfh:!!ATT.wfh, altShift:!!ATT.altShift, remark:(kind==='out'?(ATT.outRemark||''):'')});
+      pqSave(q); ATT.wfh=false;
+      toast('No internet — punch saved on phone ✓ It will send automatically.');
+      paintMe();
+    }
+    if(!navigator.onLine){ queuePunch(); return; }
     toast(selfie?'Marking… uploading photo':'Marking…');
     var tries=0;
     function attempt(){
@@ -337,8 +385,8 @@
         API.myAttendance(ymNow()).then(function(x){
           var rec=((x&&x.records)||[]).filter(function(r){ return String(r.date).slice(0,10)===tdy(); })[0];
           if(rec && ((kind==='in'&&rec.checkIn)||(kind==='out'&&rec.checkOut))){ ATT.recs=x.records||[]; success(kind==='in'?('Checked in '+rec.checkIn+' ✓'):('Checked out '+rec.checkOut+' ✓')); return; }
-          toast('Marking attendance needs an internet connection — please try again.',true);
-        },function(){ toast('Marking attendance needs an internet connection — please try again.',true); });
+          queuePunch();   // v201: network too weak — save on phone, sync automatically later
+        },function(){ queuePunch(); });
       });
     }
     attempt();
