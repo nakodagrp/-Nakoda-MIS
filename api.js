@@ -55,7 +55,8 @@
     saveItem:1,deleteItem:1,saveVendor:1,deleteVendor:1,saveConsumption:1,raiseIndent:1,advanceIndent:1,saveAudit:1,approveAudit:1,
     saveSection:1,deleteSection:1,saveVideo:1,deleteVideo:1,submitQuiz:1,saveAsset:1,deleteAsset:1,
     login:1,validate:1,logout:1,uploadFile:1,importOldCards:1,attachSelfie:1,
-    submitSuggestion:1,replySuggestion:1,saveFixedAsset:1,deleteFixedAsset:1,completeFollowup:1};
+    submitSuggestion:1,replySuggestion:1,saveFixedAsset:1,deleteFixedAsset:1,completeFollowup:1,
+    salesCreateLead:1,salesAdvance:1,salesClose:1,salesChatSend:1,salesChatEdit:1,salesResend:1,salesEditChecklist:1};
   /* Writes that already do their own optimistic queueing inside the method (don't double-queue here). */
   var SELF_QUEUE={createEmployee:1,updateEmployee:1,setStatus:1,issueCard:1,renewCard:1,cancelCard:1,markCardSent:1,markCardActivated:1,
     createTask:1,updateTask:1,setTaskStatus:1,deleteTask:1,createCalEntry:1,updateCalEntry:1,startInstance:1,advanceStage:1,attachSelfie:1};
@@ -410,6 +411,19 @@
     cachedTasksFor:function(owner){ return kvGet('tasksfor_'+owner); },
     listTasksFor:function(owner){ return call('listTasksFor',{token:getToken(),ownerEmpId:owner}).then(function(r){ if(r.ok) kvSet('tasksfor_'+owner,r.tasks); return r; }).catch(function(){ return kvGet('tasksfor_'+owner).then(function(t){ return {ok:true,tasks:t||[],offline:true}; }); }); },
     branchAssignees:function(branchId,includeRole){ var k='brassign_'+(branchId||'me')+(includeRole?('_'+includeRole):''); return call('branchAssignees',{token:getToken(),branchId:branchId||'',includeRole:includeRole||''}).then(function(r){ if(r&&r.ok) kvSet(k,r.employees); return r; }).catch(function(){ return kvGet(k).then(function(v){ return {ok:true,employees:v||[],offline:true}; }); }); },
+
+    /* ---- Sales CRM (new module) ---- */
+    cachedSalesLeads:function(){ return kvGet('scrm_leads'); },
+    salesListLeads:function(){ return call('salesListLeads',{token:getToken()}).then(function(r){ if(r&&r.ok) kvSet('scrm_leads',r.leads); return r; }).catch(function(){ return kvGet('scrm_leads').then(function(x){ return {ok:true,leads:x||[],offline:true}; }); }); },
+    salesGetLead:function(leadId){ return call('salesGetLead',{token:getToken(),leadId:leadId}); },
+    salesCreateLead:function(data){ return call('salesCreateLead',{token:getToken(),data:data}).then(function(r){ if(r&&(r.ok||r.offline)){ API.salesListLeads(); API.refreshTasks(); } return r; }); },
+    salesAdvance:function(leadId,data){ return call('salesAdvance',{token:getToken(),leadId:leadId,data:data}).then(function(r){ if(r&&(r.ok||r.offline)){ API.salesListLeads(); API.refreshTasks(); } return r; }); },
+    salesClose:function(leadId,data){ return call('salesClose',{token:getToken(),leadId:leadId,data:data}).then(function(r){ if(r&&(r.ok||r.offline)){ API.salesListLeads(); API.refreshTasks(); } return r; }); },
+    salesChatSend:function(leadId,message,kind){ return call('salesChatSend',{token:getToken(),leadId:leadId,message:message,kind:kind||'note'}); },
+    salesChatEdit:function(chatId,message){ return call('salesChatEdit',{token:getToken(),chatId:chatId,message:message}); },
+    salesResend:function(leadId,message){ return call('salesResend',{token:getToken(),leadId:leadId,message:message}).then(function(r){ if(r&&(r.ok||r.offline)) API.refreshTasks(); return r; }); },
+    salesEditChecklist:function(leadId,checklist){ return call('salesEditChecklist',{token:getToken(),leadId:leadId,checklist:checklist}); },
+    salesPeople:function(){ return call('salesPeople',{token:getToken()}).then(function(r){ if(r&&r.ok) kvSet('scrm_people',r.employees); return r; }).catch(function(){ return kvGet('scrm_people').then(function(x){ return {ok:true,employees:x||[],offline:true}; }); }); },
 
     /* fire-and-forget cache refresh */
     refreshEmployees:function(){ return API.listEmployees().catch(function(){}); },

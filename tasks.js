@@ -153,11 +153,12 @@
               :t.isCal?'<span style="background:#ECEAFB;color:#5046b8;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">📅 Meeting / Calendar</span>'
               :(t.source==='recurring'?'<span style="background:#ECEAFB;color:#5046b8;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">🔁 Recurring</span>'
               :(t.source==='training'?'<span style="background:#eafaf3;color:#1aa37a;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">🎓 Training</span>'
+              :(t.source==='salescrm'?'<span style="background:#fff0f0;color:#C0392B;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">🎯 Sales CRM</span>'
               :(t.source==='process'?'<span style="background:#eafaf3;color:#1aa37a;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">📁 CRM stage</span>'
               :(t.source==='attendance'?'<span style="background:#fdeaea;color:#a3271f;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">🕒 Attendance</span>'
               :(t.source==='leave'?'<span style="background:#eef7ee;color:#1a7f37;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">🌴 Leave</span>'
               :(t.source==='nrlead'?'<span style="background:#fff4e8;color:#c47f00;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">↻ Not responding</span>'
-              :(t.source==='assigned'?'<span style="background:#eef2ff;color:#4253c5;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">Assigned by '+esc(t.assignedByName||'manager')+'</span>':'')))))));
+              :(t.source==='assigned'?'<span style="background:#eef2ff;color:#4253c5;border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">Assigned by '+esc(t.assignedByName||'manager')+'</span>':''))))))));
       return '<div class="tcard'+(done?' tdone':'')+'" data-id="'+esc(t.taskId)+'">'+
         '<span class="tbox'+(done?' on':'')+'" data-tog="'+esc(t.taskId)+'"></span>'+
         '<div class="tbody">'+
@@ -170,6 +171,7 @@
     }).join('');
     box.querySelectorAll('.tcard').forEach(function(el){ el.onclick=function(ev){ if(ev.target.getAttribute('data-tog')) return; var id=el.getAttribute('data-id'); var tk=byId(id);
       if(id.indexOf('CAL::')===0){ if(window.openCalendarEntryById && tk) window.openCalendarEntryById(tk.calId, function(){ if(window.renderMyTasks) window.renderMyTasks(); }); return; }
+      if(tk && tk.source==='salescrm' && tk.instanceId && window.openSalesLead){ window.openSalesLead(tk.instanceId, function(){ if(window.renderMyTasks) window.renderMyTasks(); }); return; }
       if(tk && (tk.source==='process'||tk.source==='nrlead') && tk.instanceId && window.openProcessInstance){ window.openProcessInstance(tk.instanceId, function(){ if(window.renderMyTasks) window.renderMyTasks(); }); return; }
       openTaskDetail(id); }; });
     box.querySelectorAll('[data-tog]').forEach(function(b){ b.onclick=function(ev){ ev.stopPropagation(); toggleDone(b.getAttribute('data-tog')); }; });
