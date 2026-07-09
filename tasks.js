@@ -184,13 +184,23 @@
     var body='<div style="font-size:13px;color:#8a8f98;margin-bottom:8px"><span class="pdot" style="background:'+(PRI[t.priority]||'#999')+'"></span> Due '+esc(dueLabel(t))+' · '+esc(t.priority||'Normal')+' · <b style="color:'+(t.status==='done'?'#1a7f37':'#DA1017')+'">'+(t.status==='done'?'Done':'Open')+'</b></div>'+
       (t.description?'<div style="font-size:13px;background:#f6f7f9;border-radius:8px;padding:10px;white-space:pre-line">'+esc(t.description)+'</div>':'')+
       clHtml+
-      (isDaily?'<div id="tdDaily" style="font-size:13px;color:#888;margin-top:10px">Loading entry…</div>':'')+
+      (isDaily?'<div id="tdDaily" style="font-size:13px;color:#888;margin-top:10px">Loading entry…</div>'+
+        '<div style="margin-top:10px"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Notes</label>'+
+        '<textarea id="tdNote" rows="2" placeholder="Optional note — required as the reason if you Reject" style="width:100%;border:1px solid #d9d9d9;border-radius:8px;padding:8px;font-size:13px"></textarea></div>':'')+
       '<div style="font-size:11px;color:#aaa;margin-top:10px">'+(t.source==='assigned'?('Assigned by '+esc(t.assignedByName||'manager')):'Created by you · self task')+'</div>';
     var completeLabel=isDaily?(t.status==='done'?'Reopen':'✓ Verify & complete'):(t.status==='done'?'Reopen':'✓ Complete');
-    var foot='<button class="btn ghost" onclick="closeModal()">Close</button><button class="btn ghost" id="tdEdit">Edit</button><button class="btn" id="tdComplete">'+completeLabel+'</button>';
+    var rejectBtn=(isDaily&&t.status!=='done')?'<button class="btn ghost" id="tdReject" style="color:#A32D2D;border-color:#e3b1b1">✕ Reject</button>':'';
+    var foot='<button class="btn ghost" onclick="closeModal()">Close</button><button class="btn ghost" id="tdEdit">Edit</button>'+rejectBtn+'<button class="btn" id="tdComplete">'+completeLabel+'</button>';
     openModal(t.title, body, foot);
     document.querySelectorAll('#modalRoot [data-ci]').forEach(function(cb){ cb.onchange=function(){ cl[parseInt(cb.getAttribute('data-ci'),10)].done=cb.checked; var sp=cb.parentNode.querySelector('span'); if(sp) sp.style.cssText=cb.checked?'text-decoration:line-through;color:#999':''; t.checklist=cl; t._pending=true; API.updateTask(t.taskId,{checklist:cl}); }; });
     document.getElementById('tdEdit').onclick=function(){ closeModal(); openTaskForm(t); };
+    /* v194: reject a daily-collection entry with a reason — the sender gets a task in their My Tasks */
+    var rj=document.getElementById('tdReject'); if(rj) rj.onclick=function(){
+      var note=((document.getElementById('tdNote')||{}).value||'').trim();
+      if(!note){ toast('Write the reason in the Notes box first, then tap Reject.',true); return; }
+      rj.disabled=true;
+      API.rejectDaily(t.instanceId,note).then(function(r){ if(r&&r.ok){ closeModal(); toast('Entry rejected — the sender has been notified'); if(window.renderMyTasks) window.renderMyTasks(); else paintList(); } else { toast((r&&r.error)||'Could not reject',true); rj.disabled=false; } });
+    };
     if(isDaily){
       API.getDaily(t.instanceId).then(function(r){ var box=document.getElementById('tdDaily'); if(!box) return; if(r&&r.ok&&r.entry){ box.outerHTML=dailyPanelHtml(r.entry); } else { box.textContent=(r&&r.error)||'Could not load entry.'; } });
     }
