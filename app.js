@@ -381,7 +381,7 @@ function loadDashboard(){
     API.listDaily('', ym).then(function(r){ if(r&&r.ok){ DASH.daily=r.daily||[]; renderDashboard(); } }).catch(function(){});
   }
   /* org-wide training progress for the dashboard "Staff Training" tile */
-  if(!isConsultantRole() && (isMonitorRole() || (S.perms && (S.perms.canViewAll||S.perms.level==='BRANCH_MGR')))){
+  if(isMonitorRole() || (S.perms && (S.perms.canViewAll||S.perms.level==='BRANCH_MGR'))){
     API.trainingStats().then(function(r){ if(r&&r.ok){ DASH.training=r; renderDashboard(); } }).catch(function(){});
   }
   /* consultant: "Won this month" KPI — count franchise leads closed_won in the current month */
@@ -467,8 +467,7 @@ function renderDashboard(){
   if(procs.length){
     /* ---- role-specific framing of the board ---- */
     var boardProcs=procs, boardLabel='Department health';
-    if(isCons){ boardProcs=frProcs; boardLabel='My franchise process'; }
-    else if(isManager){ boardLabel='Department health · '+(branch?branchName(branch):'all branches'); }
+    if(isManager){ boardLabel='Department health · '+(branch?branchName(branch):'all branches'); }
     else if(isBranchMgr){ boardLabel='Department health · '+branchName(u.Branch); }
     else if(isMon){ boardLabel='Department health · operations'; }
     else {
@@ -480,11 +479,10 @@ function renderDashboard(){
     html+='<div class="dept-legend"><span><i class="ddot ok"></i>on track</span><span><i class="ddot warn"></i>watch</span><span><i class="ddot bad"></i>action needed</span></div>';
     /* Staff Training tile (org-wide progress) — managers/monitor roles only */
     var renderProcs=boardProcs.slice();
-    if(!isCons && (isManager||isBranchMgr||isMon) && DASH.training && (DASH.training.open>0||DASH.training.total>0)){
+    if((isManager||isBranchMgr||isMon) && DASH.training && (DASH.training.open>0||DASH.training.total>0)){
       renderProcs.push({name:'Staff Training', processId:'', byBranch:DASH.training.byBranch, open:DASH.training.open, dueToday:DASH.training.dueToday, overdue:DASH.training.overdue});
     }
-    if(isCons && !renderProcs.length){ html+='<div class="dash-att muted"><span class="t">Franchise pipeline not visible yet — ask your admin to add "Consultant" to its view roles.</span></div>'; }
-    else html+='<div class="dept-board">'+renderProcs.map(function(p){ return deptCard(p,revenue,procCounts(p,scopeBranch)); }).join('')+'</div>';
+    html+='<div class="dept-board">'+renderProcs.map(function(p){ return deptCard(p,revenue,procCounts(p,scopeBranch)); }).join('')+'</div>';
     /* monitor roles (SUPER / Ops Manager / Process Coordinator): surface the worst offenders to chase */
     if(isMon){
       var bn=procs.map(function(p){ return {p:p,over:procCounts(p,scopeBranch).overdue}; }).filter(function(x){ return x.over>0; }).sort(function(a,b){ return b.over-a.over; }).slice(0,3);
