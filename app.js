@@ -214,6 +214,15 @@ function applyPerms(){
   document.querySelectorAll('[data-page="accounts"]').forEach(function(n){ n.classList.toggle('hidden',!canAcc); });
   var canMD=(S.perms.level==='SUPER')||(S.user && ['Director','Executive Assistant'].indexOf(S.user.Role)>=0);
   document.querySelectorAll('[data-page="mdinbox"]').forEach(function(n){ n.classList.toggle('hidden',!canMD); });
+  /* v197: consultant — bare menu: Dashboard + My Profile ONLY (runs last so it overrides the grants
+     above). The dashboard's franchise tile deep-links to the CRM board, so no CRM menu entry is needed.
+     Also hides the sidebar group labels; the mobile bottom nav rebuilds from visible items below. */
+  var _cons=isConsultantRole();
+  if(_cons){
+    var _keep={dashboard:1,profile:1};
+    document.querySelectorAll('.nav-item').forEach(function(n){ n.classList.toggle('hidden', !_keep[n.getAttribute('data-page')]); });
+  }
+  document.querySelectorAll('.nav-group').forEach(function(n){ n.classList.toggle('hidden', _cons); });
   buildMobileBottomNav();
 }
 
@@ -317,6 +326,9 @@ function daysAgoD(n){ var d=new Date(); d.setDate(d.getDate()-n); return d.getFu
 function toMinD(t){ if(!t) return 0; var p=String(t).split(':'); return (+p[0])*60+(+(p[1]||0)); }
 function e0(){ return {}; }
 function isMonitorRole(){ var u=S.user||{}; return (S.perms&&S.perms.level==='SUPER')||u.Role==='Operations Manager'||u.Role==='Process Coordinator'; }
+/* v197: franchise consultant — MANAGER-level access but a trimmed, franchise-only dashboard
+   (no branch business/cash figures, no other departments' tiles, no staff list). */
+function isConsultantRole(){ return /consultant/i.test(String((S.user||{}).Role||'')); }
 function loadDashboard(){
   var u=S.user||{};
   $('greetHello').textContent=greetWord()+', '+(u.FullName||'');
@@ -365,12 +377,25 @@ function loadDashboard(){
      "Business (MTD)" KPI and the By-branch table. Only roles that can see branch business fetch it. */
   var dm=$('dashMonth'); if(dm && !dm.value) dm.value=todayD().slice(0,7);
   var ym=(dm&&dm.value)||todayD().slice(0,7);
-  if(S.perms && (S.perms.canViewAll || S.perms.level==='BRANCH_MGR' || S.perms.level==='BRANCH_VIEW')){
+  if(S.perms && !isConsultantRole() && (S.perms.canViewAll || S.perms.level==='BRANCH_MGR' || S.perms.level==='BRANCH_VIEW')){
     API.listDaily('', ym).then(function(r){ if(r&&r.ok){ DASH.daily=r.daily||[]; renderDashboard(); } }).catch(function(){});
   }
   /* org-wide training progress for the dashboard "Staff Training" tile */
-  if(isMonitorRole() || (S.perms && (S.perms.canViewAll||S.perms.level==='BRANCH_MGR'))){
+  if(!isConsultantRole() && (isMonitorRole() || (S.perms && (S.perms.canViewAll||S.perms.level==='BRANCH_MGR')))){
     API.trainingStats().then(function(r){ if(r&&r.ok){ DASH.training=r; renderDashboard(); } }).catch(function(){});
+  }
+  /* consultant: "Won this month" KPI — count franchise leads closed_won in the current month */
+  if(isConsultantRole()){
+    var fwSeen={};
+    var fw=function(procs){
+      var fp=(procs||[]).filter(function(p){ return /franchis/i.test(p.name||''); })[0];
+      if(!fp || fwSeen[fp.processId]) return; fwSeen[fp.processId]=1;
+      API.listInstances(fp.processId,'closed').then(function(r){ if(r&&r.ok){ var m=todayD().slice(0,7);
+        DASH.frWon=(r.instances||[]).filter(function(i){ return String(i.status)==='closed_won' && String(i.closedAt||'').slice(0,7)===m; }).length;
+        renderDashboard(); } }).catch(function(){});
+    };
+    API.cachedProcesses().then(function(p){ if(p&&p.length) fw(p); });
+    API.listProcesses().then(function(r){ if(r&&r.ok) fw(r.processes); }).catch(function(){});
   }
 }
 function renderDashboard(){
@@ -409,8 +434,14 @@ function renderDashboard(){
   (DASH.daily||[]).forEach(function(d){ if(effBranch && String(d.branchId)!==String(effBranch)) return; cashMTD+=Number(d.cashIn)||0; bankMTD+=Number(d.bankIn)||0; otherMTD+=Number(d.other)||0; patMTD+=Number(d.patients)||0; testMTD+=Number(d.tests)||0; });
   var bizMTD=cashMTD+bankMTD+otherMTD;
   var avgPat=patMTD>0?Math.round(bizMTD/patMTD):0;
+  /* consultant: franchise-only dashboard (approved design) — franchise KPIs, no business/cash/staff */
+  var isCons=isConsultantRole();
+  var frProcs=(DASH.procs||[]).filter(function(p){ return /franchis/i.test(p.name||''); });
+  var frO=0,frD=0,frV=0; frProcs.forEach(function(p){ var c=procCounts(p,scopeBranch); frO+=c.open; frD+=c.dueToday; frV+=c.overdue; });
+  var frPid=frProcs.length?String(frProcs[0].processId||''):'';
   var K=kpiC(myToday,'Tasks today','amber')+kpiC(myOver,'My overdue','red');
-  if(isManager){ K+=kpiC('₹'+fmtMoney(bizMTD),'Business (MTD)','green')+kpiC(openLeads,'Open CRM leads','violet')+kpiC('₹'+fmtMoney(revenue),'Card revenue','green')+kpiC(staffN,'Active staff','blue')+kpiC(Object.keys(brs).length,'Branches','blue'); }
+  if(isCons){ K+=kpiC(frO,'Open franchise leads','violet')+kpiC(frD,'Leads due today','amber')+kpiC((DASH.frWon==null?'—':DASH.frWon),'Won this month','green'); }
+  else if(isManager){ K+=kpiC('₹'+fmtMoney(bizMTD),'Business (MTD)','green')+kpiC(openLeads,'Open CRM leads','violet')+kpiC('₹'+fmtMoney(revenue),'Card revenue','green')+kpiC(staffN,'Active staff','blue')+kpiC(Object.keys(brs).length,'Branches','blue'); }
   else if(isBranchMgr){ K+=kpiC('₹'+fmtMoney(bizMTD),'Business (MTD)','green')+kpiC(openLeads,'Branch CRM leads','violet')+kpiC(staffN,'Branch staff','blue')+kpiC('₹'+fmtMoney(revenue),'Cards business','green'); }
   else { K+=kpiC(myProcDue,'My CRM leads due','violet')+kpiC(calToday.length,'Today’s events','blue'); }
   if(isMon){ K+=kpiC((DASH.chaseT||0)+(DASH.chaseC||0),'To chase','red'); }
@@ -420,6 +451,10 @@ function renderDashboard(){
   if(myOver>0) items+=arow('#DA1017', myOver+' of your tasks are overdue','tasks');
   if(myToday>0) items+=arow('#c47f00', myToday+' task'+(myToday>1?'s':'')+' due today','tasks');
   if(myProcDue>0) items+=arow('#7F77DD', myProcDue+' CRM lead'+(myProcDue>1?'s':'')+' due/overdue','crm');
+  if(isCons && frPid){
+    if(frV>0) items+='<div class="dash-att" onclick="openDept(\''+esc(frPid)+'\')"><span class="dot" style="background:#DA1017"></span><span class="t">'+frV+' franchise lead'+(frV>1?'s':'')+' overdue</span><span class="r">open ›</span></div>';
+    if(frD>0) items+='<div class="dash-att" onclick="openDept(\''+esc(frPid)+'\')"><span class="dot" style="background:#c47f00"></span><span class="t">'+frD+' follow-up'+(frD>1?'s':'')+' due today</span><span class="r">open ›</span></div>';
+  }
   if(isMon && (DASH.chaseT||DASH.chaseC)) items+=arow('#c47f00', (DASH.chaseT+DASH.chaseC)+' overdue across the team','taskmon');
   calToday.slice(0,5).forEach(function(c){ items+='<div class="dash-att" onclick="go(\'calendar\')"><span class="dot" style="background:'+(String(c.status)==='done'?'#1a7f37':'#7F77DD')+'"></span><span class="t">'+(c.startTime?esc(c.startTime)+' · ':'')+esc(c.title)+'</span><span class="r">calendar ›</span></div>'; });
   if(!items) items='<div class="dash-att muted"><span class="t">Nothing pending today. 🎉</span></div>';
@@ -432,7 +467,8 @@ function renderDashboard(){
   if(procs.length){
     /* ---- role-specific framing of the board ---- */
     var boardProcs=procs, boardLabel='Department health';
-    if(isManager){ boardLabel='Department health · '+(branch?branchName(branch):'all branches'); }
+    if(isCons){ boardProcs=frProcs; boardLabel='My franchise process'; }
+    else if(isManager){ boardLabel='Department health · '+(branch?branchName(branch):'all branches'); }
     else if(isBranchMgr){ boardLabel='Department health · '+branchName(u.Branch); }
     else if(isMon){ boardLabel='Department health · operations'; }
     else {
@@ -444,10 +480,11 @@ function renderDashboard(){
     html+='<div class="dept-legend"><span><i class="ddot ok"></i>on track</span><span><i class="ddot warn"></i>watch</span><span><i class="ddot bad"></i>action needed</span></div>';
     /* Staff Training tile (org-wide progress) — managers/monitor roles only */
     var renderProcs=boardProcs.slice();
-    if((isManager||isBranchMgr||isMon) && DASH.training && (DASH.training.open>0||DASH.training.total>0)){
+    if(!isCons && (isManager||isBranchMgr||isMon) && DASH.training && (DASH.training.open>0||DASH.training.total>0)){
       renderProcs.push({name:'Staff Training', processId:'', byBranch:DASH.training.byBranch, open:DASH.training.open, dueToday:DASH.training.dueToday, overdue:DASH.training.overdue});
     }
-    html+='<div class="dept-board">'+renderProcs.map(function(p){ return deptCard(p,revenue,procCounts(p,scopeBranch)); }).join('')+'</div>';
+    if(isCons && !renderProcs.length){ html+='<div class="dash-att muted"><span class="t">Franchise pipeline not visible yet — ask your admin to add "Consultant" to its view roles.</span></div>'; }
+    else html+='<div class="dept-board">'+renderProcs.map(function(p){ return deptCard(p,revenue,procCounts(p,scopeBranch)); }).join('')+'</div>';
     /* monitor roles (SUPER / Ops Manager / Process Coordinator): surface the worst offenders to chase */
     if(isMon){
       var bn=procs.map(function(p){ return {p:p,over:procCounts(p,scopeBranch).overdue}; }).filter(function(x){ return x.over>0; }).sort(function(a,b){ return b.over-a.over; }).slice(0,3);
@@ -458,7 +495,7 @@ function renderDashboard(){
       }
     }
   }
-  if(isManager && !branch && Object.keys(brs).length>1){
+  if(isManager && !isCons && !branch && Object.keys(brs).length>1){
     var rows=Object.keys(brs).map(function(bid){
       var be=emp.filter(function(e){return String(e.Branch)===bid;}).length;
       var bc=activeCards.filter(function(c){return String(c.branchId)===bid;});
@@ -472,7 +509,7 @@ function renderDashboard(){
       rows.map(function(r){return '<tr><td><b>'+esc(r.name)+'</b></td><td>₹'+fmtMoney(r.biz)+'</td><td>₹'+fmtMoney(r.cash)+'</td><td>₹'+fmtMoney(r.bank)+'</td><td>₹'+fmtMoney(r.other)+'</td><td>'+r.pat+'</td><td>₹'+fmtMoney(r.avg)+'</td><td>'+r.test+'</td><td>₹'+fmtMoney(r.rTest)+'</td><td>'+r.cards+'</td><td>₹'+fmtMoney(r.rev)+'</td><td>'+r.staff+'</td><td>₹'+fmtMoney(r.rStaff)+'</td></tr>';}).join('')+'</tbody></table></div></div>';
   }
   var types={}, byBT={}, brOrder=[];
-  activeCards.forEach(function(c){ var ty=String(c.typeId||'—'); types[ty]=1; var b=String(c.branchId||''); if(!byBT[b]){ byBT[b]={}; brOrder.push(b); } byBT[b][ty]=(byBT[b][ty]||0)+1; });
+  if(!isCons) activeCards.forEach(function(c){ var ty=String(c.typeId||'—'); types[ty]=1; var b=String(c.branchId||''); if(!byBT[b]){ byBT[b]={}; brOrder.push(b); } byBT[b][ty]=(byBT[b][ty]||0)+1; });
   var typeList=Object.keys(types).sort();
   if(typeList.length){
     var colTot={}; typeList.forEach(function(t){colTot[t]=0;}); var grand=0;
@@ -490,8 +527,12 @@ function renderDashboard(){
   if(window.renderStarBlock){ try{ window.renderStarBlock(document.getElementById('starBlock')); }catch(_){} }
   if(window.renderQuickLog){ try{ window.renderQuickLog(document.getElementById('quickLog')); }catch(_){} }
   var dashBr=(S.perms&&S.perms.canViewAll)?(($('dashBranch')||{}).value||''):'';
-  if(window.renderFinDash){ try{ window.renderFinDash(document.getElementById('finDash'), dashBr); }catch(_){} }
-  if(window.renderMktDash){ try{ window.renderMktDash(document.getElementById('mktDash'), dashBr); }catch(_){} }
+  if(!isCons && window.renderFinDash){ try{ window.renderFinDash(document.getElementById('finDash'), dashBr); }catch(_){} }
+  if(!isCons && window.renderMktDash){ try{ window.renderMktDash(document.getElementById('mktDash'), dashBr); }catch(_){} }
+  /* consultant: hide the business month picker and the "Recently added staff" block */
+  var _rt=$('recentTable'), _rc=_rt&&_rt.closest?_rt.closest('.card'):null, _rl=_rc?_rc.previousElementSibling:null, _dm2=$('dashMonth');
+  if(_rc){ _rc.style.display=isCons?'none':''; } if(_rl && _rl.classList && _rl.classList.contains('section-label')){ _rl.style.display=isCons?'none':''; }
+  if(_dm2){ _dm2.style.display=isCons?'none':''; }
   var recent=emp.slice().sort(function(a,b){return a.EmpID<b.EmpID?1:-1;}).slice(0,6);
   var tb=$('recentTable').querySelector('tbody'); var rhtml='';
   if(!recent.length){ rhtml='<tr><td class="empty">No staff yet.</td></tr>'; }
