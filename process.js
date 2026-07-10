@@ -106,7 +106,7 @@
     function paintBoard(r){
       paintKpis();
       if(BOARDVIEW!=='running'){ paintClosed(r); return; }
-      var stages=(r.stages||[]).filter(function(s){ return s.nodeType!=='start'; });
+      var stages=(r.stages||[]).slice();  // include the start stage as the first (leftmost) column — the "New Lead" box, shown on every module's board
       var byStage={}; (r.instances||[]).forEach(function(i){ if(String(i.status||'running')==='running') (byStage[i.currentStageId]=byStage[i.currentStageId]||[]).push(i); });
       document.getElementById('crmBoard').innerHTML='<div class="crm-cols">'+stages.map(function(s){
         var leads=byStage[s.stageId]||[];
@@ -158,10 +158,10 @@
       var assignEmps=isDoc?salesTeamOnly(emps):emps;
       var brs=(S.meta&&S.meta.branches)||[];
       var _fe=(DEF.edges||[]).filter(function(e){return String(e.fromStageId)===String(start.stageId);})[0];
-      var _defTarget=_fe?_fe.toStageId:((DEF.stages[1]||start).stageId);
+      var _defTarget=start.stageId;  // new leads begin in the start stage ("New Lead") so they land in the first board column
       var moveOpts=(DEF.stages||[]).map(function(s){ return '<option value="'+esc(s.stageId)+'"'+(String(s.stageId)===String(_defTarget)?' selected':'')+'>'+esc(s.name)+'</option>'; }).join('')+'<option value="STAY_NR">⏸ Not responding</option><option value="STAY_FU">↻ Follow up</option><option value="STAY_PR">★ Prospect</option><option value="CLOSE_WON">✓ Close — Won</option><option value="CLOSE_LOST">✕ Close — Lost</option>';
       // Doctor CRM: the "Lead stage" box (first step) — the real pipeline columns only, no dispositions.
-      var stageOpts=(DEF.stages||[]).filter(function(s){ return String(s.nodeType)!=='start'; }).map(function(s){ return '<option value="'+esc(s.stageId)+'"'+(String(s.stageId)===String(_defTarget)?' selected':'')+'>'+esc(s.name)+'</option>'; }).join('');
+      var stageOpts=(DEF.stages||[]).map(function(s){ return '<option value="'+esc(s.stageId)+'"'+(String(s.stageId)===String(_defTarget)?' selected':'')+'>'+esc(s.name)+'</option>'; }).join('');
       var _ax=String(start.activityOptions||'').split(',').filter(Boolean).filter(function(a){ return !/call|meeting|visit/i.test(a); });
       var actOpts=['New call','Follow-up call','New meeting','Follow-up meeting'].concat(_ax).map(function(a){ return '<option>'+esc(a)+'</option>'; }).join('');
       // Recruitment only: the lead's title IS the position (no candidate/mobile yet); first task goes to HR.
