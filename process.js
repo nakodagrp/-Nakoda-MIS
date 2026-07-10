@@ -37,30 +37,14 @@
     API.cachedProcesses().then(function(p){ if(p&&p.length) paintProcs(p); else document.getElementById('crmList').innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>'; });
     API.listProcesses().then(function(r){ if(r.ok) paintProcs(r.processes); else document.getElementById('crmList').innerHTML='<div class="empty">'+esc(r.error||'')+'</div>'; });
   }
-  function salesCrmAllowed(){
-    var lvl=S.perms&&S.perms.level, role=S.user&&S.user.Role;
-    return lvl==='SUPER' || lvl==='BRANCH_MGR' ||
-      ['Operations Manager','Area Sales Manager','Sales Executive','CRM','Marketing Manager'].indexOf(role)>=0;
-  }
-  function salesCrmTile(){
-    if(!salesCrmAllowed()) return '';
-    return '<div class="crm-tile" data-sales="1">'+
-      '<div class="crm-ic" style="background:#fff0f0;color:#C0392B">🎯</div>'+
-      '<div class="crm-mid"><b>Sales CRM</b>'+
-        '<div class="crm-sub">Camp · Doctor · Company — field sales</div></div>'+
-      '<span class="crm-go">›</span></div>';
-  }
   function paintProcs(list){
     var box=document.getElementById('crmList'); if(!box) return;
-    var sales=salesCrmTile();
-    if(!list.length){ box.innerHTML=sales||'<div class="empty">No pipelines available.</div>'; }
-    else box.innerHTML=sales+list.map(function(p){ return '<div class="crm-tile" data-pid="'+esc(p.processId)+'"><div class="crm-ic">📁</div>'+
+    if(!list.length){ box.innerHTML='<div class="empty">No pipelines available.</div>'; return; }
+    box.innerHTML=list.map(function(p){ return '<div class="crm-tile" data-pid="'+esc(p.processId)+'"><div class="crm-ic">📁</div>'+
       '<div class="crm-mid"><b>'+esc(p.name)+'</b><div class="crm-sub">Owner: '+esc(p.ownerRole)+'</div>'+
       '<div class="crm-kpi">Open <b>'+p.open+'</b> · Due today <b>'+p.dueToday+'</b> · Overdue <b style="color:#DA1017">'+p.overdue+'</b></div></div>'+
       '<span class="crm-go">›</span></div>'; }).join('');
-    box.querySelectorAll('.crm-tile').forEach(function(el){ el.onclick=function(){
-      if(el.getAttribute('data-sales')){ go('salescrm'); return; }
-      openPipeline(el.getAttribute('data-pid')); }; });
+    box.querySelectorAll('.crm-tile').forEach(function(el){ el.onclick=function(){ openPipeline(el.getAttribute('data-pid')); }; });
   }
 
   /* ---------- pipeline board ---------- */

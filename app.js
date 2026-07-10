@@ -244,7 +244,7 @@ var currentPage='dashboard';
 function go(page){
   currentPage=page;
   document.querySelectorAll('.nav-item').forEach(function(n){ n.classList.toggle('active', n.getAttribute('data-page')===page); });
-  ['dashboard','tasks','calendar','attendance','leave','field','policy','training','assets','fixedassets','inventory','payroll','accounts','recurring','crm','salescrm','builder','taskmon','staffperf','marketing','qc','kpiadmin','employees','profile','branches','cards','cardstatus','suggest','mdinbox'].forEach(function(p){ $('page-'+p).classList.toggle('hidden',p!==page); });
+  ['dashboard','tasks','calendar','attendance','leave','field','policy','training','assets','fixedassets','inventory','payroll','accounts','recurring','crm','builder','taskmon','staffperf','marketing','qc','kpiadmin','employees','profile','branches','cards','cardstatus','suggest','mdinbox'].forEach(function(p){ $('page-'+p).classList.toggle('hidden',p!==page); });
   if(page==='dashboard') loadDashboard();
   if(page==='tasks' && window.renderMyTasks) window.renderMyTasks();
   if(page==='calendar' && window.renderCalendar) window.renderCalendar();
@@ -262,7 +262,6 @@ function go(page){
   if(page==='accounts' && window.renderAccounts) window.renderAccounts();
   if(page==='recurring' && window.renderRecurring) window.renderRecurring();
   if(page==='crm' && window.renderCRM) window.renderCRM();
-  if(page==='salescrm' && window.renderSalesCRM) window.renderSalesCRM();
   if(page==='builder' && window.renderBuilder) window.renderBuilder();
   if(page==='taskmon' && window.renderTaskMonitor) window.renderTaskMonitor();
   if(page==='staffperf' && window.renderStaffPerf) window.renderStaffPerf();
