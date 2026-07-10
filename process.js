@@ -154,12 +154,14 @@
     var wantHR=isRecruit||String((DEF.process&&DEF.process.ownerRole)||'').toUpperCase().indexOf('HR')>=0;
     function hrOf(list,fallback){ if(!isRecruit) return fallback; var h=(list||[]).filter(function(e){ return String(e.Role||'').toLowerCase().indexOf('hr')>=0; })[0]; return h?h.EmpID:fallback; }
     var isDoc=isDoctorProc(DEF.process&&DEF.process.name, DEF.process&&DEF.process.processId);
-    API.branchAssignees(S.user&&S.user.Branch, wantHR?'HR':'').then(function(resp){ var emps=(resp&&resp.employees)||[];
+    API.branchAssignees(S.user&&S.user.Branch, wantHR?'HR':'', isDoc).then(function(resp){ var emps=(resp&&resp.employees)||[];
       var assignEmps=isDoc?salesTeamOnly(emps):emps;
       var brs=(S.meta&&S.meta.branches)||[];
       var _fe=(DEF.edges||[]).filter(function(e){return String(e.fromStageId)===String(start.stageId);})[0];
       var _defTarget=_fe?_fe.toStageId:((DEF.stages[1]||start).stageId);
       var moveOpts=(DEF.stages||[]).map(function(s){ return '<option value="'+esc(s.stageId)+'"'+(String(s.stageId)===String(_defTarget)?' selected':'')+'>'+esc(s.name)+'</option>'; }).join('')+'<option value="STAY_NR">⏸ Not responding</option><option value="STAY_FU">↻ Follow up</option><option value="STAY_PR">★ Prospect</option><option value="CLOSE_WON">✓ Close — Won</option><option value="CLOSE_LOST">✕ Close — Lost</option>';
+      // Doctor CRM: the "Lead stage" box (first step) — the real pipeline columns only, no dispositions.
+      var stageOpts=(DEF.stages||[]).filter(function(s){ return String(s.nodeType)!=='start'; }).map(function(s){ return '<option value="'+esc(s.stageId)+'"'+(String(s.stageId)===String(_defTarget)?' selected':'')+'>'+esc(s.name)+'</option>'; }).join('');
       var _ax=String(start.activityOptions||'').split(',').filter(Boolean).filter(function(a){ return !/call|meeting|visit/i.test(a); });
       var actOpts=['New call','Follow-up call','New meeting','Follow-up meeting'].concat(_ax).map(function(a){ return '<option>'+esc(a)+'</option>'; }).join('');
       // Recruitment only: the lead's title IS the position (no candidate/mobile yet); first task goes to HR.
@@ -178,17 +180,18 @@
         mobileField+
         '<div class="field"><label>Serving branch</label><select id="psBranch" class="in">'+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'"'+(String(b.BranchID)===String(S.user&&S.user.Branch)?' selected':'')+'>'+esc(b.BranchName)+'</option>';}).join('')+'</select></div>'+
         '<div class="field"><label>Assign first task to</label><select id="psAssignee" class="in">'+empOpts(assignEmps,defAssignee)+'</select></div>'+
+        (isDoc?'<div class="field full"><label>Lead stage *</label><select id="psStage" class="in">'+stageOpts+'</select></div>':'')+
         fieldsHtml(startFields,'ps_')+
         '<div class="field full"><label>Notes</label><textarea id="psNotes" class="in" rows="2" placeholder="Initial notes about this lead..."></textarea></div>'+
         '<div class="field"><label>Lead date</label><input id="psLeadDate" class="in" type="date"></div>'+
         '<div class="field"><label>First task date</label><input id="psDate" class="in" type="date"></div>'+
         '<div class="field"><label>Activity</label><select id="psAct" class="in">'+actOpts+'</select></div>'+
-        '<div class="field"><label>Move to *</label><select id="psMove" class="in">'+moveOpts+'</select></div>'+
+        (isDoc?'':'<div class="field"><label>Move to *</label><select id="psMove" class="in">'+moveOpts+'</select></div>')+
         '</div><div id="psMsg"></div>';
       openModal('Add to '+DEF.process.name, body, '<button class="btn" id="psSave">Save & start</button>');
       wireFileInputs(startFields,'ps_');
       var psBr=document.getElementById('psBranch');
-      if(psBr) psBr.onchange=function(){ API.branchAssignees(psBr.value, wantHR?'HR':'').then(function(rr){ var es=(rr&&rr.employees)||[]; var a=document.getElementById('psAssignee'); if(a){ a.innerHTML=empOpts(isDoc?salesTeamOnly(es):es, hrOf(es, S.user&&S.user.EmpID)); if(a.__syncCombo) a.__syncCombo(); } }); };
+      if(psBr) psBr.onchange=function(){ if(isDoc) return; API.branchAssignees(psBr.value, wantHR?'HR':'').then(function(rr){ var es=(rr&&rr.employees)||[]; var a=document.getElementById('psAssignee'); if(a){ a.innerHTML=empOpts(es, hrOf(es, S.user&&S.user.EmpID)); if(a.__syncCombo) a.__syncCombo(); } }); };
       var psMv=document.getElementById('psMove'); if(psMv) psMv.onchange=function(){ var pd=document.getElementById('psDate'); if(pd&&pd.parentNode) pd.parentNode.style.display=(psMv.value==='STAY_NR')?'none':''; };
       document.getElementById('psSave').onclick=function(){
         var name=document.getElementById('psName').value.trim(); if(!name){ document.getElementById('psMsg').innerHTML='<div class="msg error">'+(isRecruit?'Position is required.':'Name is required.')+'</div>'; return; }
@@ -196,7 +199,7 @@
         var _dj=collectFields(startFields,'ps_');
         var _notes=(document.getElementById('psNotes')||{}).value||''; if(_notes) _dj['Notes']=_notes;
         var data={ leadName:name, leadMobile:pmob?pmob.value.trim():'', branchId:document.getElementById('psBranch').value,
-          assigneeEmpId:document.getElementById('psAssignee').value, dataJson:_dj, leadDate:(document.getElementById('psLeadDate')||{}).value||'', startStageId:(document.getElementById('psMove')||{}).value||'', activityType:(document.getElementById('psAct')||{}).value||'', nextDate:document.getElementById('psDate').value };
+          assigneeEmpId:document.getElementById('psAssignee').value, dataJson:_dj, leadDate:(document.getElementById('psLeadDate')||{}).value||'', startStageId:(document.getElementById(isDoc?'psStage':'psMove')||{}).value||'', activityType:(document.getElementById('psAct')||{}).value||'', nextDate:document.getElementById('psDate').value };
         this.disabled=true; this.textContent='Saving…';
         API.startInstance(pid,data).then(function(r){ if(r&&(r.ok||r.offline)){ closeModal(); toast(r.offline?'Saved offline — will sync':'Added to pipeline'); if(after) after(); } else { document.getElementById('psMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; } });
       };
@@ -232,7 +235,7 @@
     var isRecruit=/recruit/i.test((r&&r.processName)||'');
     var wantHR=isRecruit||String((r&&r.processOwnerRole)||'').toUpperCase().indexOf('HR')>=0;
     var isDoc=isDoctorProc(r&&r.processName, r&&r.instance&&r.instance.processId);
-    API.branchAssignees(r&&r.instance&&r.instance.branchId, wantHR?'HR':'').then(function(resp){ var emps=(resp&&resp.employees)||[];
+    API.branchAssignees(r&&r.instance&&r.instance.branchId, wantHR?'HR':'', isDoc).then(function(resp){ var emps=(resp&&resp.employees)||[];
       var assignEmps=isDoc?salesTeamOnly(emps):emps;
       var st=r.stage||{}, acts=actsFor(st, r.steps);
       var moveOpts=(r.edges||[]).map(function(e){ return '<option value="'+esc(e.toStageId)+'">→ '+esc(e.toName)+(e.label?(' ('+esc(e.label)+')'):'')+'</option>'; }).join('');
