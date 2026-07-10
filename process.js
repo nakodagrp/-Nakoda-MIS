@@ -18,7 +18,7 @@
       var st=document.getElementById(pfx+f.fieldId+'_st'); if(st) st.textContent='Uploading…';
       var fr=new FileReader(); fr.onload=function(){ var s=fr.result,i=s.indexOf(',');
         API.uploadFile({base64:s.slice(i+1),mimeType:file.type,fileName:file.name,subPath:'ProcessFiles'}).then(function(r){
-          if(r&&r.ok){ var h=document.getElementById(pfx+f.fieldId); if(h) h.value=r.url; if(st) st.innerHTML='Attached \u2713 <a href="'+esc(r.url)+'" target="_blank">view</a>'; }
+          if(r&&r.ok){ var h=document.getElementById(pfx+f.fieldId); if(h) h.value=r.url; if(st) st.innerHTML='Attached ✓ <a href="'+esc(r.url)+'" target="_blank">view</a>'; }
           else { if(st) st.textContent=(r&&r.error)||'Upload failed'; }
         },function(){ if(st) st.textContent='Uploading a file needs internet.'; });
       }; fr.readAsDataURL(file);
@@ -37,14 +37,30 @@
     API.cachedProcesses().then(function(p){ if(p&&p.length) paintProcs(p); else document.getElementById('crmList').innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>'; });
     API.listProcesses().then(function(r){ if(r.ok) paintProcs(r.processes); else document.getElementById('crmList').innerHTML='<div class="empty">'+esc(r.error||'')+'</div>'; });
   }
+  function salesCrmAllowed(){
+    var lvl=S.perms&&S.perms.level, role=S.user&&S.user.Role;
+    return lvl==='SUPER' || lvl==='BRANCH_MGR' ||
+      ['Operations Manager','Area Sales Manager','Sales Executive','CRM','Marketing Manager'].indexOf(role)>=0;
+  }
+  function salesCrmTile(){
+    if(!salesCrmAllowed()) return '';
+    return '<div class="crm-tile" data-sales="1">'+
+      '<div class="crm-ic" style="background:#fff0f0;color:#C0392B">🎯</div>'+
+      '<div class="crm-mid"><b>Sales CRM</b>'+
+        '<div class="crm-sub">Camp · Doctor · Company — field sales</div></div>'+
+      '<span class="crm-go">›</span></div>';
+  }
   function paintProcs(list){
     var box=document.getElementById('crmList'); if(!box) return;
-    if(!list.length){ box.innerHTML='<div class="empty">No pipelines available.</div>'; return; }
-    box.innerHTML=list.map(function(p){ return '<div class="crm-tile" data-pid="'+esc(p.processId)+'"><div class="crm-ic">📁</div>'+
+    var sales=salesCrmTile();
+    if(!list.length){ box.innerHTML=sales||'<div class="empty">No pipelines available.</div>'; }
+    else box.innerHTML=sales+list.map(function(p){ return '<div class="crm-tile" data-pid="'+esc(p.processId)+'"><div class="crm-ic">📁</div>'+
       '<div class="crm-mid"><b>'+esc(p.name)+'</b><div class="crm-sub">Owner: '+esc(p.ownerRole)+'</div>'+
       '<div class="crm-kpi">Open <b>'+p.open+'</b> · Due today <b>'+p.dueToday+'</b> · Overdue <b style="color:#DA1017">'+p.overdue+'</b></div></div>'+
       '<span class="crm-go">›</span></div>'; }).join('');
-    box.querySelectorAll('.crm-tile').forEach(function(el){ el.onclick=function(){ openPipeline(el.getAttribute('data-pid')); }; });
+    box.querySelectorAll('.crm-tile').forEach(function(el){ el.onclick=function(){
+      if(el.getAttribute('data-sales')){ go('salescrm'); return; }
+      openPipeline(el.getAttribute('data-pid')); }; });
   }
 
   /* ---------- pipeline board ---------- */
@@ -59,7 +75,7 @@
     document.getElementById('crmAdd').onclick=function(){ if(DEF) openStartForm(pid,DEF,load); };
     function fmtD(ds){ if(!ds) return ''; var p=String(ds).slice(0,10).split('-'); if(p.length<3) return String(ds); var mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return (+p[2])+' '+(mo[(+p[1])-1]||''); }
     function paintKpis(){ var k=KPI||{}; var box=document.getElementById('crmKpis'); if(!box) return;
-      var defs=[['running','Open',(k.open||0),'#fdeaea','#a3271f','#DA1017'],['closed_won','Won',(k.won||0),'#eafaf3','#1a7f37','#1a7f37'],['closed_lost','Lost',(k.lost||0),'#fdecec','#c0392b','#c0392b'],['not_responding','\u23f8 Not responding',(k.nr||0),'#fff4e8','#c47f00','#c47f00'],['all','All',(k.all||0),'#eef0f4','#555','#333']];
+      var defs=[['running','Open',(k.open||0),'#fdeaea','#a3271f','#DA1017'],['closed_won','Won',(k.won||0),'#eafaf3','#1a7f37','#1a7f37'],['closed_lost','Lost',(k.lost||0),'#fdecec','#c0392b','#c0392b'],['not_responding','⏸ Not responding',(k.nr||0),'#fff4e8','#c47f00','#c47f00'],['all','All',(k.all||0),'#eef0f4','#555','#333']];
       box.innerHTML=defs.map(function(d){ var on=(BOARDVIEW===d[0]); return '<div class="crm-kpi" data-v="'+d[0]+'" style="cursor:pointer;background:'+d[3]+';border-radius:12px;padding:13px 14px;'+(on?'box-shadow:0 0 0 2px '+d[5]:'')+'"><div style="font-size:12px;color:'+d[4]+'">'+d[1]+'</div><div style="font-size:26px;font-weight:600;color:'+d[5]+'">'+d[2]+'</div></div>'; }).join('');
       box.querySelectorAll('.crm-kpi').forEach(function(el){ el.onclick=function(){ BOARDVIEW=el.getAttribute('data-v'); paintKpis(); load(); }; });
     }
@@ -96,7 +112,7 @@
         var st=String(i.status), won=st==='closed_won', lost=st==='closed_lost';
         var badge = won?'<span style="border-radius:12px;font-size:10px;padding:1px 8px;font-weight:700;background:#eafaf3;color:#1aa37a">✓ Won</span>'
                   : lost?'<span style="border-radius:12px;font-size:10px;padding:1px 8px;font-weight:700;background:#fdecec;color:#C0392B">✕ Lost</span>'
-                  : (BOARDVIEW==='not_responding'?'<span style="border-radius:12px;font-size:10px;padding:1px 8px;font-weight:700;background:#fff4e8;color:#c47f00">\u23f8 Not responding</span>':'<span style="border-radius:12px;font-size:10px;padding:1px 8px;font-weight:700;background:#eef2ff;color:#4253c5">● Open</span>');
+                  : (BOARDVIEW==='not_responding'?'<span style="border-radius:12px;font-size:10px;padding:1px 8px;font-weight:700;background:#fff4e8;color:#c47f00">⏸ Not responding</span>':'<span style="border-radius:12px;font-size:10px;padding:1px 8px;font-weight:700;background:#eef2ff;color:#4253c5">● Open</span>');
         var meta = (won||lost) ? (i.closeReason?(' · '+esc(i.closeReason)):'')+(i.closedAt?(' · '+esc(fmtD(i.closedAt))):'')
                                : (snm[i.currentStageId]?(' · '+esc(snm[i.currentStageId])):'')+(i.dueDate?(' · '+(i.late?'overdue':esc(fmtD(i.dueDate)))):'');
         return '<div class="crm-lead" data-iid="'+esc(i.instanceId)+'" style="margin-bottom:8px"><b>'+esc(i.leadName)+'</b> '+badge+
@@ -123,7 +139,7 @@
       var brs=(S.meta&&S.meta.branches)||[];
       var _fe=(DEF.edges||[]).filter(function(e){return String(e.fromStageId)===String(start.stageId);})[0];
       var _defTarget=_fe?_fe.toStageId:((DEF.stages[1]||start).stageId);
-      var moveOpts=(DEF.stages||[]).map(function(s){ return '<option value="'+esc(s.stageId)+'"'+(String(s.stageId)===String(_defTarget)?' selected':'')+'>'+esc(s.name)+'</option>'; }).join('')+'<option value="STAY_NR">\u23f8 Not responding</option><option value="STAY_FU">\u21bb Follow up</option><option value="STAY_PR">\u2605 Prospect</option><option value="CLOSE_WON">\u2713 Close \u2014 Won</option><option value="CLOSE_LOST">\u2715 Close \u2014 Lost</option>';
+      var moveOpts=(DEF.stages||[]).map(function(s){ return '<option value="'+esc(s.stageId)+'"'+(String(s.stageId)===String(_defTarget)?' selected':'')+'>'+esc(s.name)+'</option>'; }).join('')+'<option value="STAY_NR">⏸ Not responding</option><option value="STAY_FU">↻ Follow up</option><option value="STAY_PR">★ Prospect</option><option value="CLOSE_WON">✓ Close — Won</option><option value="CLOSE_LOST">✕ Close — Lost</option>';
       var _ax=String(start.activityOptions||'').split(',').filter(Boolean).filter(function(a){ return !/call|meeting|visit/i.test(a); });
       var actOpts=['New call','Follow-up call','New meeting','Follow-up meeting'].concat(_ax).map(function(a){ return '<option>'+esc(a)+'</option>'; }).join('');
       // Recruitment only: the lead's title IS the position (no candidate/mobile yet); first task goes to HR.

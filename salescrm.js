@@ -99,14 +99,14 @@
   function openStep1(ltype){
     var m=TYPE_META[ltype]||TYPE_META.camp, items=CHECKLISTS[ltype]||CHECKLISTS.camp;
     ensureEmps().then(function(){
-      var clHtml=items.map(function(lbl,i){ return '<label style="display:flex;align-items:center;gap:9px;padding:4px 0;font-size:13px;cursor:pointer"><input type="checkbox" data-cl="'+esc(lbl)+'" style="transform:scale(1.2)"> '+esc(lbl)+'</label>'; }).join('');
+      var clHtml=items.map(function(lbl){ return '<label><input type="checkbox" data-cl="'+esc(lbl)+'"><span>'+esc(lbl)+'</span></label>'; }).join('');
       var ltSeg=LEADTYPES.map(function(p){ return '<div class="pseg" data-lt="'+p+'" style="cursor:pointer;padding:5px 12px;border:1px solid #ddd;border-radius:16px;font-size:12px">'+p+'</div>'; }).join('');
       var body='<div class="grid2">'+
         '<div class="field full"><label>Lead name *</label><input id="sc_name"></div>'+
         '<div class="field"><label>Number</label><input id="sc_num"></div>'+
         '<div class="field"><label>Follow-up date &amp; time</label><input id="sc_fu" type="datetime-local"></div>'+
         '<div class="field full"><label>Notes</label><textarea id="sc_notes" rows="2"></textarea></div>'+
-        '<div class="field full"><label>Checklist</label><div style="background:#f6f7f9;border-radius:8px;padding:8px 10px">'+clHtml+'</div></div>'+
+        '<div class="field full"><label>Checklist</label><div class="proc-ck" style="background:#f6f7f9;border-radius:8px;padding:8px 10px">'+clHtml+'</div></div>'+
         '<div class="field full"><label>Lead type</label><div id="sc_ltwrap" style="display:flex;gap:6px;flex-wrap:wrap">'+ltSeg+'</div><input type="hidden" id="sc_lt" value="New"></div>'+
         '<div id="sc_flow">'+
           '<div class="field"><label>Report to Ops Manager?</label><select id="sc_rep"><option value="no">No</option><option value="yes">Yes</option></select></div>'+
@@ -156,9 +156,7 @@
     var closed=(['won','lost','dead'].indexOf(String(l.status))>=0);
 
     var clHtml=items.map(function(lbl){ var on=!!cl[lbl];
-      return '<label style="display:flex;align-items:center;gap:9px;padding:3px 0;font-size:13px;'+(canEditCl?'cursor:pointer':'')+'">'+
-        '<input type="checkbox" data-cl="'+esc(lbl)+'"'+(on?' checked':'')+(canEditCl?'':' disabled')+' style="transform:scale(1.15)"> '+
-        '<span'+(on?' style="color:#1a7f37"':'')+'>'+esc(lbl)+'</span></label>';
+      return '<label><input type="checkbox" data-cl="'+esc(lbl)+'"'+(on?' checked':'')+(canEditCl?'':' disabled')+'><span'+(on?' style="color:#1a7f37"':'')+'>'+esc(lbl)+'</span></label>';
     }).join('');
 
     var head='<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px">'+
@@ -170,7 +168,7 @@
         'Assigned: '+esc(l.assignedToName||'—')+' · By: '+esc(l.createdByName||'')+'</div>'+
         (l.notes?('<div style="font-size:13px;background:#f6f7f9;border-radius:8px;padding:8px 10px;margin-top:6px;white-space:pre-line">'+esc(l.notes)+'</div>'):'');
     var clBlock='<div style="margin-top:10px"><div style="font-size:11px;color:#888;margin-bottom:2px">Checklist'+(canEditCl?' <span style="color:#185FA5">(editable — MIS/Director)</span>':'')+'</div>'+
-        '<div style="background:#f6f7f9;border-radius:8px;padding:8px 10px">'+clHtml+'</div>'+
+        '<div class="proc-ck" style="background:#f6f7f9;border-radius:8px;padding:8px 10px">'+clHtml+'</div>'+
         (canEditCl?'<button class="btn ghost sm" id="sc_clsave" style="margin-top:6px">Save checklist</button>':'')+'</div>';
 
     // action area by step / role
