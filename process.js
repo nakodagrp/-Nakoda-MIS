@@ -27,6 +27,40 @@
   function fieldsHtml(fields,pfx){ return (fields||[]).map(function(f){ return '<div class="field full"><label>'+esc(f.label)+(f.required?' *':'')+'</label>'+inputFor(f,pfx)+'</div>'; }).join(''); }
   function collectFields(fields,pfx){ var o={}; (fields||[]).forEach(function(f){ var el=document.getElementById(pfx+f.fieldId); if(!el) return; if(f.fieldType==='checklist'){ o[f.label]=[].slice.call(el.querySelectorAll('input:checked')).map(function(c){return c.value;}); } else { o[f.label]=el.value; } }); return o; }
 
+  /* ---------- Doctor CRM helpers: sales-team gate + searchable dropdowns ---------- */
+  var SALES_TEAM=[/anurag/i,/uday\s*sur/i,/vishal\s*dubey/i,/prashan/i,/gaurav\s*thakor/i,/yagnik/i,/suraj/i,/jitendra/i];
+  function isDoctorProc(name,pid){ return String(pid||'')==='P_DOCTOR' || /doctor/i.test(String(name||'')); }
+  function salesTeamOnly(list){ var f=(list||[]).filter(function(e){ var n=String(e.FullName||''); return SALES_TEAM.some(function(rx){ return rx.test(n); }); }); return f.length?f:(list||[]); }
+  // Turn a hidden <select class="combo"> into a type-to-filter combobox. Underlying <select> stays the
+  // source of truth, so all existing .value reads and change handlers keep working unchanged.
+  function enhanceSelects(root){ if(!root||!root.querySelectorAll) return;
+    [].slice.call(root.querySelectorAll('select.combo')).forEach(function(sel){
+      if(sel.__combo) return; sel.__combo=1;
+      var wrap=document.createElement('div'); wrap.style.position='relative';
+      sel.parentNode.insertBefore(wrap,sel); wrap.appendChild(sel); sel.style.display='none';
+      var inp=document.createElement('input'); inp.className='in'; inp.setAttribute('autocomplete','off'); inp.setAttribute('placeholder','Type to search…'); wrap.appendChild(inp);
+      var list=document.createElement('div');
+      list.style.cssText='position:absolute;left:0;right:0;top:100%;z-index:60;background:#fff;border:1px solid #ddd;border-radius:8px;max-height:220px;overflow:auto;display:none;box-shadow:0 6px 18px rgba(0,0,0,.12)';
+      wrap.appendChild(list);
+      function sync(){ var c=sel.options[sel.selectedIndex]; inp.value=c?c.text:''; }
+      function build(f){ f=String(f||'').toLowerCase(); list.innerHTML='';
+        [].slice.call(sel.options).forEach(function(o){ if(o.disabled) return; if(f && o.text.toLowerCase().indexOf(f)<0) return;
+          var it=document.createElement('div'); it.textContent=o.text; it.style.cssText='padding:8px 12px;cursor:pointer;font-size:14px;white-space:nowrap';
+          it.onmouseenter=function(){ it.style.background='#f2f4f7'; }; it.onmouseleave=function(){ it.style.background='#fff'; };
+          it.onmousedown=function(ev){ ev.preventDefault(); sel.value=o.value; sync(); list.style.display='none'; try{ sel.dispatchEvent(new Event('change')); }catch(e){ if(sel.onchange) sel.onchange(); } };
+          list.appendChild(it);
+        });
+        list.style.display='block';
+      }
+      inp.onfocus=function(){ try{ inp.select(); }catch(e){} build(''); };
+      inp.oninput=function(){ build(inp.value); };
+      inp.onblur=function(){ setTimeout(function(){ list.style.display='none'; },160); };
+      sel.__syncCombo=sync; sync();
+    });
+  }
+  function comboUpgrade(isDoc){ if(!isDoc) return; var mb=document.querySelector('#ov .modal-body'); if(!mb) return;
+    [].slice.call(mb.querySelectorAll('select')).forEach(function(s){ s.classList.add('combo'); }); enhanceSelects(mb); }
+
   /* ---------- CRM home ---------- */
   function renderCRM(){
     var v=document.getElementById('page-crm');
@@ -119,7 +153,9 @@
     var isRecruit=/recruit/i.test((DEF.process&&DEF.process.name)||'');
     var wantHR=isRecruit||String((DEF.process&&DEF.process.ownerRole)||'').toUpperCase().indexOf('HR')>=0;
     function hrOf(list,fallback){ if(!isRecruit) return fallback; var h=(list||[]).filter(function(e){ return String(e.Role||'').toLowerCase().indexOf('hr')>=0; })[0]; return h?h.EmpID:fallback; }
+    var isDoc=isDoctorProc(DEF.process&&DEF.process.name, DEF.process&&DEF.process.processId);
     API.branchAssignees(S.user&&S.user.Branch, wantHR?'HR':'').then(function(resp){ var emps=(resp&&resp.employees)||[];
+      var assignEmps=isDoc?salesTeamOnly(emps):emps;
       var brs=(S.meta&&S.meta.branches)||[];
       var _fe=(DEF.edges||[]).filter(function(e){return String(e.fromStageId)===String(start.stageId);})[0];
       var _defTarget=_fe?_fe.toStageId:((DEF.stages[1]||start).stageId);
@@ -135,13 +171,13 @@
       var defMobile=isGriev?esc((S.user&&(S.user.Phone||S.user.Mobile))||''):'';
       var mobileField=isRecruit?'':'<div class="field"><label>Mobile</label><input id="psMobile" class="in" value="'+defMobile+'"></div>';
       // Filter out fields that are captured differently or removed for cleaner start form
-      var _skipLabels=['dr. name','visit time','contact number'];
+      var _skipLabels=['dr. name','visit time','contact number','notes'];
       var startFields=(start.fields||[]).filter(function(f){ return _skipLabels.indexOf(String(f.label||'').toLowerCase().trim())<0; });
       var body='<div class="grid2">'+
         '<div class="field"><label>'+nameLabel+'</label><input id="psName" class="in" placeholder="'+namePh+'" value="'+defName+'"></div>'+
         mobileField+
         '<div class="field"><label>Serving branch</label><select id="psBranch" class="in">'+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'"'+(String(b.BranchID)===String(S.user&&S.user.Branch)?' selected':'')+'>'+esc(b.BranchName)+'</option>';}).join('')+'</select></div>'+
-        '<div class="field"><label>Assign first task to</label><select id="psAssignee" class="in">'+empOpts(emps,defAssignee)+'</select></div>'+
+        '<div class="field"><label>Assign first task to</label><select id="psAssignee" class="in">'+empOpts(assignEmps,defAssignee)+'</select></div>'+
         fieldsHtml(startFields,'ps_')+
         '<div class="field full"><label>Notes</label><textarea id="psNotes" class="in" rows="2" placeholder="Initial notes about this lead..."></textarea></div>'+
         '<div class="field"><label>Lead date</label><input id="psLeadDate" class="in" type="date"></div>'+
@@ -152,7 +188,7 @@
       openModal('Add to '+DEF.process.name, body, '<button class="btn" id="psSave">Save & start</button>');
       wireFileInputs(startFields,'ps_');
       var psBr=document.getElementById('psBranch');
-      if(psBr) psBr.onchange=function(){ API.branchAssignees(psBr.value, wantHR?'HR':'').then(function(rr){ var es=(rr&&rr.employees)||[]; var a=document.getElementById('psAssignee'); if(a) a.innerHTML=empOpts(es, hrOf(es, S.user&&S.user.EmpID)); }); };
+      if(psBr) psBr.onchange=function(){ API.branchAssignees(psBr.value, wantHR?'HR':'').then(function(rr){ var es=(rr&&rr.employees)||[]; var a=document.getElementById('psAssignee'); if(a){ a.innerHTML=empOpts(isDoc?salesTeamOnly(es):es, hrOf(es, S.user&&S.user.EmpID)); if(a.__syncCombo) a.__syncCombo(); } }); };
       var psMv=document.getElementById('psMove'); if(psMv) psMv.onchange=function(){ var pd=document.getElementById('psDate'); if(pd&&pd.parentNode) pd.parentNode.style.display=(psMv.value==='STAY_NR')?'none':''; };
       document.getElementById('psSave').onclick=function(){
         var name=document.getElementById('psName').value.trim(); if(!name){ document.getElementById('psMsg').innerHTML='<div class="msg error">'+(isRecruit?'Position is required.':'Name is required.')+'</div>'; return; }
@@ -164,6 +200,7 @@
         this.disabled=true; this.textContent='Saving…';
         API.startInstance(pid,data).then(function(r){ if(r&&(r.ok||r.offline)){ closeModal(); toast(r.offline?'Saved offline — will sync':'Added to pipeline'); if(after) after(); } else { document.getElementById('psMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; } });
       };
+      comboUpgrade(isDoc);
     });
   }
 
@@ -173,8 +210,9 @@
     API.cachedInstance(iid).then(function(cached){
       if(cached && cached.ok){
         renderInstance(cached, iid, after);
-        // Silent background refresh — updates fields/history without blocking
-        API.getInstance(iid).then(function(r){ if(r&&r.ok) renderInstance(r, iid, after); });
+        // Silent background refresh — updates the cache only. We deliberately do NOT re-render here:
+        // a second render would rebuild the form and wipe any checklist box the user just ticked.
+        API.getInstance(iid);
       } else {
         openModal('Lead','<div class="center-load"><span class="loader dark"></span> Loading…</div>','');
         API.getInstance(iid).then(function(r){
@@ -193,7 +231,9 @@
   function renderInstance(r, iid, after){
     var isRecruit=/recruit/i.test((r&&r.processName)||'');
     var wantHR=isRecruit||String((r&&r.processOwnerRole)||'').toUpperCase().indexOf('HR')>=0;
+    var isDoc=isDoctorProc(r&&r.processName, r&&r.instance&&r.instance.processId);
     API.branchAssignees(r&&r.instance&&r.instance.branchId, wantHR?'HR':'').then(function(resp){ var emps=(resp&&resp.employees)||[];
+      var assignEmps=isDoc?salesTeamOnly(emps):emps;
       var st=r.stage||{}, acts=actsFor(st, r.steps);
       var moveOpts=(r.edges||[]).map(function(e){ return '<option value="'+esc(e.toStageId)+'">→ '+esc(e.toName)+(e.label?(' ('+esc(e.label)+')'):'')+'</option>'; }).join('');
       moveOpts+='<option value="STAY">Stay — '+esc(st.name||'')+' (revisit)</option>';
@@ -210,13 +250,21 @@
       (r.steps||[]).forEach(function(s){ var fd={}; try{ fd=JSON.parse(s.formDataJson||'{}')||{}; }catch(e){} Object.keys(fd).forEach(function(k){ var v=fd[k]; var empty=(v==null)||(v instanceof Array && !v.length)||(String(v).trim()===''); if(!empty) dj[k]=v; }); });
       var djKeys=Object.keys(dj).filter(function(k){ var v=dj[k]; return v!=null && String(v).trim()!=='' && !(v instanceof Array && !v.length); });
       var detailHtml=djKeys.length?('<div style="background:#faf6f6;border:1px solid #eee;border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:12.5px">'+djKeys.map(function(k){ var v=dj[k]; if(v instanceof Array) v=v.join(', '); var sv=String(v); var disp=/^https?:\/\//.test(sv)?('<a href="'+esc(sv)+'" target="_blank">View</a>'):('<b>'+esc(sv)+'</b>'); return '<div><span style="color:#888">'+esc(k)+':</span> '+disp+'</div>'; }).join('')+'</div>'):'';
-      var _avSkip=['dr. name','visit time','contact number'];
+      var _avSkip=['dr. name','visit time','contact number','notes'];
       var avFields=(r.fields||[]).filter(function(f){ return _avSkip.indexOf(String(f.label||'').toLowerCase().trim())<0; });
       // Split: checklist fields rendered as styled tick-rows; regular fields in the grid
       var ckFields=avFields.filter(function(f){ return f.fieldType==='checklist'; });
       var regFields=avFields.filter(function(f){ return f.fieldType!=='checklist'; });
+      // Doctor CRM follow-up (stay) revisit: the lead was last dispositioned "Follow up", so this is a
+      // repeat contact — show a lean popup (Notes + Interest level + assign/move/date), no checklist or
+      // one-time fields. Detected from the most recent step's disposition tag.
+      var _ls=(r.steps||[])[(r.steps||[]).length-1];
+      var isFollowup=isDoc && _ls && /follow up/i.test(String(_ls.activityType||''));
+      var keepFields=isFollowup?regFields.filter(function(f){ return /interest/i.test(String(f.label||'')); }):regFields;
+      var showCk=!isFollowup;
+      var saveFields=isFollowup?keepFields:avFields;
       var ckSection='';
-      if(ckFields.length){
+      if(showCk && ckFields.length){
         ckSection='<div class="field full">'+
           '<div style="font-size:11px;font-weight:500;color:var(--text-muted,#aaa);letter-spacing:.05em;text-transform:uppercase;margin-bottom:7px">Checklist</div>'+
           ckFields.map(function(f){
@@ -231,17 +279,18 @@
       }
       var body='<div style="font-size:12.5px;color:#666;margin-bottom:8px"><b>'+esc(r.instance.leadName)+'</b>'+(r.instance.leadMobile?(' · '+esc(r.instance.leadMobile)):'')+' · stage: <b style="color:var(--text-primary,#111)">'+esc(st.name||'')+'</b></div>'+mouBtn+detailHtml+
         '<div class="grid2">'+
-        '<div class="field full"><label>Activity</label><select id="avAct" class="in">'+acts.map(function(a){return '<option>'+esc(a)+'</option>';}).join('')+'</select></div>'+
+        (isFollowup?'':'<div class="field full"><label>Activity</label><select id="avAct" class="in">'+acts.map(function(a){return '<option>'+esc(a)+'</option>';}).join('')+'</select></div>')+
         ckSection+
-        fieldsHtml(regFields,'av_')+
+        fieldsHtml(keepFields,'av_')+
         '<div class="field full"><label>Notes</label><textarea id="avNotes" class="in" rows="2" placeholder="Outcome / notes for this step..."></textarea></div>'+
         '<div class="field full"><label>Move to *</label><select id="avMove" class="in">'+moveOpts+'</select></div>'+
-        '<div class="field" id="avAssWrap"><label>Assign next to</label><select id="avAssignee" class="in">'+empOpts(emps,r.instance.assigneeEmpId)+'</select></div>'+
+        '<div class="field" id="avAssWrap"><label>Assign next to</label><select id="avAssignee" class="in">'+empOpts(assignEmps,r.instance.assigneeEmpId)+'</select></div>'+
         '<div class="field" id="avDateWrap"><label>Next date</label><input id="avDate" class="in" type="date"></div>'+
         '<div class="field full" id="avCloseWrap" style="display:none"><label>Close reason</label><input id="avReason" class="in"></div>'+
         '</div>'+timelineHtml(r.steps)+'<div id="avMsg"></div>';
-      openModal(st.name||'Work lead', body, '<button class="btn" id="avSave">Submit & advance</button>');
-      wireFileInputs(avFields,'av_');
+      openModal(isFollowup?('Follow up — '+esc(r.instance.leadName)):(st.name||'Work lead'), body, '<button class="btn" id="avSave">Submit & advance</button>');
+      wireFileInputs(saveFields,'av_');
+      comboUpgrade(isDoc);
       function onMove(){ var v=document.getElementById('avMove').value, close=(v==='CLOSE_WON'||v==='CLOSE_LOST'), nr=(v==='STAY_NR');
         document.getElementById('avCloseWrap').style.display=close?'':'none';
         document.getElementById('avAssWrap').style.display=(close||nr)?'none':'';
@@ -249,9 +298,9 @@
       document.getElementById('avMove').onchange=onMove; onMove();
       var mb=document.getElementById('avMou'); if(mb) mb.onclick=function(){ buildMou(r); };
       document.getElementById('avSave').onclick=function(){
-        var _avFd=collectFields(avFields,'av_');
+        var _avFd=collectFields(saveFields,'av_');
         var _avNotes=(document.getElementById('avNotes')||{}).value||''; if(_avNotes) _avFd['Notes']=_avNotes;
-        var data={ activityType:(document.getElementById('avAct')||{}).value||'', formData:_avFd,
+        var data={ activityType:((document.getElementById('avAct')||{}).value)||(isFollowup?'Follow-up call':''), formData:_avFd,
           nextStageId:document.getElementById('avMove').value, nextAssigneeEmpId:(document.getElementById('avAssignee')||{}).value||'',
           nextDate:(document.getElementById('avDate')||{}).value||'', closeReason:(document.getElementById('avReason')||{}).value||'' };
         this.disabled=true; this.textContent='Saving…';
