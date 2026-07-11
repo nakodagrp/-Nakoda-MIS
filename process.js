@@ -238,8 +238,10 @@
     API.branchAssignees(r&&r.instance&&r.instance.branchId, wantHR?'HR':'', isDoc).then(function(resp){ var emps=(resp&&resp.employees)||[];
       var assignEmps=isDoc?salesTeamOnly(emps):emps;
       var st=r.stage||{}, acts=actsFor(st, r.steps);
+      var isEmpanel=isDoc && /empanel|mou/i.test(String(st.name||''));
       var moveOpts=(r.edges||[]).map(function(e){ return '<option value="'+esc(e.toStageId)+'">→ '+esc(e.toName)+(e.label?(' ('+esc(e.label)+')'):'')+'</option>'; }).join('');
       moveOpts+='<option value="STAY">Stay — '+esc(st.name||'')+' (revisit)</option>';
+      if(isEmpanel){ moveOpts+='<option value="STAY_WR">⏳ Waiting for 1st referral (stay)</option>'; }   // Empanel/MOU step only
       moveOpts+='<option value="STAY_NR">⏸ Not responding (stay)</option>'+
                '<option value="STAY_FU">↻ Follow up (stay)</option>'+
                '<option value="STAY_PR">★ Prospect (stay)</option>';
@@ -263,20 +265,28 @@
       // one-time fields. Detected from the most recent step's disposition tag.
       var _ls=(r.steps||[])[(r.steps||[]).length-1];
       var isFollowup=isDoc && _ls && /follow up/i.test(String(_ls.activityType||''));
-      var keepFields=isFollowup?regFields.filter(function(f){ return /interest/i.test(String(f.label||'')); }):regFields;
-      var showCk=!isFollowup;
-      var saveFields=isFollowup?keepFields:avFields;
+      // Empanel/MOU revisit: the stage was already worked at least once (first-time fill happened earlier).
+      // On any re-open we drop the one-time bits (checklist, commission/terms, referral code) and keep a
+      // lean Activity + Notes form — so the user only records the update, not the whole intake again.
+      var _priorAtStage=(r.steps||[]).filter(function(s){ return String(s.stageId)===String(st.stageId); }).length;
+      var isMouRevisit=isEmpanel && _priorAtStage>=1;
+      var lean=isFollowup||isMouRevisit;
+      var keepFields=isMouRevisit?[]:(isFollowup?regFields.filter(function(f){ return /interest/i.test(String(f.label||'')); }):regFields);
+      var showCk=!lean;
+      var saveFields=lean?keepFields:avFields;
       var ckSection='';
       if(showCk && ckFields.length){
         ckSection='<div class="field full">'+
-          '<div style="font-size:11px;font-weight:500;color:var(--text-muted,#aaa);letter-spacing:.05em;text-transform:uppercase;margin-bottom:7px">Checklist</div>'+
+          '<div class="ck-h">Checklist</div>'+
           ckFields.map(function(f){
             var items=String(f.options||'').split(',').filter(Boolean);
-            return '<div id="av_'+esc(f.fieldId)+'" style="display:flex;flex-direction:column;gap:5px;margin-bottom:6px">'+
-              items.map(function(o){
-                return '<label style="display:flex;align-items:center;gap:10px;padding:7px 10px;background:var(--surface-1,#f9fafb);border:0.5px solid var(--border,#e5e7eb);border-radius:8px;font-size:13px;cursor:pointer;user-select:none">'+
-                  '<input type="checkbox" value="'+esc(o.trim())+'" style="width:15px;height:15px;accent-color:#DA1017;flex-shrink:0"> '+esc(o.trim())+
-                  '</label>';
+            return '<div id="av_'+esc(f.fieldId)+'" class="av-ck">'+
+              items.map(function(o){ var val=esc(o.trim());
+                return '<div class="av-ck-row" role="checkbox" aria-checked="false" tabindex="0">'+
+                  '<span class="av-ck-box"><i class="av-ck-tick">✓</i></span>'+
+                  '<span class="av-ck-lb">'+val+'</span>'+
+                  '<input type="checkbox" value="'+val+'" style="display:none">'+
+                  '</div>';
               }).join('')+'</div>';
           }).join('')+'</div>';
       }
@@ -294,6 +304,14 @@
       openModal(isFollowup?('Follow up — '+esc(r.instance.leadName)):(st.name||'Work lead'), body, '<button class="btn" id="avSave">Submit & advance</button>');
       wireFileInputs(saveFields,'av_');
       comboUpgrade(isDoc);
+      // Checklist rows: the checkbox is display:none and toggled only here, so there's exactly one
+      // toggle per tap (native <label> forwarding used to double-fire on mobile and appear to "not stick").
+      [].slice.call(document.querySelectorAll('#ov .av-ck-row')).forEach(function(row){
+        var cb=row.querySelector('input[type=checkbox]'); if(!cb) return;
+        function toggle(){ cb.checked=!cb.checked; row.classList.toggle('on',cb.checked); row.setAttribute('aria-checked',cb.checked?'true':'false'); }
+        row.addEventListener('click',function(e){ e.preventDefault(); toggle(); });
+        row.addEventListener('keydown',function(e){ if(e.key===' '||e.key==='Enter'){ e.preventDefault(); toggle(); } });
+      });
       function onMove(){ var v=document.getElementById('avMove').value, close=(v==='CLOSE_WON'||v==='CLOSE_LOST'), nr=(v==='STAY_NR');
         document.getElementById('avCloseWrap').style.display=close?'':'none';
         document.getElementById('avAssWrap').style.display=(close||nr)?'none':'';
