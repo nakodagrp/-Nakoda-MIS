@@ -115,6 +115,9 @@
     var otherFields=fields.filter(function(f){return f.fieldType!=='checklist';});
     var actSel=String(s.activityOptions||'').split(',').map(function(x){return x.trim();}).filter(Boolean);
     var ACT_SUGGEST=['WhatsApp','Email','Walk-in','SMS','Reminder'], CK_SUGGEST=[];
+    var allStages=(def&&def.stages)||[];
+    var curEdges=((def&&def.edges)||[]).filter(function(e){return String(e.fromStageId)===String(s.stageId);}).map(function(e){return String(e.toStageId);});
+    function stageEdgeChips(id){ var chips=allStages.filter(function(st){return String(st.stageId)!==String(s.stageId);}).map(function(st){ var on=curEdges.indexOf(String(st.stageId))>=0; return '<span class="rc'+(on?' on':'')+'" data-v="'+esc(st.stageId)+'">'+esc(st.name)+'</span>'; }).join(''); return '<div class="rolechips" id="'+id+'">'+(chips||'<span class="muted" style="font-size:12px">Add more stages to link them.</span>')+'</div>'; }
     var body='<div class="grid2">'+
       '<div class="field"><label>Stage name *</label><input id="stName" class="in" value="'+esc(s.name||'')+'"></div>'+
       '<div class="field"><label>Timer (TAT days)</label><input id="stTat" class="in" type="number" value="'+(Number(s.tatDays)||0)+'"></div>'+
@@ -123,14 +126,19 @@
       '<div class="field"><label class="tg"><input type="checkbox" id="stRecur" class="ce-cl-box"'+(s.recurring?' checked':'')+'> Recurring stage</label></div>'+
       '<div class="field full"><label>Checklist items <span class="muted">(tap to select or add your own)</span></label>'+pickHtml('stCk',CK_SUGGEST,ckItems)+'</div>'+
       '</div>'+
+      (s.stageId?('<div class="field full"><label>Move to — next stages <span class="muted">(tap to allow; Not responding / Follow up / Prospect / Close stay automatic)</span></label>'+stageEdgeChips('stEdges')+'</div>'):'')+
       (s.stageId?('<label class="fl2">Form fields</label><div id="stFields">'+fieldsList(otherFields)+'</div><button class="btn ghost sm" id="stAddF">+ Add field</button>'):'<div class="note" style="background:#f1effc;border-radius:9px;padding:9px;font-size:11.5px;color:#5046b8">Save the stage first, then add custom form fields.</div>')+
       '<div id="stMsg"></div>';
     openModal(s.stageId?'Edit stage':'Add stage', body, '<button class="btn" id="stSave">Save stage</button>');
     wirePick('stActs'); wirePick('stCk');
     if(s.stageId){
+      function moveField(fid,dir){ var idx=-1; for(var k=0;k<otherFields.length;k++){ if(String(otherFields[k].fieldId)===String(fid)){ idx=k; break; } } var j=idx+dir; if(idx<0||j<0||j>=otherFields.length) return; var t=otherFields[idx]; otherFields[idx]=otherFields[j]; otherFields[j]=t; document.getElementById('stFields').innerHTML=fieldsList(otherFields); binF(); API.reorderFields(otherFields.map(function(x){return x.fieldId;})); toast('Order saved'); }
       var binF=function(){ document.querySelectorAll('#stFields [data-fe]').forEach(function(b){ b.onclick=function(){ var f=otherFields.filter(function(x){return x.fieldId===b.getAttribute('data-fe');})[0]; openFieldEd(s.stageId,f,pid); }; });
-        document.querySelectorAll('#stFields [data-fd]').forEach(function(b){ b.onclick=function(){ if(!confirm('Delete field?')) return; API.deleteField(b.getAttribute('data-fd')).then(function(){ toast('Deleted'); openProcEditor(pid); closeModal(); }); }; }); };
+        document.querySelectorAll('#stFields [data-fd]').forEach(function(b){ b.onclick=function(){ if(!confirm('Delete field?')) return; API.deleteField(b.getAttribute('data-fd')).then(function(){ toast('Deleted'); openProcEditor(pid); closeModal(); }); }; });
+        document.querySelectorAll('#stFields [data-fu]').forEach(function(b){ b.onclick=function(){ moveField(b.getAttribute('data-fu'),-1); }; });
+        document.querySelectorAll('#stFields [data-fdn]').forEach(function(b){ b.onclick=function(){ moveField(b.getAttribute('data-fdn'),1); }; }); };
       binF();
+      document.querySelectorAll('#stEdges .rc').forEach(function(c){ c.onclick=function(){ c.classList.toggle('on'); }; });
       $id('stAddF').onclick=function(){ openFieldEd(s.stageId,null,pid); };
     }
     $id('stSave').onclick=function(){ var n=$id('stName').value.trim(); if(!n){ $id('stMsg').innerHTML='<div class="msg error">Name required.</div>'; return; }
@@ -139,12 +147,16 @@
         if(!r||!r.ok){ $id('stMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; return; }
         var sid=r.stageId; var items=pickVal('stCk').join(',');
         var saveCk = (ckField || items) ? API.saveField({fieldId:(ckField?ckField.fieldId:null),stageId:sid,label:(ckField?ckField.label:'Checklist'),fieldType:'checklist',options:items}) : Promise.resolve();
-        Promise.resolve(saveCk).then(function(){ closeModal(); toast('Stage saved'); openProcEditor(pid); });
+        var saveEd = s.stageId ? API.saveStageEdges(pid, s.stageId, pickVal('stEdges')) : Promise.resolve();
+        Promise.all([Promise.resolve(saveCk), Promise.resolve(saveEd)]).then(function(){ closeModal(); toast('Stage saved'); openProcEditor(pid); });
       });
     };
   }
   function fieldsList(fields){ if(!fields.length) return '<div class="muted" style="font-size:12px;margin-bottom:6px">No custom fields yet.</div>';
-    return fields.map(function(f){ return '<div class="frow"><span class="t">'+esc(f.label)+(f.required?' *':'')+'</span><span class="ty">'+esc(f.fieldType)+'</span><button class="bmini" data-fe="'+esc(f.fieldId)+'">✎</button><button class="bmini" data-fd="'+esc(f.fieldId)+'">🗑</button></div>'; }).join('');
+    return fields.map(function(f,i){ return '<div class="frow"><span class="t">'+esc(f.label)+(f.required?' *':'')+'</span><span class="ty">'+esc(f.fieldType)+'</span>'+
+      '<button class="bmini" data-fu="'+esc(f.fieldId)+'"'+(i===0?' disabled':'')+'>▲</button>'+
+      '<button class="bmini" data-fdn="'+esc(f.fieldId)+'"'+(i===fields.length-1?' disabled':'')+'>▼</button>'+
+      '<button class="bmini" data-fe="'+esc(f.fieldId)+'">✎</button><button class="bmini" data-fd="'+esc(f.fieldId)+'">🗑</button></div>'; }).join('');
   }
   function openFieldEd(stageId, f, pid){
     f=f||{};

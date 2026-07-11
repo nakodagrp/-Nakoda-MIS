@@ -52,6 +52,7 @@
       '<div id="attMe"></div>'+
       (canApprove()?'<div class="section-label" style="margin-top:18px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">Approve — today<span id="attApSummary"></span></div>'+
         '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0 10px">'+
+          '<input id="attApName" placeholder="Search name…" style="border:1px solid #d9d9d9;border-radius:8px;padding:6px 8px;font-size:13px;flex:1;min-width:130px;max-width:220px">'+
           '<input type="date" id="attApDate" value="'+todayS()+'" style="border:1px solid #d9d9d9;border-radius:8px;padding:6px 8px;font-size:13px">'+
           '<button class="btn sm" id="attApGo">Show</button>'+
           '<button class="btn sm ghost" id="attPdfBtn" style="display:inline-flex;align-items:center;gap:5px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg> Monthly PDF</button>'+
@@ -74,6 +75,7 @@
     if(canApprove()){
       loadApprove(todayS());
       var apGo=$id('attApGo'); if(apGo) apGo.onclick=function(){ loadApprove($id('attApDate').value||todayS()); };
+      var apName=$id('attApName'); if(apName) apName.oninput=function(){ if(_approveCache&&_approveCache.recs) renderApproveRecs(_approveCache.recs); };
       var pdfBtn=$id('attPdfBtn'); if(pdfBtn) pdfBtn.onclick=function(){ downloadAttPdf(); };
     }
   }
@@ -457,7 +459,9 @@
     var shown=ATT.apFilter ? (ATT.apFilter==='wfh'
       ? recs.filter(function(r){ return /work from home/i.test(String(r.notes||'')); })
       : recs.filter(function(r){ return String(r.status||'present')===ATT.apFilter; })) : recs;
-    if(!shown.length){ box.innerHTML='<div class="empty">No '+(ATT.apFilter==='wfh'?'work-from-home ':ATT.apFilter?(stLabel(ATT.apFilter)+' '):'')+'attendance marked for this date.</div>'; return; }
+    var nq=(($id('attApName')||{}).value||'').trim().toLowerCase();
+    if(nq) shown=shown.filter(function(r){ return String(r.empName||'').toLowerCase().indexOf(nq)>=0 || String(r.empId||'').toLowerCase().indexOf(nq)>=0; });
+    if(!shown.length){ box.innerHTML='<div class="empty">'+(nq?'No one matches "'+esc(nq)+'".':('No '+(ATT.apFilter==='wfh'?'work-from-home ':ATT.apFilter?(stLabel(ATT.apFilter)+' '):'')+'attendance marked for this date.'))+'</div>'; return; }
     box.innerHTML=shown.map(function(a){
       var ap=String(a.approvalStatus)==='approved';
       // Inline selfie thumbnails — punch-in (IN) and punch-out (OUT) side by side, no PDF link.

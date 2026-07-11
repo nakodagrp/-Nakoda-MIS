@@ -315,6 +315,8 @@
     reorderStages:function(pid,order){ return call('reorderStages',{token:getToken(),processId:pid,order:order}); },
     saveField:function(d){ return call('saveField',{token:getToken(),data:d}); },
     deleteField:function(id){ return call('deleteField',{token:getToken(),fieldId:id}); },
+    reorderFields:function(order){ return call('reorderFields',{token:getToken(),order:order}); },
+    saveStageEdges:function(pid,fromStageId,toStageIds){ return call('saveStageEdges',{token:getToken(),processId:pid,fromStageId:fromStageId,toStageIds:toStageIds}); },
     checkIn:function(d){ return call('checkIn',{token:getToken(),data:d}); },
     checkOut:function(d){ return call('checkOut',{token:getToken(),data:d}); },
     // Uploads the selfie after check-in/out already succeeded, so the punch itself doesn't wait on
