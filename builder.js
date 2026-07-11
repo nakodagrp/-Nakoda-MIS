@@ -117,7 +117,11 @@
     var ACT_SUGGEST=['WhatsApp','Email','Walk-in','SMS','Reminder'], CK_SUGGEST=[];
     var allStages=(def&&def.stages)||[];
     var curEdges=((def&&def.edges)||[]).filter(function(e){return String(e.fromStageId)===String(s.stageId);}).map(function(e){return String(e.toStageId);});
-    function stageEdgeChips(id){ var chips=allStages.filter(function(st){return String(st.stageId)!==String(s.stageId);}).map(function(st){ var on=curEdges.indexOf(String(st.stageId))>=0; return '<span class="rc'+(on?' on':'')+'" data-v="'+esc(st.stageId)+'">'+esc(st.name)+'</span>'; }).join(''); return '<div class="rolechips" id="'+id+'">'+(chips||'<span class="muted" style="font-size:12px">Add more stages to link them.</span>')+'</div>'; }
+    function stageEdgeChips(id){ var chips=allStages.filter(function(st){return String(st.stageId)!==String(s.stageId);}).map(function(st){ var on=curEdges.indexOf(String(st.stageId))>=0; return '<span class="rc'+(on?' on':'')+'" data-v="'+esc(st.stageId)+'">'+esc(st.name)+'</span>'; }).join('');
+      return '<div class="rolechips" id="'+id+'">'+chips+'</div>'+
+        '<div style="display:flex;gap:6px;margin-top:7px">'+
+        '<input class="in" id="'+id+'_new" placeholder="Add your own…" style="max-width:240px">'+
+        '<button class="btn ghost sm" id="'+id+'_add" type="button">+ Add</button></div>'; }
     var body='<div class="grid2">'+
       '<div class="field"><label>Stage name *</label><input id="stName" class="in" value="'+esc(s.name||'')+'"></div>'+
       '<div class="field"><label>Timer (TAT days)</label><input id="stTat" class="in" type="number" value="'+(Number(s.tatDays)||0)+'"></div>'+
@@ -139,6 +143,15 @@
         document.querySelectorAll('#stFields [data-fdn]').forEach(function(b){ b.onclick=function(){ moveField(b.getAttribute('data-fdn'),1); }; }); };
       binF();
       document.querySelectorAll('#stEdges .rc').forEach(function(c){ c.onclick=function(){ c.classList.toggle('on'); }; });
+      (function(){ var addb=$id('stEdges_add'), inp=$id('stEdges_new');
+        function add(){ var v=(inp.value||'').trim(); if(!v) return;
+          var ex=[].slice.call(document.querySelectorAll('#stEdges .rc')).filter(function(c){ return c.textContent.trim().toLowerCase()===v.toLowerCase(); })[0];
+          if(ex){ ex.classList.add('on'); } else { var sp=document.createElement('span'); sp.className='rc on'; sp.setAttribute('data-new',v); sp.textContent=v; sp.onclick=function(){ sp.classList.toggle('on'); }; $id('stEdges').appendChild(sp); }
+          inp.value=''; inp.focus();
+        }
+        if(addb) addb.onclick=add;
+        if(inp) inp.onkeydown=function(e){ if(e.key==='Enter'){ e.preventDefault(); add(); } };
+      })();
       $id('stAddF').onclick=function(){ openFieldEd(s.stageId,null,pid); };
     }
     $id('stSave').onclick=function(){ var n=$id('stName').value.trim(); if(!n){ $id('stMsg').innerHTML='<div class="msg error">Name required.</div>'; return; }
@@ -147,8 +160,17 @@
         if(!r||!r.ok){ $id('stMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; return; }
         var sid=r.stageId; var items=pickVal('stCk').join(',');
         var saveCk = (ckField || items) ? API.saveField({fieldId:(ckField?ckField.fieldId:null),stageId:sid,label:(ckField?ckField.label:'Checklist'),fieldType:'checklist',options:items}) : Promise.resolve();
-        var saveEd = s.stageId ? API.saveStageEdges(pid, s.stageId, pickVal('stEdges')) : Promise.resolve();
-        Promise.all([Promise.resolve(saveCk), Promise.resolve(saveEd)]).then(function(){ closeModal(); toast('Stage saved'); openProcEditor(pid); });
+        // Move-to targets: existing chips carry a stageId (data-v); "Add your own" chips carry a name
+        // (data-new) — create those as new stages first, then link every selected target to this stage.
+        function saveEdges(){
+          if(!s.stageId) return Promise.resolve();
+          var on=[].slice.call(document.querySelectorAll('#stEdges .rc.on')), ids=[], newNames=[];
+          on.forEach(function(c){ var v=c.getAttribute('data-v'), nn=c.getAttribute('data-new'); if(v) ids.push(v); else if(nn) newNames.push(nn); });
+          if(!newNames.length) return API.saveStageEdges(pid, s.stageId, ids);
+          return Promise.all(newNames.map(function(nm){ return API.saveStage({processId:pid,name:nm,tatDays:0}).then(function(rr){ return (rr&&rr.ok)?rr.stageId:null; }); }))
+            .then(function(newIds){ newIds.forEach(function(id){ if(id) ids.push(id); }); return API.saveStageEdges(pid, s.stageId, ids); });
+        }
+        Promise.all([Promise.resolve(saveCk), saveEdges()]).then(function(){ closeModal(); toast('Stage saved'); openProcEditor(pid); });
       });
     };
   }
