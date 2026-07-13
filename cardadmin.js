@@ -69,7 +69,7 @@
           if(fromFilter && issuedOn<fromFilter) return;
           if(toFilter && issuedOn>toFilter) return;
         }
-        var lite={cardNumber:c.cardNumber,holderName:c.holderName,mobile:c.mobile,typeId:c.typeId,branchId:c.branchId,expiryDate:c.expiryDate,issuedDate:c.issuedDate||''};
+        var lite={cardNumber:c.cardNumber,holderName:c.holderName,mobile:c.mobile,typeId:c.typeId,branchId:c.branchId,expiryDate:c.expiryDate,issuedDate:c.issuedDate||'',issuedByName:c.issuedByName||'',issuedByEmpId:c.issuedByEmpId||'',issuedByRole:c.issuedByRole||''};
         if(c.status==='expired'){ exp.push(lite); return; }
         if(c.activatedAt){ act.push(lite); } else if(c.sentAt){ sna.push(lite); } else { ins.push(lite); }
       });
@@ -101,13 +101,15 @@
       var head='<div style="display:flex;align-items:center;gap:8px;margin:8px 2px 8px"><span class="section-label" style="margin:0">'+esc(title)+' ('+list.length+')</span>'+bulk+'</div>';
       var selAllId='cs_selall_'+action;
       var selAllChk=actionable?'<input type="checkbox" id="'+selAllId+'" title="Select all" style="transform:scale(1.25);margin-right:6px;vertical-align:middle">':'';
-      return head+'<div class="card" style="margin-bottom:16px"><div class="table-wrap"><table><thead><tr><th>'+selAllChk+'Member</th><th>Type</th><th></th></tr></thead><tbody>'+
+      return head+'<div class="card" style="margin-bottom:16px"><div class="table-wrap"><table><thead><tr><th>'+selAllChk+'Member</th><th>Type</th><th>Issued by</th><th></th></tr></thead><tbody>'+
         list.map(function(c){
           var sel=actionable?'<input type="checkbox" class="cs-sel" data-cn="'+esc(c.cardNumber)+'" style="transform:scale(1.25);margin-right:9px">':'';
           var act=action==='sent'?'<button class="btn ghost sm" data-mark="sent" data-cn="'+esc(c.cardNumber)+'">Sent</button>'
                  :action==='activated'?'<button class="btn ghost sm" data-mark="activated" data-cn="'+esc(c.cardNumber)+'">Activate</button>':'';
+          var by=c.issuedByName?('<b>'+esc(c.issuedByName)+'</b>'+((c.issuedByEmpId||c.issuedByRole)?'<br><small style="color:#888">'+esc([c.issuedByEmpId,c.issuedByRole].filter(Boolean).join(' · '))+'</small>':'')):'<small style="color:#bbb">—</small>';
           return '<tr><td>'+sel+'<b>'+esc(c.holderName)+'</b><br><small style="color:#888">'+esc(c.cardNumber)+' · '+esc(c.mobile)+'</small></td>'+
             '<td>'+esc(c.typeId)+'</td>'+
+            '<td>'+by+'</td>'+
             '<td><div style="display:flex;gap:6px;justify-content:flex-end"><button class="btn ghost sm" data-open="'+esc(c.cardNumber)+'">View</button>'+act+'</div></td></tr>';
         }).join('')+'</tbody></table></div></div>';
     }
