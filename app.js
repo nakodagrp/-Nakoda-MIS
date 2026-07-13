@@ -433,11 +433,16 @@ function renderDashboard(){
   /* Daily business for the selected month — per-branch map + scoped totals. business = cash + bank + other. */
   var dailyByBr={};
   (DASH.daily||[]).forEach(function(d){ var b=String(d.branchId||''); if(b)brs[b]=1; var o=dailyByBr[b]||(dailyByBr[b]={cash:0,bank:0,other:0,pat:0,test:0}); o.cash+=Number(d.cashIn)||0; o.bank+=Number(d.bankIn)||0; o.other+=Number(d.other)||0; o.pat+=Number(d.patients)||0; o.test+=Number(d.tests)||0; });
-  /* Verified bank deposits move that branch's cash into the bank (business total unchanged). */
-  (DASH.deposits||[]).forEach(function(d){ if(String(d.status)!=='approved') return; var b=String(d.branchId||''); if(!b) return; var o=dailyByBr[b]||(dailyByBr[b]={cash:0,bank:0,other:0,pat:0,test:0}); var amt=Number(d.amount)||0; o.cash-=amt; o.bank+=amt; });
+  /* Verified bank deposits move a branch's cash into the bank, but only up to the cash actually on hand —
+     you can't deposit more cash than you collected, so cash never goes negative (business total unchanged). */
+  var _depByBr={};
+  (DASH.deposits||[]).forEach(function(d){ if(String(d.status)!=='approved') return; var b=String(d.branchId||''); if(!b) return; _depByBr[b]=(_depByBr[b]||0)+(Number(d.amount)||0); });
+  Object.keys(_depByBr).forEach(function(b){ var o=dailyByBr[b]||(dailyByBr[b]={cash:0,bank:0,other:0,pat:0,test:0}); var shift=Math.min(_depByBr[b], Math.max(0,o.cash)); o.cash-=shift; o.bank+=shift; });
   var cashMTD=0,bankMTD=0,otherMTD=0,patMTD=0,testMTD=0;
   (DASH.daily||[]).forEach(function(d){ if(effBranch && String(d.branchId)!==String(effBranch)) return; cashMTD+=Number(d.cashIn)||0; bankMTD+=Number(d.bankIn)||0; otherMTD+=Number(d.other)||0; patMTD+=Number(d.patients)||0; testMTD+=Number(d.tests)||0; });
-  (DASH.deposits||[]).forEach(function(d){ if(String(d.status)!=='approved') return; if(effBranch && String(d.branchId)!==String(effBranch)) return; var amt=Number(d.amount)||0; cashMTD-=amt; bankMTD+=amt; });
+  var _depScoped=0;
+  (DASH.deposits||[]).forEach(function(d){ if(String(d.status)!=='approved') return; if(effBranch && String(d.branchId)!==String(effBranch)) return; _depScoped+=(Number(d.amount)||0); });
+  var _shiftM=Math.min(_depScoped, Math.max(0,cashMTD)); cashMTD-=_shiftM; bankMTD+=_shiftM;
   var bizMTD=cashMTD+bankMTD+otherMTD;
   var avgPat=patMTD>0?Math.round(bizMTD/patMTD):0;
   /* consultant: franchise-only dashboard (approved design) — franchise KPIs, no business/cash/staff */
