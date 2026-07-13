@@ -405,6 +405,7 @@ function renderDashboard(){
      Replacing large chunks of DOM makes the page height dip for a frame, so the browser clamps the
      scroll and the user gets yanked back up. Remember where they were and restore it after painting. */
   var _se=document.scrollingElement||document.documentElement, _sy=_se?_se.scrollTop:0;
+  try{
   var u=S.user||{}, lvl=S.perms&&S.perms.level, isManager=S.perms&&S.perms.canViewAll, isBranchMgr=lvl==='BRANCH_MGR', isMon=isMonitorRole();
   var tdy=todayD();
   var myT=(DASH.tasks||[]).filter(function(t){return t.status!=='deleted';});
@@ -541,6 +542,7 @@ function renderDashboard(){
   else recent.forEach(function(e){ rhtml+='<tr><td><b>'+esc(e.FullName)+'</b>'+pend(e)+'</td><td>'+esc(e.Role)+'</td><td>'+officeBadge(e)+'</td><td>'+statusBadge(e.Status)+'</td></tr>'; });
   tb.innerHTML=rhtml;
   if(_se && _sy>0){ _se.scrollTop=_sy; requestAnimationFrame(function(){ if(Math.abs(_se.scrollTop-_sy)>2) _se.scrollTop=_sy; }); }
+  }catch(_dashErr){ try{ console.error('renderDashboard error:',_dashErr); var _de=document.getElementById('dashExtra'); if(_de && !String(_de.innerHTML||'').trim()){ _de.innerHTML='<div class="empty" style="padding:20px">Dashboard couldn\'t load fully — tap ⋯ More ▸ Check update, or reload the app. ('+esc((_dashErr&&_dashErr.message)||_dashErr)+')</div>'; } }catch(_e2){} }
 }
 function kpi(n,l){ return '<div class="kpi"><div class="n">'+n+'</div><div class="l">'+esc(l)+'</div></div>'; }
 function kpiC(n,l,cls){ return '<div class="kpi k-'+(cls||'')+'"><div class="n">'+n+'</div><div class="l">'+esc(l)+'</div></div>'; }

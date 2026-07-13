@@ -44,8 +44,8 @@
   var TRACK_APPROVERS = { staff:ALL_APPROVERS, bm:ALL_APPROVERS, om:ALL_APPROVERS, coop:ALL_APPROVERS };
 
   /* ---- Leave type config ---- */
-  var LTYPES = ['Casual','Paid'];
-  var LENT   = {Casual:12,Paid:12};
+  var LTYPES = ['CL','Paid'];
+  var LENT   = {CL:12,Paid:12};
 
   /* ============================================================
    *  BALANCE CARDS
@@ -383,12 +383,12 @@
       if(!r||!r.ok){ box.innerHTML='<div class="empty">'+esc((r&&r.error)||'No data')+'</div>'; return; }
       var rows=r.rows||[];
       if(!rows.length){ box.innerHTML='<div class="empty">No approved leaves in '+ym+'.</div>'; return; }
-      var totals={Casual:0,Paid:0,total:0};
+      var totals={CL:0,Paid:0,total:0};
       rows.forEach(function(row){ Object.keys(totals).forEach(function(k){ totals[k]+=(Number(row[k])||0); }); });
       var summary='<div class="lv-rpt-summary">'+Object.keys(totals).map(function(k){return '<div class="lv-rpt-tile"><div class="lv-rpt-tile-n">'+totals[k]+'</div><div class="lv-rpt-tile-l">'+k+'</div></div>';}).join('')+'</div>';
-      var table='<div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>Staff</th><th>Branch</th><th>Casual</th><th>Paid</th><th>Total</th></tr></thead><tbody>'+
+      var table='<div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>Staff</th><th>Branch</th><th>CL</th><th>Paid</th><th>Total</th></tr></thead><tbody>'+
         rows.map(function(row){return '<tr><td><b>'+esc(row.name)+'</b></td><td style="font-size:12.5px;color:#666">'+esc(row.branch)+'</td>'+
-          ['Casual','Paid','total'].map(function(k){var v=Number(row[k])||0;return '<td style="text-align:center'+(v>0?';font-weight:700':'')+'">'+v+'</td>';}).join('')+'</tr>';}).join('')+
+          ['CL','Paid','total'].map(function(k){var v=Number(row[k])||0;return '<td style="text-align:center'+(v>0?';font-weight:700':'')+'">'+v+'</td>';}).join('')+'</tr>';}).join('')+
         '</tbody></table></div>';
       box.innerHTML=summary+table;
     });
