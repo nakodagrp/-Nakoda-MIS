@@ -46,6 +46,7 @@
   /* ---- Leave type config ---- */
   var LTYPES = ['CL','Paid'];
   var LENT   = {CL:12,Paid:12};
+  var LLABEL = {CL:'CL', Paid:'Paid Leave'};   // stored type stays 'Paid'; UI shows 'Paid Leave'
 
   /* ============================================================
    *  BALANCE CARDS
@@ -56,7 +57,7 @@
       var pct = b.ent>0 ? Math.round((b.used/b.ent)*100) : 0;
       var col = pct>=100?'#DA1017':pct>=75?'#c47f00':'#1a7f37';
       return '<div class="lv-bal-card">'+
-        '<div class="lv-bal-top"><div class="lv-bal-type">'+t+'</div>'+
+        '<div class="lv-bal-top"><div class="lv-bal-type">'+(LLABEL[t]||t)+'</div>'+
         '<div class="lv-bal-num" style="color:'+col+'">'+b.bal+'</div></div>'+
         '<div class="lv-bal-bar"><div class="lv-bal-fill" style="width:'+Math.min(100,pct)+'%;background:'+col+'"></div></div>'+
         '<div class="lv-bal-meta">'+b.used+' used · '+b.ent+' total</div>'+
@@ -102,7 +103,7 @@
       }
       return '<div class="lv-leave-card">'+
         '<div class="lv-lc-top">'+
-          '<div class="lv-lc-type">'+esc(l.type)+'</div>'+
+          '<div class="lv-lc-type">'+esc(LLABEL[l.type]||l.type)+'</div>'+
           '<div class="lv-lc-dates">'+esc(fmtDate(l.fromDate))+' → '+esc(fmtDate(l.toDate))+' &nbsp;·&nbsp; <b>'+esc(l.days)+'d</b></div>'+
           '<div class="lv-lc-right">'+badge(l.status)+(canCancel?' &nbsp;<button class="btn ghost sm" data-cancel="'+esc(l.leaveId)+'">Cancel</button>':'')+'</div>'+
         '</div>'+
@@ -137,7 +138,7 @@
     var body =
       '<div class="grid2">'+
         '<div class="field"><label>Leave type</label>'+
-          '<select id="lvType" class="in">'+LTYPES.map(function(t){return '<option>'+t+'</option>';}).join('')+'</select></div>'+
+          '<select id="lvType" class="in">'+LTYPES.map(function(t){return '<option value="'+t+'">'+(LLABEL[t]||t)+'</option>';}).join('')+'</select></div>'+
         '<div class="field"><label>Half day?</label>'+
           '<select id="lvHalf" class="in"><option value="">Full days</option><option value="first">First half</option><option value="second">Second half</option></select></div>'+
         '<div class="field"><label>From date</label><input id="lvFrom" type="date" class="in" value="'+today+'"></div>'+
@@ -229,7 +230,7 @@
       '<div class="hx-mid" style="flex:1">'+
         '<div style="font-size:14px;font-weight:700">'+esc(l.empName)+
           ' <span style="font-size:10px;font-weight:400;color:#888">('+esc(trackLbl)+')</span>'+
-          ' — <b>'+esc(l.type)+'</b> &nbsp;·&nbsp; '+esc(l.days)+'d'+
+          ' — <b>'+esc(LLABEL[l.type]||l.type)+'</b> &nbsp;·&nbsp; '+esc(l.days)+'d'+
         '</div>'+
         '<div style="font-size:12.5px;color:#555;margin-top:2px">'+
           esc(fmtDate(l.fromDate))+' → '+esc(fmtDate(l.toDate))+
@@ -525,4 +526,3 @@
     document.head.appendChild(s);
   }
 })();
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
