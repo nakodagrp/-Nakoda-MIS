@@ -100,7 +100,7 @@
         return '<tr><td>'+esc(branchName(d.branchId))+'</td><td>'+esc(d.date)+'</td><td>₹'+money(d.b2cCash)+'</td><td>₹'+money(d.b2cBank)+'</td><td>₹'+money(d.other)+'</td><td>'+(d.patients||0)+'</td><td>'+(d.tests||0)+'</td><td>₹'+money(coll)+'</td><td>'+docLinks(d)+'</td><td>'+statusCell+'</td><td>'+rejectCell+'</td></tr>'; }).join(''):'<tr><td class="empty" colspan="11">No entries this month.</td></tr>')+'</tbody></table></div>'+
       (total>PAGE?'<div class="acc-pager">'+(ACC.dailyPage>0?'<button class="btn ghost sm" id="dlyPrev">‹ Prev</button>':'<span></span>')+'<span>'+(start+1)+'–'+Math.min(start+PAGE,total)+' of '+total+'</span>'+(ACC.dailyPage<pages-1?'<button class="btn ghost sm" id="dlyNext">Next ›</button>':'<span></span>')+'</div>':'');
     var a=$id('dlyAdd'); if(a) a.onclick=openDailyForm;
-    var dp=$id('dlyDep'); if(dp) dp.onclick=openDepositForm;
+    var dp=$id('dlyDep'); if(dp) dp.onclick=function(){ var t=document.querySelector('#accTabs span[data-t="deposit"]'); if(t){ t.click(); } else { ACC.tab='deposit'; paintTab(); } };   // open the Bank Deposit tab (table), not the form directly
     var pv=$id('dlyPrev'); if(pv) pv.onclick=function(){ ACC.dailyPage--; loadDaily(); };
     var nx=$id('dlyNext'); if(nx) nx.onclick=function(){ ACC.dailyPage++; loadDaily(); };
     box.querySelectorAll('[data-vf]').forEach(function(b){ b.onclick=function(){ API.verifyDaily(b.getAttribute('data-vf')).then(function(x){ if(x&&x.ok){ toast('Verified'); loadDaily(); } }); }; });
