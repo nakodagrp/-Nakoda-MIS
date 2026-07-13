@@ -379,6 +379,8 @@ function loadDashboard(){
   var ym=(dm&&dm.value)||todayD().slice(0,7);
   if(S.perms && (S.perms.canViewAll || S.perms.level==='BRANCH_MGR' || S.perms.level==='BRANCH_VIEW')){
     API.listDaily('', ym).then(function(r){ if(r&&r.ok){ DASH.daily=r.daily||[]; renderDashboard(); } }).catch(function(){});
+    /* Verified bank deposits shift a branch's Cash → Bank/UPI on the by-branch table (total business unchanged). */
+    API.listDeposits('', ym).then(function(r){ if(r&&r.ok){ DASH.deposits=r.deposits||[]; renderDashboard(); } }).catch(function(){});
   }
   /* org-wide training progress for the dashboard "Staff Training" tile */
   if(isMonitorRole() || (S.perms && (S.perms.canViewAll||S.perms.level==='BRANCH_MGR'))){
@@ -430,8 +432,11 @@ function renderDashboard(){
   /* Daily business for the selected month — per-branch map + scoped totals. business = cash + bank + other. */
   var dailyByBr={};
   (DASH.daily||[]).forEach(function(d){ var b=String(d.branchId||''); if(b)brs[b]=1; var o=dailyByBr[b]||(dailyByBr[b]={cash:0,bank:0,other:0,pat:0,test:0}); o.cash+=Number(d.cashIn)||0; o.bank+=Number(d.bankIn)||0; o.other+=Number(d.other)||0; o.pat+=Number(d.patients)||0; o.test+=Number(d.tests)||0; });
+  /* Verified bank deposits move that branch's cash into the bank (business total unchanged). */
+  (DASH.deposits||[]).forEach(function(d){ if(String(d.status)!=='approved') return; var b=String(d.branchId||''); if(!b) return; var o=dailyByBr[b]||(dailyByBr[b]={cash:0,bank:0,other:0,pat:0,test:0}); var amt=Number(d.amount)||0; o.cash-=amt; o.bank+=amt; });
   var cashMTD=0,bankMTD=0,otherMTD=0,patMTD=0,testMTD=0;
   (DASH.daily||[]).forEach(function(d){ if(effBranch && String(d.branchId)!==String(effBranch)) return; cashMTD+=Number(d.cashIn)||0; bankMTD+=Number(d.bankIn)||0; otherMTD+=Number(d.other)||0; patMTD+=Number(d.patients)||0; testMTD+=Number(d.tests)||0; });
+  (DASH.deposits||[]).forEach(function(d){ if(String(d.status)!=='approved') return; if(effBranch && String(d.branchId)!==String(effBranch)) return; var amt=Number(d.amount)||0; cashMTD-=amt; bankMTD+=amt; });
   var bizMTD=cashMTD+bankMTD+otherMTD;
   var avgPat=patMTD>0?Math.round(bizMTD/patMTD):0;
   /* consultant: franchise-only dashboard (approved design) — franchise KPIs, no business/cash/staff */

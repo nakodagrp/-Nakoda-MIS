@@ -51,7 +51,7 @@
    *  BALANCE CARDS
    * ============================================================ */
   function balanceHTML(balance) {
-    return ['CL','SL','EL'].map(function(t) {
+    return LTYPES.map(function(t) {
       var b = (balance||{})[t] || {ent:LENT[t]||0,used:0,bal:LENT[t]||0};
       var pct = b.ent>0 ? Math.round((b.used/b.ent)*100) : 0;
       var col = pct>=100?'#DA1017':pct>=75?'#c47f00':'#1a7f37';
