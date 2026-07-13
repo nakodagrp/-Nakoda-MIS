@@ -116,15 +116,15 @@
       attMap[r.empId][day]=st==='present'?'P':st==='half'?'P/2':st==='leave'?'L':st==='holiday'?'WO':'A';
     });
     var days=[]; for(var i=1;i<=daysInMonth;i++) days.push(i);
-    var head=[['Emp','Name'].concat(days.map(String)).concat(['Pre','HL','Abs'])];
+    var head=[['Emp','Name'].concat(days.map(String)).concat(['FD','HL','Abs'])];   // FD = full days only (half-days counted in HL, not here)
     var body=employees.map(function(e){
-      var row=[e.EmpID||'',e.FullName||''], pre=0, hl=0, abs=0;
+      var row=[e.EmpID||'',e.FullName||''], fd=0, hl=0, abs=0;
       for(var d=1;d<=daysInMonth;d++){
         var s=(attMap[e.EmpID]&&attMap[e.EmpID][d])||'A';
-        if(s==='P') pre++; else if(s==='P/2'){ hl++; pre+=0.5; } else if(s==='A') abs++;
+        if(s==='P') fd++; else if(s==='P/2'){ hl++; } else if(s==='A') abs++;   // FD = full days only, do not add half-days
         row.push(s);
       }
-      row.push(String(pre),String(hl),String(abs)); return row;
+      row.push(String(fd),String(hl),String(abs)); return row;
     });
     var doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
     doc.setFontSize(11); doc.setTextColor(218,16,23);
@@ -205,10 +205,17 @@
   function monthStrip(){
     var by={}; (ATT.recs||[]).forEach(function(r){ by[r.date]=r; });
     pq().forEach(function(p){ if(!by[p.date]) by[p.date]={date:p.date, status:'present', checkIn:p.time, _queued:true}; });   // v201: phone-saved punch shows as pending P
+    var sundayOn=['every','alternate'].indexOf(String((S.user&&S.user.SundayWork)||'').toLowerCase().trim())>=0;   // do they work Sundays?
     var now=new Date(), y=now.getFullYear(), m=now.getMonth(), days=new Date(y,m+1,0).getDate(), cells='';
     for(var d=1;d<=days;d++){ var ds=y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0'); var r=by[ds];
+      var dt=new Date(ds+'T00:00'), isSun=dt.getDay()===0, future=dt>now, hasPunch=r&&(String(r.status)==='present'||String(r.status)==='half');
       var cls='wW',ch=''+d; if(r){ var st=String(r.status); cls=st==='present'?'wP':st==='half'?'wL':st==='leave'?'wL':st==='absent'?'wA':'wP'; ch=(st==='half'?'½':(st==='leave'?'L':(st==='absent'?'A':'P'))); if(r._queued){ cls+=' wQ'; } }
-      else if(new Date(ds)>now){ cls='wF'; ch=''+d; }
+      else if(future){ cls='wF'; ch=''+d; }
+      // Sunday coloring: a weekly-off Sunday shows a blue date; a working Sunday with no punch shows a red L.
+      if(isSun && !hasPunch){
+        if(!sundayOn){ cls='wSun'; ch=''+d; }        // Sunday off in profile → blue date (not counted absent)
+        else if(!future){ cls='wA'; ch='L'; }        // Sunday is a working day but no punch → red L
+      }
       cells+='<span class="wd '+cls+'" title="'+ds+'">'+ch+'</span>';
     }
     return '<div class="att-month"><div class="att-mh">This month</div><div class="att-strip">'+cells+'</div><div class="att-legend">P present · ½ half · L leave · A absent</div></div>';

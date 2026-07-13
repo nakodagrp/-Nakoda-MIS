@@ -39,17 +39,13 @@
   /* Approval chain track label */
   var TRACK_LABEL = {staff:'Staff',bm:'Branch Manager',om:'Operations Manager',coop:'Co-operative'};
 
-  /* Approvers by track (parallel — all see it at once, any can approve) */
-  var TRACK_APPROVERS = {
-    staff: ['Branch Manager','Operations Manager','HR'],
-    bm:    ['Operations Manager','Director','HR'],
-    om:    ['Director','HR'],
-    coop:  ['Operations Manager','Director','HR']
-  };
+  /* All leaves go to ALL managers at once — any one can approve */
+  var ALL_APPROVERS = ['Branch Manager','Operations Manager','Director','HR'];
+  var TRACK_APPROVERS = { staff:ALL_APPROVERS, bm:ALL_APPROVERS, om:ALL_APPROVERS, coop:ALL_APPROVERS };
 
   /* ---- Leave type config ---- */
-  var LTYPES = ['CL','SL','EL','Comp Off','Unpaid'];
-  var LENT   = {CL:12,SL:6,EL:12};
+  var LTYPES = ['Casual','Paid'];
+  var LENT   = {Casual:12,Paid:12};
 
   /* ============================================================
    *  BALANCE CARDS
@@ -387,12 +383,12 @@
       if(!r||!r.ok){ box.innerHTML='<div class="empty">'+esc((r&&r.error)||'No data')+'</div>'; return; }
       var rows=r.rows||[];
       if(!rows.length){ box.innerHTML='<div class="empty">No approved leaves in '+ym+'.</div>'; return; }
-      var totals={CL:0,SL:0,EL:0,'Comp Off':0,Unpaid:0,total:0};
+      var totals={Casual:0,Paid:0,total:0};
       rows.forEach(function(row){ Object.keys(totals).forEach(function(k){ totals[k]+=(Number(row[k])||0); }); });
       var summary='<div class="lv-rpt-summary">'+Object.keys(totals).map(function(k){return '<div class="lv-rpt-tile"><div class="lv-rpt-tile-n">'+totals[k]+'</div><div class="lv-rpt-tile-l">'+k+'</div></div>';}).join('')+'</div>';
-      var table='<div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>Staff</th><th>Branch</th><th>CL</th><th>SL</th><th>EL</th><th>Comp Off</th><th>Unpaid</th><th>Total</th></tr></thead><tbody>'+
+      var table='<div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>Staff</th><th>Branch</th><th>Casual</th><th>Paid</th><th>Total</th></tr></thead><tbody>'+
         rows.map(function(row){return '<tr><td><b>'+esc(row.name)+'</b></td><td style="font-size:12.5px;color:#666">'+esc(row.branch)+'</td>'+
-          ['CL','SL','EL','Comp Off','Unpaid','total'].map(function(k){var v=Number(row[k])||0;return '<td style="text-align:center'+(v>0?';font-weight:700':'')+'">'+v+'</td>';}).join('')+'</tr>';}).join('')+
+          ['Casual','Paid','total'].map(function(k){var v=Number(row[k])||0;return '<td style="text-align:center'+(v>0?';font-weight:700':'')+'">'+v+'</td>';}).join('')+'</tr>';}).join('')+
         '</tbody></table></div>';
       box.innerHTML=summary+table;
     });
@@ -529,3 +525,4 @@
     document.head.appendChild(s);
   }
 })();
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        

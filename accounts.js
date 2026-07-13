@@ -15,7 +15,7 @@
   function renderAccounts(){
     var v=$id('page-accounts'), brs=(S.meta&&S.meta.branches)||[];
     if(!ACC.branch && !canViewAll()) ACC.branch=(S.user&&S.user.Branch)||'';
-    var tabs=isInvestor()?[['finance','Finance Sheet']]:[['finance','Finance Sheet'],['daily','Daily Entry'],['invoices','Invoices'],['expenses','Expenses'],['bank','Bank &amp; Reconcile'],['payout','Payout file']];
+    var tabs=isInvestor()?[['finance','Finance Sheet']]:[['finance','Finance Sheet'],['daily','Daily Entry'],['invoices','Invoices'],['expenses','Expenses'],['deposit','Bank Deposit'],['bank','Bank &amp; Reconcile'],['payout','Payout file']];
     v.innerHTML='<div class="page-head"><h1>Accounts</h1></div>'+
       '<div class="acc-top">'+
         (canViewAll()?'<select class="in" id="accBranch" style="max-width:170px"><option value="">All branches</option>'+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'"'+(b.BranchID===ACC.branch?' selected':'')+'>'+esc(b.BranchName)+'</option>';}).join('')+'</select>':'<span class="acc-br">'+esc(branchName(ACC.branch))+'</span>')+
@@ -30,7 +30,7 @@
     paintTab();
   }
   function paintTab(){ var b=$id('accBody'); if(!b) return; b.innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>';
-    if(ACC.tab==='finance') loadFinance(); else if(ACC.tab==='daily') loadDaily(); else if(ACC.tab==='invoices') loadInvoices(); else if(ACC.tab==='bank') loadBank(); else if(ACC.tab==='payout') loadPayout(); else loadExpenses(); }
+    if(ACC.tab==='finance') loadFinance(); else if(ACC.tab==='daily') loadDaily(); else if(ACC.tab==='invoices') loadInvoices(); else if(ACC.tab==='deposit') loadDeposits(); else if(ACC.tab==='bank') loadBank(); else if(ACC.tab==='payout') loadPayout(); else loadExpenses(); }
 
   /* ---- Finance Sheet ---- */
   function loadFinance(){ API.financeSheet(ACC.branch, ACC.ym).then(function(r){ var box=$id('accBody'); if(!box) return; if(!r||!r.ok){ box.innerHTML='<div class="empty">'+esc((r&&r.error)||'No data')+'</div>'; return; } box.innerHTML=finHtml(r); $id('finPdf').onclick=function(){ finPdf(r); }; }); }
@@ -112,10 +112,37 @@
     var body='<div class="grid2">'+brField+
       '<div class="field"><label>Date</label><input id="dpDate" class="in" type="date" value="'+(new Date().toISOString().slice(0,10))+'"></div>'+
       '<div class="field"><label>Amount deposited to bank (₹)</label><input id="dpAmt" class="in" type="number" inputmode="numeric"></div>'+
-      '<div class="field full"><label>Note (slip no. / bank)</label><input id="dpNote" class="in" type="text"></div></div>'+
-      '<div style="font-size:12px;color:#1a7f37;background:#eafaf3;border-radius:8px;padding:8px 10px;margin-top:6px">Recorded as a cash → bank transfer. Total business is unchanged.</div><div id="dpMsg"></div>';
-    openModal('Bank deposit', body, '<button class="btn" id="dpSave">Save deposit</button>');
-    $id('dpSave').onclick=function(){ var bsel=$id('dpBranch'); var bid=bsel?bsel.value:ACC.branch; if(bsel&&!bid){ $id('dpMsg').innerHTML='<div class="msg error">Please select a branch.</div>'; return; } var amt=Number($id('dpAmt').value)||0; if(amt<=0){ $id('dpMsg').innerHTML='<div class="msg error">Enter an amount.</div>'; return; } this.disabled=true; API.saveDeposit({branchId:bid,date:$id('dpDate').value,amount:amt,notes:$id('dpNote').value}).then(function(r){ if(r&&r.ok){ closeModal(); toast('Deposit recorded'); } else { $id('dpMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; var b=$id('dpSave'); if(b) b.disabled=false; } }); };
+      '<div class="field"><label>Slip no. / bank</label><input id="dpSlip" class="in" type="text" placeholder="e.g. slip-8821 · HDFC"></div>'+
+      '<div class="field full"><label>Note (optional)</label><input id="dpNote" class="in" type="text"></div></div>'+
+      '<div style="font-size:12px;color:#185fa5;background:#e6f1fb;border-radius:8px;padding:8px 10px;margin-top:6px">Sent to the accountants to verify. Once verified it becomes a cash → bank transfer (total business unchanged).</div><div id="dpMsg"></div>';
+    openModal('Bank deposit', body, '<button class="btn" id="dpSave">Save &amp; send</button>');
+    $id('dpSave').onclick=function(){ var bsel=$id('dpBranch'); var bid=bsel?bsel.value:ACC.branch; if(bsel&&!bid){ $id('dpMsg').innerHTML='<div class="msg error">Please select a branch.</div>'; return; } var amt=Number($id('dpAmt').value)||0; if(amt<=0){ $id('dpMsg').innerHTML='<div class="msg error">Enter an amount.</div>'; return; } this.disabled=true; API.saveDeposit({branchId:bid,date:$id('dpDate').value,amount:amt,slipNo:$id('dpSlip').value,notes:$id('dpNote').value}).then(function(r){ if(r&&(r.ok||r.offline)){ closeModal(); toast(r.offline?'Saved offline — will sync':'Deposit sent for verification'); if(ACC.tab==='deposit') loadDeposits(); } else { $id('dpMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; var b=$id('dpSave'); if(b) b.disabled=false; } }); };
+  }
+  /* ---- Bank Deposit (record → verify) ---- */
+  function loadDeposits(){
+    var actions=canEnter()?'<div class="fin-actions"><button class="btn" id="depAdd">🏦 + Bank deposit</button></div>':'';
+    API.listDeposits(ACC.branch,ACC.ym).then(function(r){ var box=$id('accBody'); if(!box) return;
+      if(!r||!r.ok){ box.innerHTML='<div class="empty">'+esc((r&&r.error)||'')+'</div>'; return; }
+      var list=r.deposits||[], canV=!!r.canVerify;
+      var pend=list.filter(function(d){return d.status==='pending';}).length;
+      var verified=list.filter(function(d){return d.status==='approved';});
+      var totV=verified.reduce(function(a,d){return a+(d.amount||0);},0);
+      var pills='<div style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 14px">'+
+        '<div style="background:#faf4e2;border-radius:10px;padding:8px 13px"><b style="color:#854f0b">'+pend+'</b> <span style="font-size:11px;color:#7a5b00">pending</span></div>'+
+        '<div style="background:#eafaf3;border-radius:10px;padding:8px 13px"><b style="color:#1a7f37">'+verified.length+'</b> <span style="font-size:11px;color:#1a7f37">verified</span></div>'+
+        '<div style="background:#f4f6f8;border-radius:10px;padding:8px 13px"><b>₹'+money(totV)+'</b> <span style="font-size:11px;color:#888">verified MTD</span></div></div>';
+      function chip(s){ return s==='approved'?'<span style="background:#eaf7ef;color:#1a8f4c;font-size:12px;font-weight:600;padding:3px 11px;border-radius:20px">✓ verified</span>':s==='rejected'?'<span style="background:#fdecec;color:#b23b3b;font-size:12px;font-weight:600;padding:3px 11px;border-radius:20px">✗ rejected</span>':'<span style="background:#faf4e2;color:#854f0b;font-size:12px;font-weight:600;padding:3px 11px;border-radius:20px">pending</span>'; }
+      var body=list.map(function(d){
+        var act=(canV&&d.status==='pending')
+          ? '<button class="btn ghost sm" data-vf="'+esc(d.ledId)+'" style="color:#1a8f4c;border-color:#1a8f4c">Verify</button> <button class="btn ghost sm" data-rj="'+esc(d.ledId)+'" style="color:#b23b3b;border-color:#b23b3b">Reject</button>'
+          : (d.verifiedBy?('<span style="font-size:12px;color:#888">by '+esc(d.verifiedBy)+'</span>'):'');
+        return '<tr><td>'+esc(d.date)+'</td><td>'+esc(branchName(d.branchId))+'</td><td>₹'+money(d.amount)+'</td><td>'+(d.slipUrl?'<a href="'+esc(d.slipUrl)+'" target="_blank">📎 slip</a> ':'')+esc(d.notes||'')+'</td><td>'+esc(d.recordedBy||'')+'</td><td>'+chip(d.status)+'</td><td style="text-align:right">'+act+'</td></tr>';
+      }).join('');
+      box.innerHTML=actions+pills+'<div class="card"><div class="table-wrap swipe"><table><thead><tr><th>Date</th><th>Branch</th><th>Amount</th><th>Slip / note</th><th>Recorded by</th><th>Status</th><th></th></tr></thead><tbody>'+(body||'<tr><td class="empty" colspan="7">No deposits this month.</td></tr>')+'</tbody></table></div></div>';
+      var add=$id('depAdd'); if(add) add.onclick=openDepositForm;
+      box.querySelectorAll('[data-vf]').forEach(function(b){ b.onclick=function(){ b.disabled=true; API.verifyDeposit(b.getAttribute('data-vf')).then(function(x){ if(x&&x.ok){ toast('Verified'); loadDeposits(); } else { toast((x&&x.error)||'Failed',true); b.disabled=false; } }); }; });
+      box.querySelectorAll('[data-rj]').forEach(function(b){ b.onclick=function(){ var why=prompt('Reject reason (optional):'); if(why===null) return; b.disabled=true; API.rejectDeposit(b.getAttribute('data-rj'),why||'').then(function(x){ if(x&&x.ok){ toast('Rejected'); loadDeposits(); } else { toast((x&&x.error)||'Failed',true); b.disabled=false; } }); }; });
+    });
   }
   function openDailyForm(){
     var brs=(S.meta&&S.meta.branches)||[];
