@@ -551,6 +551,18 @@ table.g-stock{border-collapse:collapse;font-size:11px}
 .pm2-tabs{display:flex;gap:16px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin-bottom:10px}
 .pm2-tabs span{font-size:13px;color:#777;padding:6px 0;cursor:pointer}
 .pm2-tabs span.on{color:var(--red);font-weight:700;border-bottom:2px solid var(--red)}
+.pm2-tabs.sub{gap:12px;font-size:12px}
+/* ---- Payment Requests (vendor bill / voucher) ---- */
+.pr-types{display:flex;gap:12px;flex-wrap:wrap}
+.pr-type{flex:1;min-width:180px;border:2px solid var(--line);border-radius:12px;padding:12px 14px;cursor:pointer;transition:.12s;display:flex;flex-direction:column;gap:2px}
+.pr-type:hover{border-color:#bbb}
+.pr-type.on{border-color:var(--red);background:var(--red-soft)}
+.pr-type b{font-size:14px}
+.pr-type span{font-size:11.5px;color:#888}
+.pr-detail{display:grid;grid-template-columns:1fr 1fr;gap:6px 18px;margin-bottom:12px}
+.pr-kv{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;border-bottom:1px dashed var(--line);padding:4px 0}
+.pr-kv span{color:#888}
+@media(max-width:560px){.pr-detail{grid-template-columns:1fr}}
 .pm2-filt{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:8px}
 .pm2-filt label{font-size:10.5px;color:#888;display:block;margin-bottom:3px}
 @media(max-width:620px){.pm2-filt{grid-template-columns:1fr 1fr}}

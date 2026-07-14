@@ -6,7 +6,7 @@
   function canUser(){ return canMgr()||lvl()==='BRANCH_MGR'||['Lab Technician','Pathologist','CRM'].indexOf(S.user&&S.user.Role)>=0; }
   function money(n){ return Math.round(Number(n)||0).toLocaleString('en-IN'); }
   function today(){ return new Date().toISOString().slice(0,10); }
-  var INV={branch:'',tab:'stock',items:[],vendors:[]};
+  var INV={branch:'',tab:'stock',items:[],vendors:[],cnMode:'auto'};
   var STAGES=[['raised','Raised'],['given','Given'],['received','Received'],['billed','Bill'],['paid','Pay']];
 
   function renderInventory(){
@@ -41,8 +41,16 @@
     $id('gYm').onchange=function(){ INV.stockYm=this.value; loadStock(); };
   }); }
 
-  /* ---- Consumption register ---- */
-  function loadConsume(){ API.invConsumption(INV.branch,today()).then(function(r){ var box=$id('invBody'); if(!box) return; if(!r||!r.ok){ box.innerHTML='<div class="empty">'+esc((r&&r.error)||'')+'</div>'; return; }
+  /* ---- Consumption register (Auto from tests  +  Manual ERP-style) ---- */
+  function loadConsume(){ var box=$id('invBody'); if(!box) return;
+    box.innerHTML='<div class="pm2-tabs sub" id="cnModeTabs" style="margin-bottom:10px">'+
+        '<span data-m="auto"'+(INV.cnMode==='auto'?' class="on"':'')+'>Auto (from tests)</span>'+
+        '<span data-m="manual"'+(INV.cnMode==='manual'?' class="on"':'')+'>Manual entry</span></div>'+
+      '<div id="cnModeBody"><div class="center-load"><span class="loader dark"></span> Loading…</div></div>';
+    box.querySelectorAll('#cnModeTabs span').forEach(function(s){ s.onclick=function(){ INV.cnMode=s.getAttribute('data-m'); box.querySelectorAll('#cnModeTabs span').forEach(function(z){z.classList.remove('on');}); s.classList.add('on'); (INV.cnMode==='manual'?loadConsumeManual:loadConsumeAuto)(); }; });
+    (INV.cnMode==='manual'?loadConsumeManual:loadConsumeAuto)();
+  }
+  function loadConsumeAuto(){ API.invConsumption(INV.branch,today()).then(function(r){ var box=$id('cnModeBody'); if(!box) return; if(!r||!r.ok){ box.innerHTML='<div class="empty">'+esc((r&&r.error)||'')+'</div>'; return; }
     var rows=r.rows||[];
     box.innerHTML='<div class="acc-top"><input class="in" id="cnDate" type="date" value="'+r.date+'" style="max-width:160px"><span style="align-self:center;font-size:12px;color:#888">Tests '+r.tests+' · Patients '+r.patients+'</span></div>'+
       '<div class="table-wrap"><table><thead><tr><th>Item</th><th>Map</th><th>Billed</th><th>QC</th><th>Repeat</th><th>Per use</th><th>Consumed</th><th>%QC</th><th>%Waste</th></tr></thead><tbody id="cnBody">'+
@@ -59,6 +67,39 @@
   function bindCn(){ $id('cnBody')&&$id('cnBody').querySelectorAll('.cn-i').forEach(function(inp){ inp.oninput=function(){ var tr=inp.closest('tr'), i=tr.getAttribute('data-i'); INV._cn[i][inp.getAttribute('data-f')]=Number(inp.value)||0; tr.outerHTML=cnRow(INV._cn[i],i); bindCn(); }; }); }
   function saveCn(){ var d=$id('cnDate').value; this.disabled=true; this.textContent='Saving…';
     API.saveConsumption(INV.branch,d,INV._cn.map(function(x){return {itemId:x.itemId,billed:x.billed,qc:x.qc,repeat:x.repeat,perUse:x.perUse};})).then(function(r){ if(r&&r.ok){ toast('Consumption saved · stock deducted'); } else toast((r&&r.error)||'Failed',true); var s=$id('cnSave'); if(s){s.disabled=false;s.textContent='Save → deduct stock';} }); }
+
+  /* ---- Manual consumption (ERP-style: pick any item + type qty consumed) ---- */
+  var MCON=[];
+  function loadConsumeManual(){ if(!INV.branch){ var b0=$id('cnModeBody'); if(b0) b0.innerHTML='<div class="empty">Pick a branch first.</div>'; return; }
+    API.listManualConsumption(INV.branch,today()).then(function(r){ var box=$id('cnModeBody'); if(!box) return; if(!r||!r.ok){ box.innerHTML='<div class="empty">'+esc((r&&r.error)||'')+'</div>'; return; }
+      INV.mItems=r.items||[]; MCON=(r.rows&&r.rows.length)?r.rows.map(function(x){return {itemId:x.itemId,qty:x.qty};}):[{itemId:'',qty:''}];
+      box.innerHTML='<div class="acc-top"><input class="in" id="mcDate" type="date" value="'+r.date+'" style="max-width:160px">'+
+          '<span style="align-self:center;font-size:12px;color:#888">Enter the actual quantity used today, item by item.</span></div>'+
+        '<div class="table-wrap"><table><thead><tr><th style="min-width:180px">Item</th><th style="width:120px">Qty consumed</th><th style="width:40px"></th></tr></thead><tbody id="mcBody"></tbody></table></div>'+
+        '<button type="button" class="btn ghost sm" id="mcAdd" style="margin-top:8px">+ Add item</button>'+
+        (r.canEnter?'<div class="fin-actions" style="margin-top:10px"><button class="btn" id="mcSave">Save → deduct stock</button></div>':'')+'<div id="mcMsg"></div>';
+      $id('mcDate').onchange=function(){ loadConsumeManualDate(this.value); };
+      $id('mcAdd').onclick=function(){ readMc(); MCON.push({itemId:'',qty:''}); paintMc(); };
+      var sv=$id('mcSave'); if(sv) sv.onclick=saveMc;
+      paintMc();
+    }); }
+  function loadConsumeManualDate(d){ API.listManualConsumption(INV.branch,d).then(function(r){ if(r&&r.ok){ MCON=(r.rows&&r.rows.length)?r.rows.map(function(x){return {itemId:x.itemId,qty:x.qty};}):[{itemId:'',qty:''}]; paintMc(); } }); }
+  function mcOpts(sel){ return '<option value="">— item —</option>'+(INV.mItems||[]).map(function(x){ var u=x.unit?(' ('+x.unit+')'):''; return '<option value="'+esc(x.itemId)+'"'+(x.itemId===sel?' selected':'')+'>'+esc(x.name)+esc(u)+'</option>'; }).join(''); }
+  function paintMc(){ var tb=$id('mcBody'); if(!tb) return;
+    tb.innerHTML=MCON.map(function(m,i){ return '<tr data-i="'+i+'"><td><select class="in mc-id" data-i="'+i+'">'+mcOpts(m.itemId)+'</select></td>'+
+      '<td><input class="in mc-q" data-i="'+i+'" type="number" min="0" value="'+(m.qty!==''&&m.qty!=null?m.qty:'')+'" style="max-width:100px"></td>'+
+      '<td><button type="button" class="bmini" data-rm="'+i+'">✕</button></td></tr>'; }).join('');
+    tb.querySelectorAll('.mc-id').forEach(function(s){ s.onchange=function(){ MCON[+s.getAttribute('data-i')].itemId=s.value; }; });
+    tb.querySelectorAll('.mc-q').forEach(function(q){ q.oninput=function(){ MCON[+q.getAttribute('data-i')].qty=q.value; }; });
+    tb.querySelectorAll('[data-rm]').forEach(function(b){ b.onclick=function(){ readMc(); MCON.splice(+b.getAttribute('data-rm'),1); if(!MCON.length) MCON=[{itemId:'',qty:''}]; paintMc(); }; });
+  }
+  function readMc(){ var tb=$id('mcBody'); if(!tb) return; tb.querySelectorAll('tr').forEach(function(row){ var i=+row.getAttribute('data-i'); MCON[i]={itemId:row.querySelector('.mc-id').value,qty:row.querySelector('.mc-q').value}; }); }
+  function saveMc(){ readMc(); var d=$id('mcDate').value;
+    var seen={}, dup=false; var lines=MCON.filter(function(m){return m.itemId;}).map(function(m){ if(seen[m.itemId]) dup=true; seen[m.itemId]=1; return {itemId:m.itemId,qty:Number(m.qty)||0}; });
+    if(dup){ $id('mcMsg').innerHTML='<div class="msg error">Same item listed twice — merge them into one row.</div>'; return; }
+    if(!lines.length){ $id('mcMsg').innerHTML='<div class="msg error">Add at least one item.</div>'; return; }
+    this.disabled=true; this.textContent='Saving…'; var self=this;
+    API.saveManualConsumption(INV.branch,d,lines).then(function(r){ if(r&&r.ok){ toast('Manual consumption saved · stock deducted'); $id('mcMsg').innerHTML=''; loadConsumeManualDate(d); } else { $id('mcMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; } if(self){ self.disabled=false; self.textContent='Save → deduct stock'; } }); }
 
   /* ---- Indents ---- */
   function loadIndents(){ API.listIndents(INV.branch).then(function(r){ var box=$id('invBody'); if(!box) return; if(!r||!r.ok){ box.innerHTML='<div class="empty">'+esc((r&&r.error)||'')+'</div>'; return; }
