@@ -14,6 +14,7 @@
         '<td>'+esc(b.Mobile||b.Phone||'—')+'</td>'+
         '<td>'+esc(b.AccountNumber||'—')+'</td>'+
         '<td>'+esc(b.IFSC||'—')+'</td>'+
+        '<td>'+(b.WaTokenSet?'<span class="badge" style="background:#1a7f3722;color:#1a7f37">Key ✓</span>':'<span style="color:#bbb">—</span>')+'</td>'+
         '<td>'+statusBadge(b.Status)+'</td>'+
         '<td><button class="btn ghost sm" onclick="openBranchModal(\''+esc(b.BranchID)+'\')">Edit</button></td></tr>';
     });
@@ -54,6 +55,16 @@
       '<div class="field"><label>Bank name</label><input id="b_bank" value="'+esc(b.BankName||'')+'"></div>'+
       '<div class="field"><label>IFSC</label><input id="b_ifsc" value="'+esc(b.IFSC||'')+'"></div>'+
       '<div class="field full"><label>Account number</label><input id="b_acct" value="'+esc(b.AccountNumber||'')+'"></div>'+
+      '<div class="section-title full">WhatsApp Official API (whatsbizapi.com) — this branch\'s number</div>'+
+      '<div class="field full"><label>API key / token '+(b.WaTokenSet?'<span style="color:#1a7f37">— saved ✓</span>':'')+'</label>'+
+        '<input id="b_watoken" type="password" autocomplete="off" placeholder="'+(b.WaTokenSet?'Leave blank to keep current key · type CLEAR to remove':'Paste the token from whatsbizapi.com')+'">'+
+        '<div style="font-size:11px;color:#999;margin-top:4px">Each branch has its own WhatsApp number, so paste that branch\'s own key here. The key is stored on the server and never shown again.</div></div>'+
+      '<div class="field"><label>Card template name</label><input id="b_watpl" value="'+esc(b.WaTemplateName||'')+'" placeholder="membership_card"></div>'+
+      '<div class="field"><label>Template language</label><input id="b_walang" value="'+esc(b.WaTemplateLang||'')+'" placeholder="en"></div>'+
+      '<div class="field full"><label>Test this key</label>'+
+        '<div style="display:flex;gap:8px"><input id="b_watestph" inputmode="numeric" placeholder="Your own mobile (gets a test message)" style="flex:1">'+
+        '<button type="button" class="btn ghost" id="b_watest" style="white-space:nowrap">📶 Send test</button></div>'+
+        '<div id="b_watestStatus" style="font-size:12px;color:#666;margin-top:5px"></div></div>'+
       (editing?'<div class="field full"><label>Status</label><select id="b_status"><option'+(b.Status==='Active'?' selected':'')+'>Active</option><option'+(b.Status==='Inactive'?' selected':'')+'>Inactive</option></select></div>':'')+
     '</div>';
     openModal(editing?('Edit · '+b.BranchName):'Add Branch', body,
@@ -74,6 +85,22 @@
       fr.readAsDataURL(f);
     };
 
+    var wt=document.getElementById('b_watest');
+    if(wt) wt.onclick=function(){
+      var ph=(document.getElementById('b_watestph').value||'').replace(/\D/g,'');
+      var st=document.getElementById('b_watestStatus');
+      if(ph.length<10){ toast('Enter the mobile number that should receive the test message.',true); return; }
+      var override=(document.getElementById('b_watoken').value||'').trim();
+      if(override==='CLEAR') override='';
+      if(!editing && !override){ toast('Paste the API key first (new branch has no saved key yet).',true); return; }
+      wt.disabled=true; wt.innerHTML='<span class="loader"></span>'; st.textContent='Contacting whatsbizapi.com…';
+      API.waTest(editing?id:'', ph, override).then(function(r){
+        wt.disabled=false; wt.textContent='📶 Send test';
+        if(r.ok){ st.innerHTML='<span style="color:#1a7f37">✓ '+esc(r.message||'Test message sent.')+'</span>'; toast('Test sent — check WhatsApp on that phone.'); }
+        else { st.innerHTML='<span style="color:#C0392B">✗ '+esc(r.error||'Test failed')+'</span>'; toast(r.error||'Test failed',true); }
+      }).catch(function(){ wt.disabled=false; wt.textContent='📶 Send test'; st.textContent='Network error — try again.'; });
+    };
+
     var ul=document.getElementById('b_useLoc');
     if(ul) ul.onclick=function(){ if(!navigator.geolocation){ toast('Location not supported on this device.',true); return; } ul.textContent='Locating…';
       navigator.geolocation.getCurrentPosition(function(pos){ document.getElementById('b_lat').value=pos.coords.latitude.toFixed(6); document.getElementById('b_lng').value=pos.coords.longitude.toFixed(6); ul.textContent='📍 Captured ✓'; },
@@ -84,7 +111,8 @@
       var data={ BranchName:val('b_name'), City:val('b_city'), Phone:val('b_phone'), Mobile:val('b_mobile'),
         Address:val('b_address'), PartnerEmpID:partnerSel.value, PartnerName:partnerSel.value?(partnerSel.options[partnerSel.selectedIndex].text.replace(/\s*\(.*\)$/,'')):'',
         BankName:val('b_bank'), IFSC:val('b_ifsc'), AccountNumber:val('b_acct'), LetterheadUrl:lhUrl, LetterheadFileId:lhFileId,
-        Latitude:val('b_lat'), Longitude:val('b_lng'), GeoRadius:val('b_radius') };
+        Latitude:val('b_lat'), Longitude:val('b_lng'), GeoRadius:val('b_radius'),
+        WaApiToken:(document.getElementById('b_watoken').value||'').trim(), WaTemplateName:val('b_watpl'), WaTemplateLang:val('b_walang') };
       if(editing) data.Status=val('b_status');
       if(!data.BranchName){ toast('Branch name is required.',true); return; }
       if(!editing){ data.BranchID=val('b_code'); if(!data.BranchID){ toast('Branch code is required.',true); return; } }

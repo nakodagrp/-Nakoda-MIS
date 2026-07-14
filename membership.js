@@ -192,6 +192,9 @@
           '<div style="font-size:11.5px;color:#888;margin:10px 0 4px">Option 2 · Direct chat with customer</div>'+
           '<div style="display:flex;gap:8px"><input id="cdNum" value="'+esc(c.mobile||'')+'" style="flex:1;border:1px solid #e3e5ea;border-radius:8px;padding:9px" inputmode="numeric"><button class="btn ghost" id="cdChat" style="white-space:nowrap">💬 Open Chat</button></div>'+
           '<div style="font-size:11px;color:#999;font-style:italic;margin-top:4px">Image goes into your clipboard — paste it inside WhatsApp.</div>'+
+          '<div style="font-size:11.5px;color:#888;margin:10px 0 4px">Option 3 · Official WhatsApp API — sends card + message automatically from the branch\'s WhatsApp number</div>'+
+          '<button class="btn" id="cdApiSend" style="width:100%;background:#1a7f37">🚀 Send via Official API</button>'+
+          '<div id="cdApiStatus" style="font-size:11px;color:#999;font-style:italic;margin-top:4px">Uses this branch\'s approved template — the text box above does not apply to this option.</div>'+
         '</div>'):'';
       var benefits=(t&&t.benefitsText)?('<div style="margin-top:10px;white-space:pre-line;background:#f6f7f9;border-radius:8px;padding:10px;font-size:12.5px">'+esc(t.benefitsText)+'</div>'):'';
       var actions='<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn ghost" id="cdDl" style="flex:1;min-width:110px">⬇ Download Image</button>'+
@@ -204,6 +207,19 @@
       var markSent=function(){ if(r.canIssue) API.markCardSent(c.cardNumber).catch(function(){}); };
       var sh=document.getElementById('cdShare'); if(sh) sh.onclick=function(){ shareSystem(cv,c,(document.getElementById('cdMsg')||{}).value||msg); markSent(); };
       var ch=document.getElementById('cdChat'); if(ch) ch.onclick=function(){ openChatWA(cv,(document.getElementById('cdNum').value||'').replace(/\D/g,''),(document.getElementById('cdMsg')||{}).value||msg); markSent(); };
+      var ap=document.getElementById('cdApiSend'); if(ap) ap.onclick=function(){
+        var phone=(document.getElementById('cdNum').value||'').replace(/\D/g,'')||String(c.mobile||'');
+        if(phone.replace(/\D/g,'').length<10){ toast('Enter the customer\'s mobile number first.',true); return; }
+        if(!confirm('Send this membership card on WhatsApp to '+phone+' via the official API?')) return;
+        var st=document.getElementById('cdApiStatus');
+        ap.disabled=true; ap.innerHTML='<span class="loader"></span> Sending…'; st.textContent='Uploading card image & calling WhatsApp…';
+        var b64=cv.toDataURL('image/png').split(',')[1];
+        API.waSendCard(c.cardNumber, b64, phone).then(function(rr){
+          ap.disabled=false; ap.textContent='🚀 Send via Official API';
+          if(rr.ok){ st.innerHTML='<span style="color:#1a7f37">✓ '+esc(rr.message||'Sent!')+'</span>'; toast('Card sent on WhatsApp ✓'); }
+          else { st.innerHTML='<span style="color:#C0392B">✗ '+esc(rr.error||'Failed')+'</span>'; toast(rr.error||'Send failed',true); }
+        }).catch(function(){ ap.disabled=false; ap.textContent='🚀 Send via Official API'; st.textContent='Network error — try again.'; toast('Network error — sending via API needs internet.',true); });
+      };
       var ac=document.getElementById('cdActivate'); if(ac) ac.onclick=function(){ API.markCardActivated(c.cardNumber).then(function(rr){ if(rr.ok){ closeModal(); toast('Marked activated'); renderMembershipCards(); } else toast(rr.error,true); }); };
       var rn=document.getElementById('cdRenew'); if(rn) rn.onclick=function(){ if(!confirm('Renew this card? A new card with a fresh '+(t?t.validityMonths:12)+'-month validity will be issued.')) return; API.renewCard(c.cardNumber).then(function(rr){ if(rr.ok){ closeModal(); toast('Renewed: '+rr.card.cardNumber); renderMembershipCards(); } else toast(rr.error,true); }); };
       var cn=document.getElementById('cdCancel'); if(cn) cn.onclick=function(){ var why=prompt('Reason for cancelling?',''); if(why===null) return; API.cancelCard(c.cardNumber,why).then(function(rr){ if(rr.ok){ closeModal(); toast('Card cancelled'); renderMembershipCards(); } else toast(rr.error,true); }); };
