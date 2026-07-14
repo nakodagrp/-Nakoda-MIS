@@ -56,13 +56,13 @@
     saveItem:1,deleteItem:1,saveVendor:1,deleteVendor:1,saveConsumption:1,saveManualConsumption:1,raiseIndent:1,advanceIndent:1,saveAudit:1,approveAudit:1,
     createPayRequest:1,setPayRequest:1,
     saveSection:1,deleteSection:1,saveVideo:1,deleteVideo:1,submitQuiz:1,saveAsset:1,deleteAsset:1,
-    login:1,validate:1,logout:1,uploadFile:1,importOldCards:1,attachSelfie:1,waTest:1,waSendCard:1,
+    login:1,validate:1,logout:1,uploadFile:1,importOldCards:1,attachSelfie:1,waTest:1,waSendCard:1,saveWaTemplate:1,waTestTemplate:1,
     submitSuggestion:1,replySuggestion:1,saveFixedAsset:1,deleteFixedAsset:1,completeFollowup:1};
   /* Writes that already do their own optimistic queueing inside the method (don't double-queue here). */
   var SELF_QUEUE={createEmployee:1,updateEmployee:1,setStatus:1,issueCard:1,renewCard:1,cancelCard:1,markCardSent:1,markCardActivated:1,
     createTask:1,updateTask:1,setTaskStatus:1,deleteTask:1,createCalEntry:1,updateCalEntry:1,startInstance:1,advanceStage:1,attachSelfie:1};
   /* Writes that MUST stay online (auth, server-computed, exact-time, bulk). */
-  var NOQUEUE={login:1,validate:1,logout:1,changePassword:1,resetPassword:1,checkIn:1,checkOut:1,runPayroll:1,uploadFile:1,importOldCards:1,submitQuiz:1,waTest:1,waSendCard:1};
+  var NOQUEUE={login:1,validate:1,logout:1,changePassword:1,resetPassword:1,checkIn:1,checkOut:1,runPayroll:1,uploadFile:1,importOldCards:1,submitQuiz:1,waTest:1,waSendCard:1,saveWaTemplate:1,waTestTemplate:1};
   function rk(action,payload){ var p=Object.assign({},payload||{}); delete p.token; return 'rc:'+action+':'+JSON.stringify(p); }
   function noTok(payload){ var p=Object.assign({},payload||{}); delete p.token; return p; }
   function enqueue(action,payload){ return obAdd({action:action,payload:noTok(payload),ts:Date.now()}).then(function(){ emit(); return {ok:true,offline:true}; }); }
@@ -233,6 +233,15 @@
     waSendCard:function(cardNumber,imageBase64,phone){
       if(!navigator.onLine) return Promise.resolve({ok:false,error:'Sending via the WhatsApp API needs an internet connection.'});
       return call('waSendCard',{token:getToken(),cardNumber:cardNumber,imageBase64:imageBase64,phone:phone||''}).then(function(r){ if(r.ok) API.refreshCards(); return r; });
+    },
+    listWaTemplates:function(){ return call('listWaTemplates',{token:getToken()}); },
+    saveWaTemplate:function(data){
+      if(!navigator.onLine) return Promise.resolve({ok:false,error:'Saving templates needs an internet connection.'});
+      return call('saveWaTemplate',{token:getToken(),data:data});
+    },
+    waTestTemplate:function(branchId,tplId,phone,params,mediaUrl){
+      if(!navigator.onLine) return Promise.resolve({ok:false,error:'Testing templates needs an internet connection.'});
+      return call('waTestTemplate',{token:getToken(),branchId:branchId,tplId:tplId,phone:phone,params:params||[],mediaUrl:mediaUrl||''});
     },
 
     listCardTypes:function(){ return call('listCardTypes',{token:getToken()}).then(function(r){ if(r.ok) kvSet('cardtypes',r.types); return r; }).catch(function(){ return kvGet('cardtypes').then(function(t){ return {ok:true,types:t||[]}; }); }); },

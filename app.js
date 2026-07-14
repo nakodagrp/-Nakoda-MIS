@@ -193,6 +193,7 @@ function applyPerms(){
   var canList=S.perms.canViewAll||S.perms.level==='BRANCH_MGR'||S.perms.level==='BRANCH_VIEW';
   document.querySelectorAll('[data-page="employees"]').forEach(function(n){ n.classList.toggle('hidden',!canList); });
   document.querySelectorAll('[data-page="branches"]').forEach(function(n){ n.classList.toggle('hidden',!S.perms.canManageAll); });
+  document.querySelectorAll('[data-page="watemplates"]').forEach(function(n){ n.classList.toggle('hidden',!S.perms.canManageAll); });
   document.querySelectorAll('[data-page="cards"]').forEach(function(n){ n.classList.remove('hidden'); });
   document.querySelectorAll('[data-page="cardstatus"]').forEach(function(n){ n.classList.remove('hidden'); });
   $('addEmpBtn').classList.toggle('hidden', !S.perms.canCreate);
@@ -244,7 +245,7 @@ var currentPage='dashboard';
 function go(page){
   currentPage=page;
   document.querySelectorAll('.nav-item').forEach(function(n){ n.classList.toggle('active', n.getAttribute('data-page')===page); });
-  ['dashboard','tasks','calendar','attendance','leave','field','policy','training','assets','fixedassets','inventory','payreq','payroll','accounts','recurring','crm','builder','taskmon','staffperf','marketing','qc','kpiadmin','employees','profile','branches','cards','cardstatus','suggest','mdinbox'].forEach(function(p){ $('page-'+p).classList.toggle('hidden',p!==page); });
+  ['dashboard','tasks','calendar','attendance','leave','field','policy','training','assets','fixedassets','inventory','payreq','payroll','accounts','recurring','crm','builder','taskmon','staffperf','marketing','qc','kpiadmin','employees','profile','branches','watemplates','cards','cardstatus','suggest','mdinbox'].forEach(function(p){ $('page-'+p).classList.toggle('hidden',p!==page); });
   if(page==='dashboard') loadDashboard();
   if(page==='tasks' && window.renderMyTasks) window.renderMyTasks();
   if(page==='calendar' && window.renderCalendar) window.renderCalendar();
@@ -272,13 +273,14 @@ function go(page){
   if(page==='employees') loadEmployees();
   if(page==='profile') loadProfile();
   if(page==='branches' && window.renderBranches) window.renderBranches();
+  if(page==='watemplates' && window.renderWaTemplates) window.renderWaTemplates();
   if(page==='cards' && window.renderMembershipCards) window.renderMembershipCards();
   if(page==='cardstatus' && window.renderCardStatus) window.renderCardStatus();
   highlightBottomNav();
 }
 
 /* ---------- mobile bottom navigation + "More" sheet ---------- */
-var NAVDEF=[['dashboard','▦','Home'],['tasks','✓','Tasks'],['calendar','📅','Calendar'],['attendance','🕒','Attend'],['crm','📁','CRM'],['builder','🔧','Builder'],['recurring','🔁','Recurring'],['taskmon','📋','Monitor'],['staffperf','📈','Performance'],['marketing','📣','Marketing'],['qc','🧪','QC'],['kpiadmin','🎯','KPI'],['employees','👥','Staff'],['leave','🌴','Leave'],['field','🚗','Field'],['policy','📋','Policy'],['training','🎓','Training'],['assets','🗂','Information'],['fixedassets','🛠','Asset Mgmt'],['inventory','📦','Inventory'],['payreq','🧾','Payments'],['payroll','💰','Payroll'],['accounts','📊','Accounts'],['cards','🏷','Cards'],['cardstatus','✅','Status'],['suggest','✉','Suggest'],['mdinbox','📨','MD Inbox'],['branches','🏢','Branches'],['profile','⚙','Profile']];
+var NAVDEF=[['dashboard','▦','Home'],['tasks','✓','Tasks'],['calendar','📅','Calendar'],['attendance','🕒','Attend'],['crm','📁','CRM'],['builder','🔧','Builder'],['recurring','🔁','Recurring'],['taskmon','📋','Monitor'],['staffperf','📈','Performance'],['marketing','📣','Marketing'],['qc','🧪','QC'],['kpiadmin','🎯','KPI'],['employees','👥','Staff'],['leave','🌴','Leave'],['field','🚗','Field'],['policy','📋','Policy'],['training','🎓','Training'],['assets','🗂','Information'],['fixedassets','🛠','Asset Mgmt'],['inventory','📦','Inventory'],['payreq','🧾','Payments'],['payroll','💰','Payroll'],['accounts','📊','Accounts'],['cards','🏷','Cards'],['cardstatus','✅','Status'],['suggest','✉','Suggest'],['mdinbox','📨','MD Inbox'],['branches','🏢','Branches'],['watemplates','💬','WA Templates'],['profile','⚙','Profile']];
 function visibleNav(){ return NAVDEF.filter(function(d){ var el=document.querySelector('.nav-item[data-page="'+d[0]+'"]'); return el && !el.classList.contains('hidden'); }); }
 function navBtn(d){ return '<button data-page="'+d[0]+'"><span class="ic">'+d[1]+'</span><span>'+d[2]+'</span></button>'; }
 function buildMobileBottomNav(){

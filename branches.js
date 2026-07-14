@@ -59,8 +59,9 @@
       '<div class="field full"><label>API key / token '+(b.WaTokenSet?'<span style="color:#1a7f37">— saved ✓</span>':'')+'</label>'+
         '<input id="b_watoken" type="password" autocomplete="off" placeholder="'+(b.WaTokenSet?'Leave blank to keep current key · type CLEAR to remove':'Paste the token from whatsbizapi.com')+'">'+
         '<div style="font-size:11px;color:#999;margin-top:4px">Each branch has its own WhatsApp number, so paste that branch\'s own key here. The key is stored on the server and never shown again.</div></div>'+
-      '<div class="field"><label>Card template name</label><input id="b_watpl" value="'+esc(b.WaTemplateName||'')+'" placeholder="membership_card"></div>'+
-      '<div class="field"><label>Template language</label><input id="b_walang" value="'+esc(b.WaTemplateLang||'')+'" placeholder="en"></div>'+
+      '<div class="field full"><label>Card template for this branch</label><select id="b_watpl"><option value="">— Auto: "Membership card" template from the WhatsApp Templates menu —</option></select>'+
+        '<input type="hidden" id="b_walang" value="'+esc(b.WaTemplateLang||'')+'">'+
+        '<div style="font-size:11px;color:#999;margin-top:4px">Templates are managed in the <b>WhatsApp Templates</b> menu. Pick one here only if this branch must use a different template than the rest.</div></div>'+
       '<div class="field full"><label>Test this key</label>'+
         '<div style="display:flex;gap:8px"><input id="b_watestph" inputmode="numeric" placeholder="Your own mobile (gets a test message)" style="flex:1">'+
         '<button type="button" class="btn ghost" id="b_watest" style="white-space:nowrap">📶 Send test</button></div>'+
@@ -84,6 +85,19 @@
       };
       fr.readAsDataURL(f);
     };
+
+    /* fill template override dropdown from the WhatsApp Templates registry */
+    (function(){
+      var sel=document.getElementById('b_watpl'); if(!sel) return;
+      var cur=String(b.WaTemplateName||'');
+      function addOpt(name,lang,selq){ var o=document.createElement('option'); o.value=name; o.textContent=name+(lang?(' ('+lang+')'):''); o.setAttribute('data-lang',lang||''); if(selq) o.selected=true; sel.appendChild(o); }
+      if(cur) addOpt(cur, b.WaTemplateLang||'', true);
+      API.listWaTemplates().then(function(r){
+        if(!r.ok) return;
+        (r.templates||[]).forEach(function(t){ if(String(t.status)!=='active') return; if(String(t.name)===cur) return; addOpt(String(t.name), String(t.language||'en'), false); });
+      }).catch(function(){});
+      sel.onchange=function(){ var o=sel.options[sel.selectedIndex]; document.getElementById('b_walang').value=o?(o.getAttribute('data-lang')||''):''; };
+    })();
 
     var wt=document.getElementById('b_watest');
     if(wt) wt.onclick=function(){
