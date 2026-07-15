@@ -222,6 +222,7 @@
     var by={}; (ATT.recs||[]).forEach(function(r){ by[r.date]=r; });
     pq().forEach(function(p){ if(!by[p.date]) by[p.date]={date:p.date, status:'present', checkIn:p.time, _queued:true}; });   // v201: phone-saved punch shows as pending P
     var sundayOn=['every','alternate'].indexOf(String((S.user&&S.user.SundayWork)||'').toLowerCase().trim())>=0;   // do they work Sundays?
+    var punchExempt=String((S.user&&S.user.PunchRequired)||'').toLowerCase().trim()==='no';   // partners/exempt aren't expected to punch → never mark their blank days Absent
     var now=new Date(), y=now.getFullYear(), m=now.getMonth(), days=new Date(y,m+1,0).getDate(), cells='';
     var todayStr=y+'-'+String(m+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
     // Don't paint days before the person joined as absent. JoiningDate may be a date string or Date.
@@ -230,11 +231,10 @@
       var dt=new Date(ds+'T00:00'), isSun=dt.getDay()===0, future=dt>now, hasPunch=r&&(String(r.status)==='present'||String(r.status)==='half');
       var cls='wW',ch=''+d; if(r){ var st=String(r.status); cls=st==='present'?'wP':st==='half'?'wL':st==='leave'?'wL':st==='absent'?'wA':'wP'; ch=(st==='half'?'½':(st==='leave'?'L':(st==='absent'?'A':'P'))); if(r._queued){ cls+=' wQ'; } }
       else if(future){ cls='wF'; ch=''+d; }
-      // v227: a PAST working day with no punch shows a NEUTRAL grey dot — "no punch on record" — never a
-      // red "A". A missing record is very often a lost/failed punch (backend hiccup, dropped offline sync),
-      // NOT a real absence, so marking it Absent wrongly accused people who actually worked. Only an explicit
-      // absent record (status='absent', set by a manager on the Approve screen) shows red A — handled above.
-      else if(!isSun && ds<todayStr && (!joinCut || ds>=joinCut)){ cls='wW'; ch='·'; }
+      // v228: a PAST working day with no punch shows a red "A" (Absent). Genuine lost punches are now
+      // repaired by the backfill tools and the root-cause offline-drop bug is fixed, so a blank working day
+      // means the person really was absent (or needs a manual backfill). Punch-exempt partners are excluded.
+      else if(!isSun && !punchExempt && ds<todayStr && (!joinCut || ds>=joinCut)){ cls='wA'; ch='A'; }
       // Sunday coloring: a weekly-off Sunday shows a blue date; a working Sunday with no punch shows a red L.
       if(isSun && !hasPunch){
         if(!sundayOn){ cls='wSun'; ch=''+d; }        // Sunday off in profile → blue date (not counted absent)
@@ -242,7 +242,7 @@
       }
       cells+='<span class="wd '+cls+'" title="'+ds+'">'+ch+'</span>';
     }
-    return '<div class="att-month"><div class="att-mh">This month</div><div class="att-strip">'+cells+'</div><div class="att-legend">P present · ½ half · L leave · A absent · <span style="color:#9aa0a6">·</span> no punch on record</div></div>';
+    return '<div class="att-month"><div class="att-mh">This month</div><div class="att-strip">'+cells+'</div><div class="att-legend">P present · ½ half · L leave · A absent</div></div>';
   }
 
   // Selfies only need to be big enough to identify someone in an 80x80 thumbnail — shrinking before upload
