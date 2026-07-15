@@ -322,6 +322,7 @@
           when:(t.dueDate||'')+' '+(t.dueTime||''), sortKey:(t.dueDate||'')+(t.dueTime||'00:00'), dueDate:t.dueDate, dueTime:t.dueTime});
       });
       ALLC.forEach(function(c){
+        if(['done','completed','cancelled','canceled','deleted'].indexOf(String(c.status||'').toLowerCase())>=0) return;   // v225: a schedule item the owner already closed must never linger on the monitor (covers stale cache / status variants)
         var endMin=c.endTime?toMinTM(c.endTime):(c.startTime?toMinTM(c.startTime)+30:0);
         var missed=(c.date<tdy) || (c.date===tdy && endMin && endMin<nowMin);
         if(!missed) return;

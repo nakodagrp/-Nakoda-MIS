@@ -38,7 +38,23 @@
       if(r&&r.wfhPrompt){ item.wfh=true; var q2=pq(); q2.forEach(function(p){ if(p.ts===item.ts) p.wfh=true; }); pqSave(q2); pqSync(); return; }   // punched from outside the branch — send as WFH (goes for approval)
       if(/already checked/i.test(em)){ pqDrop(item); refreshAfterSync(); pqSync(); return; }   // an earlier tap already landed
       if(/server busy/i.test(em)) return;   // v202: lock held right now — keep the punch, next cycle will land it
-      if(em){ pqDrop(item); toast('Saved punch could not be accepted: '+em, true); refreshAfterSync(); pqSync(); return; }   // real server rejection (e.g. Sunday rule) — keeping it would retry forever
+      // v225: ONLY drop a saved punch when the server rejection is PERMANENT — one that can never succeed on
+      // retry (Sunday-not-scheduled, alternate-Sunday limit, missing selfie). Previously ANY error string
+      // deleted the punch, so a transient "Session expired" (token lapsed while the phone was offline for
+      // hours) or a brief Drive/server hiccup silently lost the whole day — this is the blank-day bug.
+      if(em && /not scheduled to work|already worked .*sundays|alternate sunday limit|selfie is required/i.test(em)){
+        pqDrop(item); toast('Saved punch could not be accepted: '+em, true); refreshAfterSync(); pqSync(); return;
+      }
+      if(em){
+        // Recoverable (session expired, Drive hiccup, transient server error): KEEP the punch and retry next
+        // cycle instead of deleting it. A bounded attempt counter stops a genuine poison item from blocking
+        // the queue head forever; re-logging in refreshes the token so a kept "session expired" punch lands.
+        var q3=pq(), it3=q3.filter(function(p){ return p.ts===item.ts; })[0];
+        if(it3){ it3.tries=(it3.tries||0)+1; pqSave(q3); }
+        if(it3 && it3.tries>=12){ pqDrop(item); toast('A saved punch kept failing and was removed: '+em, true); refreshAfterSync(); pqSync(); return; }
+        if(/session expired|not signed in|please log ?in/i.test(em)){ toast('Your saved punch will send after you log in again.', true); }
+        return;   // keep it — the online/60s retry will try again
+      }
     }).catch(function(){ _pqBusy=false; });   // still no (or flaky) internet — keep it, try again later
   }
   function refreshAfterSync(){ API.myAttendance(ymNow()).then(function(x){ if(x&&x.ok){ ATT.recs=x.records||[]; if(document.getElementById('attMe')) paintMe(); } }); }
@@ -207,10 +223,17 @@
     pq().forEach(function(p){ if(!by[p.date]) by[p.date]={date:p.date, status:'present', checkIn:p.time, _queued:true}; });   // v201: phone-saved punch shows as pending P
     var sundayOn=['every','alternate'].indexOf(String((S.user&&S.user.SundayWork)||'').toLowerCase().trim())>=0;   // do they work Sundays?
     var now=new Date(), y=now.getFullYear(), m=now.getMonth(), days=new Date(y,m+1,0).getDate(), cells='';
+    var todayStr=y+'-'+String(m+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+    // Don't paint days before the person joined as absent. JoiningDate may be a date string or Date.
+    var joinCut=''; try{ var _j=(S.user&&(S.user.JoiningDate||''))||''; if(_j){ var _jd=new Date(_j); if(!isNaN(_jd.getTime())) joinCut=_jd.getFullYear()+'-'+String(_jd.getMonth()+1).padStart(2,'0')+'-'+String(_jd.getDate()).padStart(2,'0'); } }catch(e){}
     for(var d=1;d<=days;d++){ var ds=y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0'); var r=by[ds];
       var dt=new Date(ds+'T00:00'), isSun=dt.getDay()===0, future=dt>now, hasPunch=r&&(String(r.status)==='present'||String(r.status)==='half');
       var cls='wW',ch=''+d; if(r){ var st=String(r.status); cls=st==='present'?'wP':st==='half'?'wL':st==='leave'?'wL':st==='absent'?'wA':'wP'; ch=(st==='half'?'½':(st==='leave'?'L':(st==='absent'?'A':'P'))); if(r._queued){ cls+=' wQ'; } }
       else if(future){ cls='wF'; ch=''+d; }
+      // v225: a PAST working day (before today, not Sunday, on/after joining) with no punch is Absent —
+      // show a clear red A instead of a bare grey number that looked blank/broken. Today stays plain until
+      // the person punches; Sundays/weekly-offs are handled by the block below; leave rows already show L.
+      else if(!isSun && ds<todayStr && (!joinCut || ds>=joinCut)){ cls='wA'; ch='A'; }
       // Sunday coloring: a weekly-off Sunday shows a blue date; a working Sunday with no punch shows a red L.
       if(isSun && !hasPunch){
         if(!sundayOn){ cls='wSun'; ch=''+d; }        // Sunday off in profile → blue date (not counted absent)
@@ -365,7 +388,15 @@
     // Now: (1) a lost reply auto-retries once; (2) "Already checked in/out" counts as SUCCESS — it
     // means the first tap worked; (3) after a final network failure we double-check the server before
     // telling the user it failed. One tap is enough.
-    var c=ATT.coords||{}, payload={selfie:selfie, lat:c.lat, lng:c.lng, wfh:!!ATT.wfh, altShift:!!ATT.altShift, remark:(kind==='out'?(ATT.outRemark||''):'')};
+    // v225: stamp the REAL tap time on every (even online) punch. On a weak/flaky connection navigator.onLine
+    // is still true, so the request goes out live but can land on the server minutes late — the server used to
+    // record its own clock (arrival time), pushing an on-time 9:10 punch to 9:35 and wrongly marking half-day.
+    // Sending the tap time lets the server record when the user actually tapped. (Distinct from the offline
+    // clientDate/clientTime path so it is NOT labelled "Offline punch".)
+    var _tt=new Date(ATT.tapTs||Date.now());
+    var _tapDate=_tt.getFullYear()+'-'+String(_tt.getMonth()+1).padStart(2,'0')+'-'+String(_tt.getDate()).padStart(2,'0');
+    var _tapTime=String(_tt.getHours()).padStart(2,'0')+':'+String(_tt.getMinutes()).padStart(2,'0');
+    var c=ATT.coords||{}, payload={selfie:selfie, lat:c.lat, lng:c.lng, wfh:!!ATT.wfh, altShift:!!ATT.altShift, remark:(kind==='out'?(ATT.outRemark||''):''), tapDate:_tapDate, tapTime:_tapTime};
     function tdy(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
     function success(msg){ ATT.wfh=false; toast(msg); API.myAttendance(ymNow()).then(function(x){ if(x&&x.ok){ ATT.recs=x.records||[]; paintMe(); } }); }
     /* v201: no internet (or network died) → save the punch on the phone with the ORIGINAL tap time. */
