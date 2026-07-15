@@ -230,10 +230,11 @@
       var dt=new Date(ds+'T00:00'), isSun=dt.getDay()===0, future=dt>now, hasPunch=r&&(String(r.status)==='present'||String(r.status)==='half');
       var cls='wW',ch=''+d; if(r){ var st=String(r.status); cls=st==='present'?'wP':st==='half'?'wL':st==='leave'?'wL':st==='absent'?'wA':'wP'; ch=(st==='half'?'½':(st==='leave'?'L':(st==='absent'?'A':'P'))); if(r._queued){ cls+=' wQ'; } }
       else if(future){ cls='wF'; ch=''+d; }
-      // v225: a PAST working day (before today, not Sunday, on/after joining) with no punch is Absent —
-      // show a clear red A instead of a bare grey number that looked blank/broken. Today stays plain until
-      // the person punches; Sundays/weekly-offs are handled by the block below; leave rows already show L.
-      else if(!isSun && ds<todayStr && (!joinCut || ds>=joinCut)){ cls='wA'; ch='A'; }
+      // v227: a PAST working day with no punch shows a NEUTRAL grey dot — "no punch on record" — never a
+      // red "A". A missing record is very often a lost/failed punch (backend hiccup, dropped offline sync),
+      // NOT a real absence, so marking it Absent wrongly accused people who actually worked. Only an explicit
+      // absent record (status='absent', set by a manager on the Approve screen) shows red A — handled above.
+      else if(!isSun && ds<todayStr && (!joinCut || ds>=joinCut)){ cls='wW'; ch='·'; }
       // Sunday coloring: a weekly-off Sunday shows a blue date; a working Sunday with no punch shows a red L.
       if(isSun && !hasPunch){
         if(!sundayOn){ cls='wSun'; ch=''+d; }        // Sunday off in profile → blue date (not counted absent)
@@ -241,7 +242,7 @@
       }
       cells+='<span class="wd '+cls+'" title="'+ds+'">'+ch+'</span>';
     }
-    return '<div class="att-month"><div class="att-mh">This month</div><div class="att-strip">'+cells+'</div><div class="att-legend">P present · ½ half · L leave · A absent</div></div>';
+    return '<div class="att-month"><div class="att-mh">This month</div><div class="att-strip">'+cells+'</div><div class="att-legend">P present · ½ half · L leave · A absent · <span style="color:#9aa0a6">·</span> no punch on record</div></div>';
   }
 
   // Selfies only need to be big enough to identify someone in an 80x80 thumbnail — shrinking before upload
