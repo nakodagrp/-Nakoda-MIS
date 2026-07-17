@@ -216,18 +216,26 @@
       API.saveItem({itemId:it.itemId,itemCode:$id('itCode').value.trim(),name:n,category:$id('itCat').value,unit:$id('itUnit').value,mapBasis:document.querySelector('#itBasis .on').getAttribute('data-b'),perUse:$id('itPer').value,reorderLevel:$id('itRe').value,maxLevel:$id('itMax').value,season:$id('itSeason').value,vendorId:(function(){var nm=($id('itVen').value||'').trim().toLowerCase();var m=INV.vendors.filter(function(v){return String(v.name).toLowerCase()===nm;})[0];return m?m.vendorId:'';})(),price:$id('itPrice').value}).then(function(r){ if(r&&r.ok){ closeModal(); toast('Saved'); loadItems(); } else $id('itMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; }); };
   }
   function loadVendors(){ API.invVendors().then(function(r){ var box=$id('invBody'); if(!box) return; var rows=(r&&r.ok)?r.vendors:[]; INV.vendors=rows;
-    box.innerHTML='<div class="fin-actions"><button class="btn" id="veAdd">+ Vendor</button></div>'+(rows.length?rows.map(function(v){ return '<div class="hx-row"><div class="hx-mid"><b>'+esc(v.name)+'</b><div class="hx-m">'+esc(v.contact||'')+' · '+esc(v.ifsc||'')+' '+esc(v.acct||'')+'</div></div><a href="javascript:void(0)" data-e="'+esc(v.vendorId)+'">✎</a> <a href="javascript:void(0)" data-d="'+esc(v.vendorId)+'" style="color:var(--red)">🗑</a></div>'; }).join(''):'<div class="empty">No vendors.</div>');
+    box.innerHTML='<div class="fin-actions"><button class="btn" id="veAdd">+ Vendor</button></div>'+(rows.length?rows.map(function(v){ return '<div class="hx-row"><div class="hx-mid"><b>'+(v.vendorCode?('<span style="color:#999;font-weight:600">'+esc(v.vendorCode)+'</span> '):'')+esc(v.name)+'</b><div class="hx-m">'+esc(v.contactPerson||'')+(v.phone?(' · '+esc(v.phone)):'')+(v.gstin?(' · '+esc(v.gstin)):'')+'</div></div><a href="javascript:void(0)" data-e="'+esc(v.vendorId)+'">✎</a> <a href="javascript:void(0)" data-d="'+esc(v.vendorId)+'" style="color:var(--red)">🗑</a></div>'; }).join(''):'<div class="empty">No vendors.</div>');
     $id('veAdd').onclick=function(){ openVendorForm(null); };
     box.querySelectorAll('[data-e]').forEach(function(b){ b.onclick=function(){ openVendorForm(rows.filter(function(x){return x.vendorId===b.getAttribute('data-e');})[0]); }; });
     box.querySelectorAll('[data-d]').forEach(function(b){ b.onclick=function(){ if(confirm('Delete vendor?')) API.deleteVendor(b.getAttribute('data-d')).then(function(){toast('Deleted');loadVendors();}); }; });
   }); }
   function openVendorForm(v){ v=v||{};
-    var body='<div class="grid2"><div class="field full"><label>Vendor name</label><input id="veName" class="in" value="'+esc(v.name||'')+'"></div>'+
-      '<div class="field"><label>Contact</label><input id="veContact" class="in" value="'+esc(v.contact||'')+'"></div><div class="field"><label>GSTIN</label><input id="veGst" class="in" value="'+esc(v.gstin||'')+'"></div>'+
-      '<div class="field"><label>Bank IFSC</label><input id="veIfsc" class="in" value="'+esc(v.ifsc||'')+'"></div><div class="field"><label>Account no.</label><input id="veAcct" class="in" value="'+esc(v.acct||'')+'"></div></div><div id="veMsg"></div>';
+    var body='<div class="grid2">'+
+      '<div class="field"><label>Vendor code</label><input id="veCode" class="in" value="'+esc(v.vendorCode||'')+'" placeholder="e.g. V0002"></div>'+
+      '<div class="field"><label>Vendor name</label><input id="veName" class="in" value="'+esc(v.name||'')+'"></div>'+
+      '<div class="field"><label>Contact person</label><input id="veContactP" class="in" value="'+esc(v.contactPerson||'')+'"></div>'+
+      '<div class="field"><label>Phone</label><input id="vePhone" class="in" value="'+esc(v.phone||v.contact||'')+'"></div>'+
+      '<div class="field full"><label>Email</label><input id="veEmail" class="in" value="'+esc(v.email||'')+'"></div>'+
+      '<div class="field full"><label>Address</label><input id="veAddr" class="in" value="'+esc(v.address||'')+'"></div>'+
+      '<div class="field"><label>GSTIN</label><input id="veGst" class="in" value="'+esc(v.gstin||'')+'"></div>'+
+      '<div class="field"><label>Payment terms</label><input id="veTerms" class="in" value="'+esc(v.paymentTerms||'')+'"></div>'+
+      '<div class="field"><label>Bank IFSC</label><input id="veIfsc" class="in" value="'+esc(v.ifsc||'')+'"></div>'+
+      '<div class="field"><label>Account no.</label><input id="veAcct" class="in" value="'+esc(v.acct||'')+'"></div></div><div id="veMsg"></div>';
     openModal(v.vendorId?'Edit vendor':'New vendor', body, '<button class="btn" id="veSave">Save</button>');
     $id('veSave').onclick=function(){ var n=$id('veName').value.trim(); if(!n){ $id('veMsg').innerHTML='<div class="msg error">Name required.</div>'; return; }
-      API.saveVendor({vendorId:v.vendorId,name:n,contact:$id('veContact').value,gstin:$id('veGst').value,ifsc:$id('veIfsc').value,acct:$id('veAcct').value}).then(function(r){ if(r&&r.ok){ closeModal(); toast('Saved'); loadVendors(); } else $id('veMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; }); };
+      API.saveVendor({vendorId:v.vendorId,vendorCode:$id('veCode').value.trim(),name:n,contactPerson:$id('veContactP').value,phone:$id('vePhone').value,contact:$id('vePhone').value,email:$id('veEmail').value,address:$id('veAddr').value,gstin:$id('veGst').value,paymentTerms:$id('veTerms').value,ifsc:$id('veIfsc').value,acct:$id('veAcct').value}).then(function(r){ if(r&&r.ok){ closeModal(); toast('Saved'); loadVendors(); } else $id('veMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; }); };
   }
 
   window.renderInventory=renderInventory;
