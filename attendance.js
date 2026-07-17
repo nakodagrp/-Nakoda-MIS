@@ -69,7 +69,7 @@
       (canApprove()?'<div class="section-label" style="margin-top:18px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">Approve — today<span id="attApSummary"></span></div>'+
         '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0 10px">'+
           '<input id="attApName" placeholder="Search name…" style="border:1px solid #d9d9d9;border-radius:8px;padding:6px 8px;font-size:13px;flex:1;min-width:130px;max-width:220px">'+
-          '<input type="date" id="attApDate" value="'+todayS()+'" style="border:1px solid #d9d9d9;border-radius:8px;padding:6px 8px;font-size:13px">'+
+          '<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:#888">From<input type="date" id="attApDate" value="'+todayS()+'" style="border:1px solid #d9d9d9;border-radius:8px;padding:6px 8px;font-size:13px">To<input type="date" id="attApDateTo" value="" title="Optional — leave blank for a single day" style="border:1px solid #d9d9d9;border-radius:8px;padding:6px 8px;font-size:13px"></span>'+
           '<button class="btn sm" id="attApGo">Show</button>'+
           '<button class="btn sm ghost" id="attPdfBtn" style="display:inline-flex;align-items:center;gap:5px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg> Monthly PDF</button>'+
         '</div>'+
@@ -90,7 +90,7 @@
     API.myAttendance(ymNow()).then(function(r){ if(r&&r.ok){ ATT.recs=r.records||[]; paintMe(); } });
     if(canApprove()){
       loadApprove(todayS());
-      var apGo=$id('attApGo'); if(apGo) apGo.onclick=function(){ loadApprove($id('attApDate').value||todayS()); };
+      var apGo=$id('attApGo'); if(apGo) apGo.onclick=function(){ loadApprove($id('attApDate').value||todayS(), ($id('attApDateTo')||{}).value||''); };
       var apName=$id('attApName'); if(apName) apName.oninput=function(){ if(_approveCache&&_approveCache.recs) renderApproveRecs(_approveCache.recs); };
       var pdfBtn=$id('attPdfBtn'); if(pdfBtn) pdfBtn.onclick=function(){ downloadAttPdf(); };
     }
@@ -519,7 +519,7 @@
       return '<div class="att-row" data-id="'+esc(a.attId)+'" style="align-items:flex-start">'+
         '<div class="att-av" style="margin-top:4px">'+esc(initials(a.empName))+'</div>'+
         '<div class="att-mid" style="flex:1">'+
-          '<div class="att-nm"><b>'+esc(a.empName)+'</b>'+dayBadge(a.status)+(String(a.late)==='yes'?' <span class="att-late">late</span>':'')+(/work from home/i.test(String(a.notes||''))?' <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:#eeedfe;color:#534AB7">🏠 WFH</span>':'')+'</div>'+
+          '<div class="att-nm"><b>'+esc(a.empName)+'</b>'+dayBadge(a.status)+(ATT.apRangeOn&&a.date?(' <span style="font-size:10px;color:#888;font-weight:600">'+esc(String(a.date).split('-').reverse().join('-'))+'</span>'):'')+(String(a.late)==='yes'?' <span class="att-late">late</span>':'')+(/work from home/i.test(String(a.notes||''))?' <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:#eeedfe;color:#534AB7">🏠 WFH</span>':'')+'</div>'+
           '<div class="att-m">In '+esc(a.checkIn||'—')+(a.checkOut?(' · Out '+esc(a.checkOut)):'')+((a.workHours&&!isNaN(Number(a.workHours)))?(' · '+esc(a.workHours)+'h'):'')+' · '+esc(stLabel(a.status))+((a.latIn&&a.lngIn)?' · <a href="https://maps.google.com/?q='+esc(a.latIn)+','+esc(a.lngIn)+'" target="_blank">📍 '+esc(a.addrIn||'location')+'</a>':'')+'</div>'+
           '<div class="att-m">ID '+esc(a.empId||'')+(a.dutyStart?(' · Duty '+esc(a.dutyStart)+(a.dutyEnd?('–'+esc(a.dutyEnd)):'')):'')+(a.attMode?(' · '+esc(a.attMode)):'')+'</div>'+
           (a.notes?'<div class="att-m" style="color:#a3271f;font-weight:600">📝 '+esc(a.notes)+'</div>':'')+
@@ -527,7 +527,7 @@
         '</div>'+
         '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">'+
           (ap?'<span class="att-ok">✓ approved</span>':'<button class="btn sm" data-ap="'+esc(a.attId)+'">Approve</button>')+
-          '<select class="att-sel" data-st="'+esc(a.attId)+'" data-prev="'+esc(a.status)+'">'+['present','half','leave','absent'].map(function(s){return '<option value="'+s+'"'+(s===a.status?' selected':'')+'>'+esc(stLabel(s))+'</option>';}).join('')+'</select>'+
+          '<select class="att-sel" data-nocombo data-st="'+esc(a.attId)+'" data-prev="'+esc(a.status)+'">'+['present','half','leave','absent'].map(function(s){return '<option value="'+s+'"'+(s===a.status?' selected':'')+'>'+esc(stLabel(s))+'</option>';}).join('')+'</select>'+
         '</div>'+
         '</div>';
     }).join('');
@@ -584,17 +584,19 @@
       };
     });
   }
-  function loadApprove(date){
-    date=date||todayS();
+  function loadApprove(date, dateTo){
+    date=date||todayS(); dateTo=dateTo||'';
     var box=$id('attApprove'); if(!box) return;
-    // Use cached data if fresh (within 45 s) AND for the same date — avoids repeated API calls on re-render
+    var key=date+'|'+dateTo;
+    // Use cached data if fresh (within 45 s) AND for the same date/range — avoids repeated API calls on re-render
     var now=Date.now();
-    if(_approveCache.recs && _approveCache.date===date && (now-_approveCache.ts)<45000){ renderApproveRecs(_approveCache.recs); return; }
+    if(_approveCache.recs && _approveCache.key===key && (now-_approveCache.ts)<45000){ ATT.apRangeOn=!!dateTo; renderApproveRecs(_approveCache.recs); return; }
     box.innerHTML='<div class="center-load"><span class="loader dark"></span></div>';
-    API.listAttendance('',date).then(function(r){
+    API.listAttendance('',date,dateTo).then(function(r){
       if(!r||!r.ok){ box.innerHTML='<div class="empty">'+esc((r&&r.error)||'')+'</div>'; return; }
-      var recs=(r.records||[]).slice().sort(function(a,b){ var ta=String(a.checkIn||''),tb=String(b.checkIn||''); return tb>ta?1:tb<ta?-1:0; });
-      _approveCache={ts:Date.now(), recs:recs, date:date, activeStaff:r.activeStaff||0, notPunched:r.notPunched||[]};
+      var recs=(r.records||[]).slice().sort(function(a,b){ var da=String(a.date||''),db=String(b.date||''); if(da!==db) return db>da?1:-1; var ta=String(a.checkIn||''),tb=String(b.checkIn||''); return tb>ta?1:tb<ta?-1:0; });
+      ATT.apRangeOn=!!(r.dateTo);
+      _approveCache={ts:Date.now(), recs:recs, date:date, key:key, activeStaff:r.activeStaff||0, notPunched:r.notPunched||[]};
       renderApproveRecs(recs);
     }).catch(function(){ if(box) box.innerHTML='<div class="empty">Connect to load attendance for this date.</div>'; });
   }

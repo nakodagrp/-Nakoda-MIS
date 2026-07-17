@@ -15,8 +15,8 @@
     return '<span style="background:'+c[1]+';color:'+c[0]+';border-radius:8px;padding:3px 9px;font-size:11px;font-weight:700;text-transform:uppercase">'+esc(st)+'</span>';
   }
 
-  window.renderPayReq=function(){
-    var v=$id('page-payreq'); if(!v) return;
+  window.renderPayReq=function(host){
+    var v=(host&&host.nodeType)?host:$id('page-payreq'); if(!v) return;
     var brs=(S.meta&&S.meta.branches)||[];
     // estimate manager/approver rights client-side so the branch picker shows on first paint
     // (server is authoritative; load() refreshes these from the response)
