@@ -181,13 +181,26 @@
 
   /* ---- Items & Vendors (manage) ---- */
   function loadItems(){ API.invItems().then(function(r){ var box=$id('invBody'); if(!box) return; var rows=(r&&r.ok)?r.items:[]; INV.items=rows;
-    box.innerHTML='<div class="fin-actions"><button class="btn" id="itAdd">+ Item</button></div>'+(rows.length?rows.map(function(i){ return '<div class="hx-row" ><div class="hx-mid"><b>'+esc(i.name)+'</b><div class="hx-m">'+esc(i.category)+' · '+esc(i.unit||'')+' · '+(i.mapBasis!=='none'?('per '+i.mapBasis+' ×'+i.perUse):'manual')+' · reorder '+i.reorderLevel+'</div></div><a href="javascript:void(0)" data-e="'+esc(i.itemId)+'">✎</a> <a href="javascript:void(0)" data-d="'+esc(i.itemId)+'" style="color:var(--red)">🗑</a></div>'; }).join(''):'<div class="empty">No items.</div>');
+    var cats=[]; rows.forEach(function(i){ if(i.category && cats.indexOf(i.category)<0) cats.push(i.category); }); cats.sort();
+    box.innerHTML='<div class="fin-actions" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn" id="itAdd">+ Item</button>'+
+      '<input class="in" id="itSearch" placeholder="Search code or name…" style="max-width:220px">'+
+      '<select class="in" id="itCatF" data-nocombo style="max-width:180px"><option value="">All categories</option>'+cats.map(function(c){return '<option>'+esc(c)+'</option>';}).join('')+'</select>'+
+      '<span id="itCount" style="font-size:12px;color:#888;margin-left:auto"></span></div><div id="itList"></div>';
+    function itRow(i){ return '<div class="hx-row"><div class="hx-mid"><b>'+(i.itemCode?('<span style="color:#999;font-weight:600">'+esc(i.itemCode)+'</span> '):'')+esc(i.name)+'</b><div class="hx-m">'+esc(i.category)+' · '+esc(i.unit||'')+' · '+(i.mapBasis!=='none'?('per '+i.mapBasis+' ×'+i.perUse):'manual')+' · reorder '+i.reorderLevel+'</div></div><a href="javascript:void(0)" data-e="'+esc(i.itemId)+'">✎</a> <a href="javascript:void(0)" data-d="'+esc(i.itemId)+'" style="color:var(--red)">🗑</a></div>'; }
+    function paintList(){ var q=($id('itSearch').value||'').trim().toLowerCase(), cf=$id('itCatF').value;
+      var list=rows.filter(function(i){ if(cf && String(i.category)!==cf) return false; if(q){ var hay=((i.itemCode||'')+' '+(i.name||'')).toLowerCase(); if(hay.indexOf(q)<0) return false; } return true; });
+      $id('itList').innerHTML=list.length?list.map(itRow).join(''):'<div class="empty">No matching items.</div>';
+      $id('itCount').textContent=list.length+' of '+rows.length;
+      $id('itList').querySelectorAll('[data-e]').forEach(function(b){ b.onclick=function(){ openItemForm(rows.filter(function(x){return x.itemId===b.getAttribute('data-e');})[0]); }; });
+      $id('itList').querySelectorAll('[data-d]').forEach(function(b){ b.onclick=function(){ if(confirm('Delete item?')) API.deleteItem(b.getAttribute('data-d')).then(function(){toast('Deleted');loadItems();}); }; });
+    }
     $id('itAdd').onclick=function(){ openItemForm(null); };
-    box.querySelectorAll('[data-e]').forEach(function(b){ b.onclick=function(){ openItemForm(rows.filter(function(x){return x.itemId===b.getAttribute('data-e');})[0]); }; });
-    box.querySelectorAll('[data-d]').forEach(function(b){ b.onclick=function(){ if(confirm('Delete item?')) API.deleteItem(b.getAttribute('data-d')).then(function(){toast('Deleted');loadItems();}); }; });
+    $id('itSearch').oninput=paintList; $id('itCatF').onchange=paintList;
+    paintList();
   }); }
   function openItemForm(it){ it=it||{};
-    var body='<div class="grid2"><div class="field full"><label>Item name</label><input id="itName" class="in" value="'+esc(it.name||'')+'"></div>'+
+    var body='<div class="grid2"><div class="field"><label>Item code</label><input id="itCode" class="in" value="'+esc(it.itemCode||'')+'" placeholder="e.g. REA-001"></div>'+
+      '<div class="field"><label>Item name</label><input id="itName" class="in" value="'+esc(it.name||'')+'"></div>'+
       '<div class="field"><label>Category</label><input id="itCat" class="in" list="itCatList" value="'+esc(it.category||'')+'" placeholder="Type or pick"><datalist id="itCatList">'+['Reagent','Consumables','Kit','Accessories','Instrument','Stationery','Computer Accessory','Other'].map(function(c){return '<option value="'+c+'"></option>';}).join('')+'</datalist></div>'+
       '<div class="field"><label>Unit</label><input id="itUnit" class="in" value="'+esc(it.unit||'')+'"></div>'+
       '<div class="field full"><label>Auto-deduct per</label><div class="seg" id="itBasis"><div data-b="test"'+(it.mapBasis==='test'?' class="on"':'')+'>Per test</div><div data-b="patient"'+(it.mapBasis==='patient'?' class="on"':'')+'>Per patient</div><div data-b="none"'+((!it.mapBasis||it.mapBasis==='none')?' class="on"':'')+'>None</div></div></div>'+
@@ -200,7 +213,7 @@
     openModal(it.itemId?'Edit item':'New item', body, '<button class="btn" id="itSave">Save</button>');
     document.querySelectorAll('#itBasis div').forEach(function(d){ d.onclick=function(){ document.querySelectorAll('#itBasis div').forEach(function(z){z.classList.remove('on');}); d.classList.add('on'); }; });
     $id('itSave').onclick=function(){ var n=$id('itName').value.trim(); if(!n){ $id('itMsg').innerHTML='<div class="msg error">Name required.</div>'; return; }
-      API.saveItem({itemId:it.itemId,name:n,category:$id('itCat').value,unit:$id('itUnit').value,mapBasis:document.querySelector('#itBasis .on').getAttribute('data-b'),perUse:$id('itPer').value,reorderLevel:$id('itRe').value,maxLevel:$id('itMax').value,season:$id('itSeason').value,vendorId:(function(){var nm=($id('itVen').value||'').trim().toLowerCase();var m=INV.vendors.filter(function(v){return String(v.name).toLowerCase()===nm;})[0];return m?m.vendorId:'';})(),price:$id('itPrice').value}).then(function(r){ if(r&&r.ok){ closeModal(); toast('Saved'); loadItems(); } else $id('itMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; }); };
+      API.saveItem({itemId:it.itemId,itemCode:$id('itCode').value.trim(),name:n,category:$id('itCat').value,unit:$id('itUnit').value,mapBasis:document.querySelector('#itBasis .on').getAttribute('data-b'),perUse:$id('itPer').value,reorderLevel:$id('itRe').value,maxLevel:$id('itMax').value,season:$id('itSeason').value,vendorId:(function(){var nm=($id('itVen').value||'').trim().toLowerCase();var m=INV.vendors.filter(function(v){return String(v.name).toLowerCase()===nm;})[0];return m?m.vendorId:'';})(),price:$id('itPrice').value}).then(function(r){ if(r&&r.ok){ closeModal(); toast('Saved'); loadItems(); } else $id('itMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; }); };
   }
   function loadVendors(){ API.invVendors().then(function(r){ var box=$id('invBody'); if(!box) return; var rows=(r&&r.ok)?r.vendors:[]; INV.vendors=rows;
     box.innerHTML='<div class="fin-actions"><button class="btn" id="veAdd">+ Vendor</button></div>'+(rows.length?rows.map(function(v){ return '<div class="hx-row"><div class="hx-mid"><b>'+esc(v.name)+'</b><div class="hx-m">'+esc(v.contact||'')+' · '+esc(v.ifsc||'')+' '+esc(v.acct||'')+'</div></div><a href="javascript:void(0)" data-e="'+esc(v.vendorId)+'">✎</a> <a href="javascript:void(0)" data-d="'+esc(v.vendorId)+'" style="color:var(--red)">🗑</a></div>'; }).join(''):'<div class="empty">No vendors.</div>');
