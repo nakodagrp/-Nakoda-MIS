@@ -13,6 +13,7 @@
     var v=$id('page-inventory'), brs=(S.meta&&S.meta.branches)||[];
     if(!INV.branch && !(S.perms&&S.perms.canViewAll||canMgr())) INV.branch=(S.user&&S.user.Branch)||'';
     var tabs=[['stock','Stock'],['consume','Consumption'],['indents','Indents'],['audit','Physical Check']]; if(canMgr()) tabs.push(['items','Items'],['vendors','Vendors'],['payments','Payments']);
+    if(['MIS','Logistics','Admin','Director'].indexOf(S.user&&S.user.Role)>=0){ tabs.splice(1,0,['saappr','Approvals']); tabs.push(['sarcp','Recipes']); }
     v.innerHTML='<div class="page-head"><h1>Inventory</h1></div>'+
       '<div class="acc-top">'+((S.perms&&S.perms.canViewAll||canMgr())?'<select class="in" id="invBranch" style="max-width:170px"><option value="">Pick branch</option>'+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'"'+(b.BranchID===INV.branch?' selected':'')+'>'+esc(b.BranchName)+'</option>';}).join('')+'</select>':'<span class="acc-br">'+esc(branchName(INV.branch))+'</span>')+'</div>'+
       '<div class="pm2-tabs" id="invTabs">'+tabs.map(function(t){return '<span data-t="'+t[0]+'"'+(t[0]===INV.tab?' class="on"':'')+'>'+t[1]+'</span>';}).join('')+'</div>'+
@@ -24,7 +25,9 @@
     paint();
   }
   function paint(){ var b=$id('invBody'); if(!b) return; b.innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>';
-    ({stock:loadStock,consume:loadConsume,indents:loadIndents,audit:loadAudit,items:loadItems,vendors:loadVendors,payments:loadPayments}[INV.tab]||loadStock)(); }
+    ({stock:loadStock,consume:loadConsume,indents:loadIndents,audit:loadAudit,items:loadItems,vendors:loadVendors,payments:loadPayments,
+      saappr:function(){ if(window.renderSAApprovals) window.renderSAApprovals(b,INV.branch); else b.innerHTML='<div class="empty">Approvals module not loaded — upload stockauto.js.</div>'; },
+      sarcp:function(){ if(window.renderSARecipes) window.renderSARecipes(b); else b.innerHTML='<div class="empty">Recipes module not loaded — upload stockauto.js.</div>'; }}[INV.tab]||loadStock)(); }
   function loadPayments(){ var b=$id('invBody'); if(!b) return; if(window.renderPayReq) window.renderPayReq(b); else b.innerHTML='<div class="empty">Payments module not loaded — upload payreq.js.</div>'; }
 
   /* ---- Stock (month grid, colour-coded MIN/MAX) ---- */

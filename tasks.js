@@ -292,6 +292,7 @@
     var brOpts='<option value="">All branches</option>'+branches.map(function(b){return '<option value="'+esc(b.BranchID)+'">'+esc(b.BranchName)+'</option>';}).join('');
     v.innerHTML='<div class="page-head"><h1>Process Flow Monitor</h1></div>'+
       '<div class="seg tm-seg" id="tmSeg"><div data-v="tasks" class="on">Tasks &amp; Schedule</div><div data-v="proc">Processes (stage by stage)</div><div data-v="score">Activity scorecard</div></div>'+
+      '<div id="saOverdue"></div>'+
       '<div id="tmMain">'+
         '<div style="color:#888;font-size:13px;margin:10px 0 12px">Everyone’s overdue tasks &amp; missed scheduled items — call or message the person.</div>'+
         '<div class="tm-filters" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'+
@@ -452,5 +453,5 @@
 
   window.renderMyTasks=renderMyTasks;
   window.openTaskDetail=openTaskDetail;
-  window.renderTaskMonitor=renderTaskMonitor;
+  window.renderTaskMonitor=function(){ renderTaskMonitor(); try{ if(window.renderSAOverdue) window.renderSAOverdue(document.getElementById('saOverdue')); }catch(e){} };
 })();
