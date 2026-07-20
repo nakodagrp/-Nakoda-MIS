@@ -422,7 +422,9 @@
     saveManualConsumption:function(b,d,lines){ return call('saveManualConsumption',{token:getToken(),branch:b,date:d,lines:lines}); },
     listPayRequests:function(b,s){ return call('listPayRequests',{token:getToken(),branch:b,status:s}); },
     createPayRequest:function(data){ return call('createPayRequest',{token:getToken(),data:data}); },
-    setPayRequest:function(reqId,action,data){ return call('setPayRequest',{token:getToken(),reqId:reqId,action:action,data:data}); },
+    /* FIX: the payload key was also called `action`, so Object.assign in NET() overwrote the
+       route name and the server saw 'approve' / 'paid' as the action. Sent as payAction now. */
+    setPayRequest:function(reqId,action,data){ return call('setPayRequest',{token:getToken(),reqId:reqId,payAction:action,data:data}); },
     raiseIndent:function(d){ return call('raiseIndent',{token:getToken(),data:d}); },
     listIndents:function(b){ return call('listIndents',{token:getToken(),branch:b}); },
     advanceIndent:function(id,a,d){ return call('advanceIndent',{token:getToken(),indentId:id,action:a,data:d}); },
