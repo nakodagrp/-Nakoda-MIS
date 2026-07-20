@@ -185,8 +185,17 @@ function populateSelectors(){
   var opts='<option value="">All branches</option>'+S.meta.branches.map(function(b){ return '<option value="'+esc(b.BranchID)+'">'+esc(b.BranchName)+'</option>'; }).join('');
   $('filterBranch').innerHTML=opts;
   var ds=$('dashBranch'), canPick=S.perms&&S.perms.canViewAll;
-  ds.style.display=canPick?'':'none';
-  if(canPick){ ds.innerHTML=opts; }
+  /* combo.js replaces every <select> with a visible input inside a .cmb-wrap and hides
+     the native select. Resetting ds.style.display here used to un-hide the native select
+     too, so the branch picker appeared TWICE. Toggle the wrapper instead. */
+  var host=(ds.closest && ds.closest('.cmb-wrap')) || ds;
+  host.style.display=canPick?'':'none';
+  if(host!==ds) ds.style.display='none';
+  if(canPick){
+    ds.innerHTML=opts;
+    var mirror=host.querySelector && host.querySelector('.cmb-input');
+    if(mirror){ var so=ds.options[ds.selectedIndex]; mirror.value=so?so.textContent:''; }
+  }
 }
 function applyPerms(){
   if(!S.perms) return;

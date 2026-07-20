@@ -25,7 +25,7 @@
     paint();
   }
   function paint(){ var b=$id('invBody'); if(!b) return; b.innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>';
-    ({stock:loadStock,consume:loadConsume,indents:loadIndents,audit:loadAudit,items:loadItems,vendors:loadVendors,payments:loadPayments,
+    ({stock:loadStock,consume:loadConsume,indents:function(){ if(window.renderPUIndents) window.renderPUIndents(b,INV.branch); else loadIndents(); },audit:loadAudit,items:loadItems,vendors:loadVendors,payments:loadPayments,
       saappr:function(){ if(window.renderSAApprovals) window.renderSAApprovals(b,INV.branch); else b.innerHTML='<div class="empty">Approvals module not loaded — upload stockauto.js.</div>'; },
       sarcp:function(){ if(window.renderSARecipes) window.renderSARecipes(b); else b.innerHTML='<div class="empty">Recipes module not loaded — upload stockauto.js.</div>'; }}[INV.tab]||loadStock)(); }
   function loadPayments(){ var b=$id('invBody'); if(!b) return; if(window.renderPayReq) window.renderPayReq(b); else b.innerHTML='<div class="empty">Payments module not loaded — upload payreq.js.</div>'; }
