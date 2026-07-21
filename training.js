@@ -49,10 +49,18 @@
       if(preview) return;
       $id('tvSubmit').onclick=function(){ var ans=(r.questions||[]).map(function(q,qi){ var sel=document.querySelector('input[name="q'+qi+'"]:checked'); return sel?Number(sel.value):-1; });
         if(ans.indexOf(-1)>=0){ $id('tvMsg').innerHTML='<div class="msg error">Answer all questions.</div>'; return; }
-        this.disabled=true; API.submitQuiz(videoId,ans).then(function(x){ if(x&&x.ok){ if(x.passed){ closeModal(); toast('Passed '+x.score+'% 🎉'); loadMy(); } else { $id('tvMsg').innerHTML='<div class="msg error">Scored '+x.score+'% — need '+x.passMark+'%. Watch again & retry.</div>'; $id('tvSubmit').disabled=false; } } else { $id('tvMsg').innerHTML='<div class="msg error">'+esc((x&&x.error)||'Failed')+'</div>'; $id('tvSubmit').disabled=false; } }); };
+        this.disabled=true; API.submitQuiz(videoId,ans).then(function(x){ if(x&&x.ok){ if(x.passed){ closeModal(); toast('Passed '+x.score+'% 🎉');
+            /* The quiz can now be opened straight from a My Tasks training card, so the Training page
+               may not be mounted. Refresh whichever screen is actually on-screen. */
+            try{ if(document.getElementById('trBody')) loadMy(); }catch(e){}
+            try{ if(window.renderMyTasks && document.getElementById('page-tasks')) window.renderMyTasks(); }catch(e){}
+          } else { $id('tvMsg').innerHTML='<div class="msg error">Scored '+x.score+'% — need '+x.passMark+'%. Watch again & retry.</div>'; $id('tvSubmit').disabled=false; } } else { $id('tvMsg').innerHTML='<div class="msg error">'+esc((x&&x.error)||'Failed')+'</div>'; $id('tvSubmit').disabled=false; } }); };
     });
   }
   window.previewTrainingVideo=function(vid){ openVideo(vid,true); };
+  /* Opened by a 🎓 Training task in My Tasks — shows the real video + quiz, not a plain Complete box.
+     The task closes itself server-side once the quiz is passed. */
+  window.openTrainingVideo=function(vid){ openVideo(vid,false); };
 
   /* ---- Manage ---- */
   function loadManage(){

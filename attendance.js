@@ -352,21 +352,10 @@
   function doMark(kind){
     if(pqToday(kind)){ toast('Already saved on phone — will send automatically when internet returns. ✓'); return; }
     ATT.kind=kind; ATT.outRemark=''; ATT.tapTs=Date.now();   // remember the REAL tap time for offline punches; under 4 hours auto-marks half day on the server — no reason prompt
-    if(kind==='in'){ ATT.altShift=false; maybeAltShiftPrompt(function(){ startMark(kind); }); }
-    else startMark(kind);
-  }
-  // Two-shift staff (e.g. Angel branch: 8–4 and 12–8): if this employee has an alternate shift configured
-  // and they're punching in near its start time, ask which shift they're on today.
-  function maybeAltShiftPrompt(cb){
-    var alt=(S.user&&S.user.AltDutyStart)||'';
-    if(!alt){ cb(); return; }
-    var altMin=hm2min(alt), n=new Date(), nowMin=n.getHours()*60+n.getMinutes();
-    if(altMin==null || Math.abs(nowMin-altMin)>90){ cb(); return; }   // only ask when punching in near the alt shift's start
-    var altEnd=(S.user&&S.user.AltDutyEnd)||'';
-    openModal('Alternate shift?','<div style="text-align:center"><div style="font-size:15px;font-weight:700;margin-bottom:8px">Working your alternate shift today?</div><div style="font-size:13px;color:#555;margin-bottom:14px">'+esc(fmtDutyTime(alt))+(altEnd?('–'+esc(fmtDutyTime(altEnd))):'')+' shift</div><div style="display:flex;gap:10px;justify-content:center"><button class="btn ghost" id="altNo">No</button><button class="btn" id="altYes">Yes</button></div></div>','');
-    var y=document.getElementById('altYes'), n2=document.getElementById('altNo');
-    if(y) y.onclick=function(){ ATT.altShift=true; closeModal(); cb(); };
-    if(n2) n2.onclick=function(){ ATT.altShift=false; closeModal(); cb(); };
+    // v242: two-shift staff are no longer asked which shift they're on. The server infers it from the
+    // punch time (see pickShift_ in Code.gs), so a 11:56 arrival on the 12:00 shift is simply on time.
+    if(kind==='in') ATT.altShift=false;
+    startMark(kind);
   }
   function stLabel(s){ return ({present:'Full day',half:'Half day',leave:'Leave',absent:'Absent'})[String(s)]||(s||'Full day'); }
   function promptWfh(r, cb){

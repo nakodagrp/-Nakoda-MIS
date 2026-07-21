@@ -203,6 +203,9 @@
   }
   function openTaskDetail(id){
     var t=byId(id); if(!t) return; var cl=pc(t);
+    /* A training task is not a tick-box — open the actual lesson (video + quiz).
+       The task auto-closes server-side when the quiz is passed, so there is no manual Complete. */
+    if(t.source==='training' && t.instanceId && window.openTrainingVideo){ window.openTrainingVideo(t.instanceId); return; }
     var isDaily=(t.source==='accounts' && t.instanceId);
     var isDep=(t.source==='deposit' && t.instanceId);
     var clHtml=cl.length?('<div style="background:#f6f7f9;border-radius:8px;padding:10px;margin-top:10px">'+cl.map(function(it,i){
@@ -318,7 +321,15 @@
       var tdy=todayStr(), nowMin=new Date().getHours()*60+new Date().getMinutes();
       var br=canPick?((document.getElementById('tmBranch')||{}).value||''):'';
       var items=[];
-      ALLT.filter(function(t){return t.status!=='done' && t.dueDate && t.dueDate<tdy;}).forEach(function(t){
+      ALLT.filter(function(t){
+        /* Only genuinely open, genuinely overdue work belongs on the monitor. Anything the owner has
+           already closed (any spelling of "done") drops off by itself on the next refresh. */
+        if(['done','completed','cancelled','canceled','deleted'].indexOf(String(t.status||'').toLowerCase())>=0) return false;
+        if(!t.dueDate || t.dueDate>=tdy) return false;
+        if(t.assigneeActive===false) return false;          // staff marked Inactive are never chased
+        if(t.pcHidden) return false;                        // e.g. rejected daily cash — branch ↔ Accounts, not PC
+        return true;
+      }).forEach(function(t){
         if(br && String(t.branchId)!==String(br)) return;
         items.push({kind:'task', id:t.taskId, title:t.title, name:t.assigneeName, phone:t.assigneePhone, branchId:t.branchId,
           when:(t.dueDate||'')+' '+(t.dueTime||''), sortKey:(t.dueDate||'')+(t.dueTime||'00:00'), dueDate:t.dueDate, dueTime:t.dueTime});
