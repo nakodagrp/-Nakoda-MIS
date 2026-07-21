@@ -332,6 +332,7 @@
       }).forEach(function(t){
         if(br && String(t.branchId)!==String(br)) return;
         items.push({kind:'task', id:t.taskId, title:t.title, name:t.assigneeName, phone:t.assigneePhone, branchId:t.branchId,
+          empId:t.assignedToEmpId,
           when:(t.dueDate||'')+' '+(t.dueTime||''), sortKey:(t.dueDate||'')+(t.dueTime||'00:00'), dueDate:t.dueDate, dueTime:t.dueTime});
       });
       ALLC.forEach(function(c){
@@ -361,7 +362,7 @@
       if(!i) return;
       var hint = i.kind==='dc' ? 'The entry itself is still verified by Accounts in Accounts → Daily Entry. If an uploaded report stays unverified for 3 hours it comes back here automatically.'
         : i.kind==='att' ? 'Attendance approval still happens on the Attendance → Approve screen. If a punch stays unapproved for 24 hours it comes back here automatically.'
-        : i.kind==='task' ? 'This marks the task itself as done — it also disappears from the assignee’s My Tasks.'
+        : i.kind==='task' ? 'This records that you have informed '+(i.name||'the owner')+' and removes the row from this monitor. The task stays open in their My Tasks until they actually complete it.'
         : 'This closes the scheduled item on the owner’s calendar.';
       var body='<div style="font-size:13px;color:#666;margin-bottom:8px"><b>'+esc(i.title)+'</b>'+(i.name?(' · '+esc(i.name)):'')+'</div>'+
         '<div class="field full"><label>Notes (what was done)</label><textarea id="fuNote" class="in" rows="3" placeholder="e.g. Spoke to them — done now"></textarea></div>'+
@@ -371,9 +372,15 @@
         var btn=this; btn.disabled=true; btn.innerHTML='<span class="loader"></span>';
         var note=(document.getElementById('fuNote')||{}).value||'';
         function fail(r){ btn.disabled=false; btn.textContent='✓ Completed'; var m=document.getElementById('fuMsg'); if(m) m.innerHTML='<div class="msg error">'+esc((r&&r.error)||'Could not save — check internet.')+'</div>'; }
-        function done(){ closeModal(); toast('Marked completed'); paint(); }
+        function done(){ closeModal(); toast(i.kind==='task'?'Owner informed — removed from monitor':'Marked completed'); paint(); }
         if(i.kind==='task'){
-          API.setTaskStatus(i.id,'done',note).then(function(r){ if(r&&(r.ok||r.offline)){ ALLT=ALLT.filter(function(t){ return String(t.taskId)!==String(i.id); }); done(); } else fail(r); });
+          /* The PC chases people; they do not close other people's work. Marking it here logs the chase
+             in PC_Followups under TASK|<taskId> so the row leaves this monitor for good, while the task
+             itself stays open with its owner. (Previously this called setTaskStatus, which the server
+             rejected with "Not your task" — the PC is neither the assignee nor the creator.) */
+          API.completeFollowup({fuKey:'TASK|'+i.id, kind:'task', title:i.title, branchId:i.branchId, empId:i.empId||'', note:note}).then(function(r){
+            if(r&&r.ok){ ALLT=ALLT.filter(function(t){ return String(t.taskId)!==String(i.id); }); done(); } else fail(r);
+          });
         } else if(i.kind==='sch'){
           API.updateCalEntry(i.id,{status:'done'},i.owner).then(function(r){ if(r&&(r.ok||r.offline)){ ALLC=ALLC.filter(function(c){ return String(c.entryId)!==String(i.id); }); done(); } else fail(r); });
         } else {
