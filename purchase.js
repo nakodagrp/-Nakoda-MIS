@@ -16,7 +16,7 @@
   function money(v){ return Math.round(n(v)).toLocaleString('en-IN'); }
   function today(){ return new Date().toISOString().slice(0,10); }
 
-  var PU = { branch:'', filter:'all', list:[], items:[], vendors:[], canManage:false, canUse:false, me:'' };
+  var PU = { branch:'', filter:'all', list:[], items:[], vendors:[], canManage:false, canUse:false, canBill:false, me:'' };
 
   var STAGES = [['raised','Raised'],['given','Given'],['received','Received'],['billed','Bill'],['paid','Pay']];
 
@@ -52,7 +52,7 @@
       var m = r[0], l = r[1];
       if(!l || !l.ok){ box.innerHTML = '<div class="empty">' + esc((l && l.error) || 'Could not load.') + '</div>'; return; }
       if(m && m.ok){ PU.items = m.items||[]; PU.vendors = m.vendors||[]; }
-      PU.list = l.indents||[]; PU.canManage = !!l.canManage; PU.canUse = !!l.canUse; PU.me = l.me||'';
+      PU.list = l.indents||[]; PU.canManage = !!l.canManage; PU.canUse = !!l.canUse; PU.canBill = !!l.canBill; PU.me = l.me||'';
       paint(box);
     });
   };
@@ -104,7 +104,7 @@
   function actionFor(ind){
     if(ind.stage === 'raised')   return {show:PU.canManage, label:'Give order'};
     if(ind.stage === 'given')    return {show:PU.canUse,    label:'Receive'};
-    if(ind.stage === 'received') return {show:PU.canManage && ind.source === 'vendor', label:'Submit bill'};
+    if(ind.stage === 'received') return {show:PU.canBill && ind.source === 'vendor', label:'Submit bill'};
     if(ind.stage === 'billed')   return {show:false,        label:''};
     return {show:false, label:''};
   }
@@ -125,6 +125,7 @@
     if(ind.expectedDate) extra.push('expected ' + esc(ind.expectedDate));
     if(ind.poNo)        extra.push('PO ' + esc(ind.poNo));
     if(ind.bill)        extra.push('bill ' + esc(ind.bill.billNo) + ' ₹' + money(ind.bill.amount));
+    if(ind.payNumber)   extra.push(esc(ind.payNumber));
 
     var warn = '';
     if(rejected) warn = '<div class="msg error" style="margin:6px 0">Turned down' +
@@ -134,6 +135,17 @@
         ind.daysAtStage + ' days at this stage</div>';
     else if(ind.msgToBranch && ind.stage === 'given')
       warn = '<div class="msg" style="margin:6px 0">Note from Logistics: "' + esc(ind.msgToBranch) + '"</div>';
+    else if(ind.payStatus){
+      var PS = {
+        pending  : ['#c47f00', 'Bill sent — waiting for Accounts to approve'],
+        approved : ['#c47f00', 'Approved by Accounts — payment not made yet'],
+        paid     : ['#2e7d32', 'Paid'],
+        rejected : ['#c62828', 'Accounts rejected this bill'],
+        cancelled: ['#c62828', 'Payment request cancelled']
+      }[ind.payStatus];
+      if(PS) warn = '<div class="msg" style="margin:6px 0;border-color:' + PS[0] + ';color:' + PS[0] + '">' +
+                    PS[1] + ' · open Payment Requests</div>';
+    }
 
     var partial = ind.items.filter(function(i){ return i.received > 0 && i.received < i.qty; }).length;
 
