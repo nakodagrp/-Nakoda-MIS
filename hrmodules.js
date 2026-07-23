@@ -120,7 +120,7 @@
       '<div class="pm2-filt" style="grid-template-columns:1fr 1fr auto"><div><label>Month</label><input id="pyMonth" class="in" type="month" value="'+ymNow()+'"></div>'+
       '<div><label>Branch</label><select id="pyBranch" class="in"><option value="">All</option>'+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'">'+esc(b.BranchName)+'</option>';}).join('')+'</select></div>'+
       '<div style="align-self:end"><button class="btn" id="pyRun">Run payroll</button></div></div>'+
-      '<div id="pyActions" class="pm2-bar" style="display:none"><button class="btn ghost sm" id="pyBank">⤓ Bank file (CMS)</button> <button class="btn ghost sm" id="pyReg">⤓ Salary register</button></div>'+
+      '<div id="pyActions" class="pm2-bar" style="display:none"><button class="btn ghost sm" id="pyBank">⤓ Bank file (CMS)</button> <button class="btn ghost sm" id="pyReg">⤓ Salary register (Excel)</button> <button class="btn ghost sm" id="pyRegPdf">⤓ Salary register (PDF)</button></div>'+
       '<div id="pyTable"></div>';
     $id('pyRun').onclick=runPay;
     loadPayslips();
@@ -191,6 +191,52 @@
     paintKpi();
     var bk=$id('pyBank'); if(bk) bk.onclick=function(){ bankXls(computed(),PAY.month); };
     var rg=$id('pyReg'); if(rg) rg.onclick=function(){ registerXls(computed(),PAY.month); };
+    var rgp=$id('pyRegPdf'); if(rgp) rgp.onclick=function(){ registerPdf(computed(),PAY.month); };
+  }
+  /* Whole-payroll Salary Register PDF (all staff, grouped earnings/deductions + totals) via print iframe. */
+  function registerPdf(slips,month){
+    if(!slips||!slips.length){ toast('No payslips to export.',true); return; }
+    var brSel=$id('pyBranch'); var brLabel=(brSel&&brSel.value)?(brSel.options[brSel.selectedIndex].text):'All branches';
+    var mlabel=month; try{ var p=String(month).split('-'); mlabel=new Date(+p[0],+p[1]-1,1).toLocaleDateString('en-IN',{month:'long',year:'numeric'}); }catch(e){}
+    var today=new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
+    var keys=['basic','addIncentive','addBonus','addTravel','addOther','gross','lopAmt','pf','esi','pt','otherDed','deductions','net'];
+    var tot={}; keys.forEach(function(k){tot[k]=0;});
+    function c(v){ return Number(v)>0?money(v):'—'; }
+    function n(v){ return money(Number(v)||0); }
+    var body=slips.map(function(s){
+      keys.forEach(function(k){ tot[k]+=Number(s[k])||0; });
+      var zero=!(Number(s.basic)||Number(s.net));
+      return '<tr'+(zero?' class="z"':'')+'>'+
+        '<td class="l">'+esc(s.name||'')+'<div class="sub">'+esc(s.empId||'')+' · '+(s.paidDays||0)+'/'+(s.totalDays||0)+(Number(s.lopDays)>0?' · '+s.lopDays+' abs':'')+'</div></td>'+
+        '<td>'+n(s.basic)+'</td><td>'+c(s.addIncentive)+'</td><td>'+c(s.addBonus)+'</td><td>'+c(s.addTravel)+'</td><td>'+c(s.addOther)+'</td><td class="b">'+n(s.gross)+'</td>'+
+        '<td>'+c(s.lopAmt)+'</td><td>'+c(s.pf)+'</td><td>'+c(s.esi)+'</td><td>'+c(s.pt)+'</td><td>'+c(s.otherDed)+'</td><td class="b">'+n(s.deductions)+'</td>'+
+        '<td class="b">'+n(s.net)+'</td></tr>';
+    }).join('');
+    var totRow='<tr class="tot"><td class="l">TOTAL ('+slips.length+' staff)</td>'+keys.map(function(k){return '<td>'+money(tot[k])+'</td>';}).join('')+'</tr>';
+    var html='<!doctype html><html><head><meta charset="utf-8"><title>Salary Register '+esc(mlabel)+'</title>'+
+      '<style>@page{size:A4 landscape;margin:10mm}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0}'+
+      '.hd{border-bottom:2px solid #DA1017;padding-bottom:8px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-start}'+
+      '.h1{color:#DA1017;font-size:20px;font-weight:800}.sub{color:#666;font-size:11px}'+
+      'table{width:100%;border-collapse:collapse;font-size:10px}th,td{border:0.5px solid #cfcfcf;padding:3px 5px;text-align:right;white-space:nowrap}'+
+      'th{background:#f3f4f6}td.l,th.l{text-align:left}td.l .sub{font-size:8px;color:#999}td.b{font-weight:700}'+
+      '.ge{background:#e1f5ee;color:#0f6e56}.gd{background:#fcebeb;color:#a32d2d}'+
+      'tr.z td{color:#9aa0a6}tr.tot td{font-weight:700;background:#f3f4f6;border-top:1.5px solid #999}'+
+      '.sign{display:flex;justify-content:space-between;margin-top:26px;font-size:11px;color:#444}'+
+      '.sign div{border-top:0.5px solid #999;padding-top:4px;width:30%;text-align:center}.ft{margin-top:12px;color:#999;font-size:9px;text-align:center}</style></head><body>'+
+      '<div class="hd"><div><div class="h1">NAKODA</div><div class="sub">Diagnostics And Research Center</div></div>'+
+        '<div style="text-align:right"><div style="font-weight:700;font-size:14px">Salary Register</div><div class="sub">'+esc(mlabel)+' · '+esc(brLabel)+' · '+slips.length+' staff</div></div></div>'+
+      '<table><thead>'+
+        '<tr><th rowspan="2" class="l">Employee</th><th colspan="6" class="ge">Earnings (+)</th><th colspan="6" class="gd">Deductions (−)</th><th rowspan="2">Net</th></tr>'+
+        '<tr><th>Basic</th><th>Incent.</th><th>Bonus</th><th>Travel</th><th>Other</th><th>Gross</th><th>LOP</th><th>PF</th><th>ESI</th><th>PT</th><th>Other</th><th>Total</th></tr>'+
+      '</thead><tbody>'+body+totRow+'</tbody></table>'+
+      '<div class="sign"><div>Prepared by</div><div>Verified by</div><div>Authorised signatory</div></div>'+
+      '<div class="ft">Generated '+today+' · Nakoda MIS · PF 12% of basic · ESI 0.75% (gross ≤ ₹21,000) · PT ₹200 · LOP = base ÷ days × absent</div>'+
+      '</body></html>';
+    var ifr=document.createElement('iframe'); ifr.style.position='fixed'; ifr.style.right='0'; ifr.style.bottom='0'; ifr.style.width='0'; ifr.style.height='0'; ifr.style.border='0';
+    document.body.appendChild(ifr);
+    var d=ifr.contentWindow.document; d.open(); d.write(html); d.close();
+    setTimeout(function(){ try{ ifr.contentWindow.focus(); ifr.contentWindow.print(); }catch(e){} setTimeout(function(){ if(ifr.parentNode) ifr.parentNode.removeChild(ifr); },60000); }, 400);
+    toast('Opening Salary Register PDF — choose "Save as PDF"');
   }
   /* the two-column detail (additions with custom lines + button, deductions with other-deduction + PDF) */
   function buildDetail(s,i){
