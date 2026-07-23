@@ -7,7 +7,7 @@
   function todayS(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
   function attMode(){ return String((S.user&&S.user.AttendanceMode)||''); }
   function needSelfie(){ return true; }  // selfie required for all modes
-  function isFenced(){ var m=attMode().toLowerCase(); return m.indexOf('geo only')>=0 || m.indexOf('office')>=0; }   // "Geo only" mode is fenced to the branch (150 m)
+  function isFenced(){ var m=attMode().toLowerCase(); return m.indexOf('geo')>=0 || m.indexOf('office')>=0; }   // v242: ANY "geo" mode (Geo only, Geo + Selfie, Geo) is fenced to the branch (150 m) — must match Code.gs
   function hm2min(t){ var p=String(t||'').split(':'); return p.length>=2?(+p[0])*60+(+p[1]):null; }
   // Sheets time cells arrive as ISO strings like "1899-12-30T06:38:50.000Z" — extract HH:MM only
   function fmtDutyTime(t){ if(!t) return ''; var s=String(t); var m=s.match(/T(\d{2}):(\d{2})/); if(m) return m[1]+':'+m[2]; return s; }
