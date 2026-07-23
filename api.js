@@ -368,7 +368,7 @@
     myClaims:function(ym){ return call('myClaims',{token:getToken(),ym:ym}); },
     claimApprovals:function(){ return call('claimApprovals',{token:getToken()}); },
     setClaim:function(id,a){ return call('setClaim',{token:getToken(),claimId:id,action:a}); },
-    runPayroll:function(m,b){ return call('runPayroll',{token:getToken(),month:m,branch:b}); },
+    runPayroll:function(m,b,adjustments){ return call('runPayroll',{token:getToken(),month:m,branch:b,adjustments:adjustments||{}}); },
     listPayslips:function(m,b){ return call('listPayslips',{token:getToken(),month:m,branch:b}); },
     myPayslip:function(m){ return call('myPayslip',{token:getToken(),month:m}); },
     saveDaily:function(d){ return call('saveDaily',{token:getToken(),data:d}); },

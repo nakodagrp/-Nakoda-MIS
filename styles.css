@@ -446,6 +446,26 @@ table.pm-grid{border-collapse:collapse;font-size:11px;min-width:560px}
 .pol-admin a{color:var(--red)}
 .psrow{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed #eef1f5;font-size:13px}
 .net2{background:#eafaf3;color:#1a7f37;border-radius:8px;padding:10px;font-weight:700;margin-top:8px}
+.pyk{background:#f6f7f9;border-radius:10px;padding:12px 14px}
+.pyk-l{font-size:12px;color:#6b7280}
+.pyk-v{font-size:20px;font-weight:700;margin-top:2px}
+.py2{display:grid;grid-template-columns:1.7fr 1fr 1fr 1fr 1fr 30px;align-items:center;gap:8px}
+.py2>div{font-size:13px}
+.py2 .r{text-align:right}
+.py2-head{padding:8px 12px;color:#6b7280;font-size:11px;border-bottom:1px solid var(--line)}
+.py-row{border-bottom:1px solid var(--line)}
+.py-main{padding:11px 12px;cursor:pointer}
+.py-main:hover{background:#fafbfc}
+.py-sub{font-size:11px;color:#9aa0a6;margin-top:2px}
+.py-chev{color:#9aa0a6;display:inline-block;transition:transform .15s}
+.py-row.open .py-chev{transform:rotate(90deg)}
+.py-det{grid-template-columns:1fr 1fr;gap:14px;padding:2px 12px 14px}
+@media(max-width:640px){.py-det{grid-template-columns:1fr}.py2{grid-template-columns:1.4fr 1fr 1fr 26px}.py2 .r:nth-child(3),.py2 .r:nth-child(4){display:none}}
+.py-box{background:#f6f7f9;border-radius:10px;padding:10px 12px}
+.py-bt{font-size:11px;font-weight:600;letter-spacing:.04em;margin-bottom:6px}
+.py-li{display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:12px;color:#555}
+.py-li input{width:88px;height:30px;padding:3px 8px;text-align:right;font-size:12px;border:1px solid var(--line);border-radius:7px}
+.py-lt{display:flex;justify-content:space-between;font-size:12px;font-weight:600;border-top:1px solid var(--line);margin-top:6px;padding-top:6px}
 .upst{margin-top:4px}
 
 /* ===================== ACCOUNTS ===================== */
