@@ -7,7 +7,7 @@
   function lvl(){ return (S.perms&&S.perms.level)||''; }
   function canLeaveApprove(){ return lvl()==='BRANCH_MGR'||lvl()==='SUPER'||(S.user&&String(S.user.Role)==='Operations Manager'); }
   function canClaimApprove(){ return lvl()==='BRANCH_MGR'||lvl()==='HR_ADMIN'||lvl()==='SUPER'||(S.user&&S.user.Role==='Operations Manager'); }
-  function payAllowed(){ return lvl()==='SUPER'||lvl()==='HR_ADMIN'; }
+  function payAllowed(){ return lvl()==='SUPER'||lvl()==='HR_ADMIN'||(S.user && ['Operations Manager','Accounts'].indexOf(String(S.user.Role))>=0); }
   function lstat(s){ s=String(s||''); var c=s==='approved'?'#1a7f37':s==='rejected'?'#DA1017':'#c47f00'; return '<span style="font-size:10px;font-weight:700;color:'+c+'">'+s.toUpperCase()+'</span>'; }
 
   /* Leave is handled by leave.js (renderLeave exposed on window.renderLeave) */
