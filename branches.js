@@ -49,7 +49,7 @@
       '<div class="section-title full">Location (for attendance geo-fencing)</div>'+
       '<div class="field"><label>Latitude</label><input id="b_lat" value="'+esc(b.Latitude||'')+'" placeholder="e.g. 21.1702"></div>'+
       '<div class="field"><label>Longitude</label><input id="b_lng" value="'+esc(b.Longitude||'')+'" placeholder="e.g. 72.8311"></div>'+
-      '<div class="field"><label>Allowed radius (metres)</label><input id="b_radius" type="number" value="'+esc(b.GeoRadius||'100')+'"></div>'+
+      '<div class="field"><label>Allowed radius (metres)</label><input id="b_radius" type="number" value="'+esc(b.GeoRadius||'150')+'"></div>'+
       '<div class="field"><label>&nbsp;</label><button type="button" class="btn ghost" id="b_useLoc">📍 Use my current location</button></div>'+
       '<div class="section-title full">Banking (used later for payroll / payouts)</div>'+
       '<div class="field"><label>Bank name</label><input id="b_bank" value="'+esc(b.BankName||'')+'"></div>'+
