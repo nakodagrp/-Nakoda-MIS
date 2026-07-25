@@ -57,8 +57,11 @@
       '<div class="field full"><label>Account number</label><input id="b_acct" value="'+esc(b.AccountNumber||'')+'"></div>'+
       '<div class="section-title full">WhatsApp Official API (whatsbizapi.com) — this branch\'s number</div>'+
       '<div class="field full"><label>API key / token '+(b.WaTokenSet?'<span style="color:#1a7f37">— saved ✓</span>':'')+'</label>'+
-        '<input id="b_watoken" type="password" autocomplete="off" placeholder="'+(b.WaTokenSet?'Leave blank to keep current key · type CLEAR to remove':'Paste the token from whatsbizapi.com')+'">'+
-        '<div style="font-size:11px;color:#999;margin-top:4px">Each branch has its own WhatsApp number, so paste that branch\'s own key here. The key is stored on the server and never shown again.</div></div>'+
+        '<div style="display:flex;align-items:stretch">'+
+          '<input id="b_watoken" type="password" autocomplete="new-password" name="wa_'+Math.random().toString(36).slice(2)+'" data-lpignore="true" data-form-type="other" readonly placeholder="'+(b.WaTokenSet?'Leave blank to keep current key · type CLEAR to remove':'Paste the token from whatsbizapi.com')+'" style="flex:1;border-top-right-radius:0;border-bottom-right-radius:0">'+
+          '<button type="button" id="b_watokenEye" class="btn ghost" title="Show / hide" style="border-top-left-radius:0;border-bottom-left-radius:0;border-left:none;padding:0 12px;min-width:44px">👁</button>'+
+        '</div>'+
+        '<div style="font-size:11px;color:#999;margin-top:4px">Each branch has its own WhatsApp number, so paste that branch\'s own key here. The key is stored on the server and never shown again — tap 👁 to check what you just pasted before saving.</div></div>'+
       '<div class="field full"><label>Card template for this branch</label><select id="b_watpl"><option value="">— Auto: "Membership card" template from the WhatsApp Templates menu —</option></select>'+
         '<input type="hidden" id="b_walang" value="'+esc(b.WaTemplateLang||'')+'">'+
         '<div style="font-size:11px;color:#999;margin-top:4px">Templates are managed in the <b>WhatsApp Templates</b> menu. Pick one here only if this branch must use a different template than the rest.</div></div>'+
@@ -114,6 +117,13 @@
         else { st.innerHTML='<span style="color:#C0392B">✗ '+esc(r.error||'Test failed')+'</span>'; toast(r.error||'Test failed',true); }
       }).catch(function(){ wt.disabled=false; wt.textContent='📶 Send test'; st.textContent='Network error — try again.'; });
     };
+
+    /* WhatsApp token field: block browser autofill (readonly until focus, so it stays truly empty
+       on reopen — no stale "previous token" dots), and an eye button to show/hide what you type. */
+    var wtok=document.getElementById('b_watoken');
+    if(wtok){ wtok.addEventListener('focus', function(){ this.removeAttribute('readonly'); });
+      var eye=document.getElementById('b_watokenEye');
+      if(eye) eye.onclick=function(){ if(wtok.type==='password'){ wtok.type='text'; eye.textContent='🙈'; } else { wtok.type='password'; eye.textContent='👁'; } }; }
 
     var ul=document.getElementById('b_useLoc');
     if(ul) ul.onclick=function(){ if(!navigator.geolocation){ toast('Location not supported on this device.',true); return; } ul.textContent='Locating…';
