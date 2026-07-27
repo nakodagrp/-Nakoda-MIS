@@ -716,11 +716,12 @@ function openEmpModal(empId){
       '<div class="section-title full">Work &amp; pay</div>'+
       fld('Duty start','f_DutyStart',timeInp(e.DutyStart),'time')+fld('Duty end','f_DutyEnd',timeInp(e.DutyEnd),'time')+
       fld('Alt shift start','f_AltDutyStart',timeInp(e.AltDutyStart),'time')+fld('Alt shift end','f_AltDutyEnd',timeInp(e.AltDutyEnd),'time')+
-      fld('Basic salary (₹)','f_BasicSalary',e.BasicSalary,'number')+
-      '<div class="field"><label>PF (provident fund)</label><select id="f_PfApplicable"><option value="">Applicable — 12% of basic</option><option value="no"'+(String(e.PfApplicable).toLowerCase()==='no'?' selected':'')+'>Not applicable</option></select></div>'+
-      '<div class="field"><label>ESI</label><select id="f_EsiApplicable"><option value="">Auto — 0.75% if gross ≤ ₹21,000</option><option value="yes"'+(String(e.EsiApplicable).toLowerCase()==='yes'?' selected':'')+'>Always deduct</option><option value="no"'+(String(e.EsiApplicable).toLowerCase()==='no'?' selected':'')+'>Never deduct</option></select></div>'+
-      '<div class="field"><label>Professional tax (₹/month)</label><input id="f_PtAmount" type="number" placeholder="200" value="'+esc(e.PtAmount===''||e.PtAmount==null?'':e.PtAmount)+'"><div style="font-size:11px;color:#9aa0a6;margin-top:3px">Blank = ₹200 (Gujarat default). Enter 0 to skip.</div></div>'+
-      sel('Attendance mode','f_AttendanceMode',['Geo only — lab staff','Geo — WFH','Selfie only — field staff','Geo + Selfie — both required','Digital Technician — work from home'],e.AttendanceMode)+
+      '<div class="field"><label>Actual salary (₹/month)</label><input id="f_ActualSalary" type="number" value="'+esc(e.ActualSalary===''||e.ActualSalary==null?(e.BasicSalary||''):e.ActualSalary)+'"><div id="salSplit" style="font-size:11px;color:#9aa0a6;margin-top:3px"></div></div>'+
+      '<div class="field"><label>Pay mode</label><select id="f_PayMode"><option value="">Standard — deductions apply</option><option value="gross"'+(String(e.PayMode).toLowerCase()==='gross'?' selected':'')+'>Gross salary — no deductions</option></select></div>'+
+      '<div class="field"><label>PF (provident fund)</label><select id="f_PfApplicable"><option value="">In PF scheme</option><option value="no"'+(String(e.PfApplicable).toLowerCase()==='no'?' selected':'')+'>Not in PF scheme</option></select><div style="font-size:11px;color:#9aa0a6;margin-top:3px">₹1,800 flat at ₹15,000+, otherwise 12% of basic.</div></div>'+
+      '<div class="field"><label>ESIC</label><select id="f_EsiApplicable"><option value="">Deduct — 0.75% of basic</option><option value="no"'+(String(e.EsiApplicable).toLowerCase()==='no'?' selected':'')+'>Never deduct</option></select></div>'+
+      '<div class="field"><label>Professional tax (₹/month)</label><input id="f_PtAmount" type="number" placeholder="auto" value="'+esc(e.PtAmount===''||e.PtAmount==null?'':e.PtAmount)+'"><div style="font-size:11px;color:#9aa0a6;margin-top:3px">Blank = ₹200 at ₹15,000+, nil below. Enter a number to override, 0 to skip.</div></div>'+
+      sel('Attendance mode','f_AttendanceMode',['Geo only — lab staff','Geo — WFH','Selfie only — field staff','Geo + Selfie — both required'],e.AttendanceMode)+
       '<div class="field"><label>Punch in/out required</label><select id="f_PunchRequired"><option value="">Yes — normal staff</option><option value="no"'+(String(e.PunchRequired)==='no'?' selected':'')+'>No — partner / exempt</option></select><div style="font-size:11px;color:#9aa0a6;margin-top:3px">"No" = never chased for punch-in, never counted in the L (not punched) list.</div></div>'+
       '<div class="field"><label>Sunday work</label><select id="f_SundayWork"><option value="">No</option><option value="every"'+(String(e.SundayWork)==='every'?' selected':'')+'>Every Sunday</option><option value="alternate"'+(String(e.SundayWork)==='alternate'?' selected':'')+'>Alternate Sunday</option></select></div>'+
       '<div class="field"><label>Sunday time</label><input id="f_SundayHours" type="text" placeholder="e.g. 5:00 am to 9:00 am" value="'+esc(e.SundayHours||'')+'"></div>'+
@@ -753,6 +754,25 @@ function openEmpModal(empId){
     var roleSel=$('f_Role');
     function syncBranch(){ if(!roleSel) return; var sel=S.meta.roles.filter(function(r){return r.Role===roleSel.value;})[0]; var bf=$('branchField'); if(bf) bf.style.display=(sel&&sel.OfficeType==='Branch')?'':'none'; }
     if(roleSel){ roleSel.addEventListener('change',syncBranch); syncBranch(); }
+    /* Live Basic 55% / HRA 45% split under the salary box, plus which PF band the person falls in,
+       so whoever types the number can see what it actually becomes. Mirrors payCalc_ in Code.gs. */
+    (function(){
+      var si=$('f_ActualSalary'), so=$('salSplit'); if(!si||!so) return;
+      function money(n){ return '₹'+Math.round(n).toLocaleString('en-IN'); }
+      function upd(){
+        var a=Number(si.value)||0;
+        if(a<=0){ so.innerHTML='Basic and HRA are worked out from this. Leave blank and the person stays at ₹0.'; return; }
+        var basic=Math.round(a*0.55), hra=a-basic;
+        var gross=(($('f_PayMode')||{}).value==='gross');
+        var band=gross?'Gross pay — no PF, ESIC or professional tax.'
+          :(a>=15000?('₹15,000+ band — PF ₹1,800 flat, professional tax ₹200.')
+                    :('Below ₹15,000 — PF 12% of basic ('+money(basic*0.12)+'), no professional tax.'));
+        so.innerHTML='Basic <b>'+money(basic)+'</b> (55%) · HRA <b>'+money(hra)+'</b> (45%)<br>'+band;
+      }
+      si.addEventListener('input',upd);
+      var pm=$('f_PayMode'); if(pm) pm.addEventListener('change',upd);
+      upd();
+    })();
     if(S.perms.level==='BRANCH_MGR'){ var bs=$('f_Branch'); if(bs){ bs.value=S.perms.branch; bs.disabled=true; } }
     var empDocsPending=0;
     function empDocsSaveState(){ var b=$('saveEmpBtn'); if(!b) return; b.disabled=empDocsPending>0; if(empDocsPending>0) b.textContent='Uploading… ('+empDocsPending+') — please wait'; else b.textContent=editing?'Save changes':'Create staff'; }
@@ -842,7 +862,7 @@ function val(id){ var e=$(id); return e?e.value.trim():undefined; }
 function saveEmp(empId, manage){
   var data={ Phone:val('f_Phone'),Email:val('f_Email'),Gender:val('f_Gender'),DOB:val('f_DOB'),Address:val('f_Address'),EmergencyName:val('f_EmergencyName'),EmergencyPhone:val('f_EmergencyPhone') };
   if(manage){ data.FullName=val('f_FullName'); data.Role=val('f_Role'); data.JoiningDate=val('f_JoiningDate'); data.ReportsTo=val('f_ReportsTo'); var bs=$('f_Branch'); if(bs) data.Branch=bs.value;
-    ['FatherName','FatherPhone','MotherName','MotherPhone','SpouseName','SpousePhone','Anniversary','BankPrefix','IFSC','AccountNo','DutyStart','DutyEnd','AltDutyStart','AltDutyEnd','BasicSalary','AttendanceMode','SundayWork','SundayHours','PayType','PerKmRate','PerVisitRate','KRA','PunchRequired','PfApplicable','EsiApplicable','PtAmount'].forEach(function(f){ var v=val('f_'+f); if(v!==undefined) data[f]=v; });
+    ['FatherName','FatherPhone','MotherName','MotherPhone','SpouseName','SpousePhone','Anniversary','BankPrefix','IFSC','AccountNo','DutyStart','DutyEnd','AltDutyStart','AltDutyEnd','BasicSalary','AttendanceMode','SundayWork','SundayHours','PayType','PerKmRate','PerVisitRate','KRA','PunchRequired','PfApplicable','EsiApplicable','PtAmount','ActualSalary','PayMode'].forEach(function(f){ var v=val('f_'+f); if(v!==undefined) data[f]=v; });
     var dc=window._empDocs||{}; data.AadhaarUrl=dc.Aadhaar||''; data.PanUrl=dc.Pan||''; data.DLUrl=dc.DL||''; data.LightBillUrl=dc.LightBill||''; data.EduDocsUrl=(dc.Edu||[]).join(',');
     var adCb=$('f_AttApproveDenied'); if(adCb) data.AttApproveDenied=adCb.checked?'yes':''; }
   if(manage && !data.FullName){ toast('Full name is required.',true); return; }

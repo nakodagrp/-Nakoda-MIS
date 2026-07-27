@@ -120,38 +120,61 @@
       '<div class="pm2-filt" style="grid-template-columns:1fr 1fr auto"><div><label>Month</label><input id="pyMonth" class="in" type="month" value="'+ymNow()+'"></div>'+
       '<div><label>Branch</label><select id="pyBranch" class="in"><option value="">All</option>'+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'">'+esc(b.BranchName)+'</option>';}).join('')+'</select></div>'+
       '<div style="align-self:end"><button class="btn" id="pyRun">Run payroll</button></div></div>'+
-      '<div id="pyActions" class="pm2-bar" style="display:none"><button class="btn ghost sm" id="pyBank">⤓ Bank file (CMS)</button> <button class="btn ghost sm" id="pyReg">⤓ Salary register (Excel)</button> <button class="btn ghost sm" id="pyRegPdf">⤓ Salary register (PDF)</button></div>'+
-      '<div id="pyTable"></div>';
+      '<div id="pyActions" class="pm2-bar" style="display:none"><button class="btn ghost sm" id="pyBank">⤓ Bank file (CMS)</button> <button class="btn ghost sm" id="pyReg">⤓ Salary register (Excel)</button> <button class="btn ghost sm" id="pyRegPdf">⤓ Salary register (PDF)</button> <button class="btn ghost sm" id="pyBulk">⚙ Set salaries</button><span id="pyLockWrap"></span></div>'+
+      '<div id="pyWarn"></div><div id="pyTable"></div>';
     $id('pyRun').onclick=runPay;
     loadPayslips();
   }
-  var PAY={slips:[],month:ymNow()};
+  var PAY={slips:[],month:ymNow(),locked:false};
   var R='#A32D2D', G='#0F6E56';
   function m0(n){ return '₹'+money(n); }
+  function myActual(s){ return Number(s.actualSalary)||Number(s.basic)||0; }
+  function myBasic(s){ return Math.round(myActual(s)*0.55); }
   function numv(v){ return Math.max(0,Math.round(Number(v)||0)); }
+  /* Blank means "use the calculated figure". 0 is a real override meaning deduct nothing. */
+  function hasOv(v){ return v!==undefined && v!==null && String(v).trim()!==''; }
   function stop(e){ e.stopPropagation(); }
-  /* mirror of the backend statutory maths, so Net previews live as you type additions/deductions */
+  /* Exact mirror of payCalc_ in Code.gs, so the number on screen is always the number that gets saved.
+     Basic 55% / HRA 45% of actual salary; PF flat 1,800 and PT 200 at 15,000+, else PF 12% of basic and
+     no PT; ESIC 0.75% of basic rounded up; deductions do NOT shrink when someone takes leave. */
   function pcCalc(s){
     var inc=numv(s._inc), bon=numv(s._bon), trv=numv(s._trv);
     var addOther=0; (s._other||[]).forEach(function(o){ addOther+=numv(o.amt); });
-    var additions=inc+bon+trv+addOther, basic=Number(s.basic)||0, lopAmt=Number(s.lopAmt)||0, gross=basic+additions;
-    var pfOn=(s.pfOn===false)?false:true;
-    var esiMode=s.esiMode||'auto';
-    var esiOn=esiMode==='yes'?true:(esiMode==='no'?false:(gross>0&&gross<=21000));
-    var ptAmt=(s.ptAmt===undefined||s.ptAmt===''||s.ptAmt===null)?200:(Number(s.ptAmt)||0);
-    var pf=pfOn?Math.round(basic*0.12):0;
-    var esi=esiOn?Math.round(gross*0.0075):0;
-    var pt=basic>0?ptAmt:0;
+    var additions=inc+bon+trv+addOther;
+    var actual=Number(s.actualSalary)||Number(s.basic)||0;
+    var basic=Math.round(actual*0.55), hra=actual-basic;
+    var lopAmt=Number(s.lopAmt)||0, earned=actual-lopAmt, gross=earned+additions;
+    var grossMode=String(s.payMode||'')==='gross';
+    var pfOn=!grossMode && s.pfOn!==false;
+    var esiOn=!grossMode && s.esiOn!==false;
+    var pf=0, esi=0, pt=0, pfAuto=0, esiAuto=0, ptAuto=0;
+    if(actual>0 && !grossMode){
+      pfAuto=pfOn?((actual>=15000)?1800:Math.round(basic*0.12)):0;
+      esiAuto=esiOn?Math.ceil(basic*0.0075):0;
+      ptAuto=(s.ptAmt===undefined||s.ptAmt===''||s.ptAmt===null)?((actual>=15000)?200:0):(Number(s.ptAmt)||0);
+      pf=pfAuto; esi=esiAuto; pt=ptAuto;
+      if(hasOv(s._pfOv))  pf=numv(s._pfOv);
+      if(hasOv(s._esiOv)) esi=numv(s._esiOv);
+      if(hasOv(s._ptOv))  pt=numv(s._ptOv);
+    }
     var otherDed=numv(s._otherDed);
-    var ded=lopAmt+pf+esi+pt+otherDed;
-    return {inc:inc,bon:bon,trv:trv,addOther:addOther,other:(s._other||[]),additions:additions,gross:gross,lopAmt:lopAmt,pf:pf,esi:esi,pt:pt,otherDed:otherDed,otherDedLabel:s._otherDedLabel||'',ded:ded,net:gross-ded};
+    var statutory=pf+esi+pt+otherDed;
+    return {inc:inc,bon:bon,trv:trv,addOther:addOther,other:(s._other||[]),additions:additions,
+      actual:actual,basic:basic,hra:hra,earned:earned,gross:gross,lopAmt:lopAmt,
+      pf:pf,esi:esi,pt:pt,pfAuto:pfAuto,esiAuto:esiAuto,ptAuto:ptAuto,
+      otherDed:otherDed,otherDedLabel:s._otherDedLabel||'',
+      ded:lopAmt+statutory,net:gross-statutory,grossMode:grossMode,noSalary:actual<=0};
   }
-  function loadPayslips(){ PAY.month=$id('pyMonth').value||ymNow(); API.listPayslips(PAY.month, ($id('pyBranch')||{}).value||'').then(function(r){ if(r&&r.ok){ PAY.slips=(r.slips||[]).map(initSlip); paintPay(); } }); }
+  function loadPayslips(){ PAY.month=$id('pyMonth').value||ymNow(); API.listPayslips(PAY.month, ($id('pyBranch')||{}).value||'').then(function(r){ if(r&&r.ok){ PAY.slips=(r.slips||[]).map(initSlip); PAY.locked=!!r.locked; paintPay(); } }); }
   function initSlip(s){
     s._inc=Number(s.addIncentive)||0; s._bon=Number(s.addBonus)||0; s._trv=Number(s.addTravel)||0;
     s._other=[]; if(s.addOtherJson){ try{ s._other=JSON.parse(s.addOtherJson)||[]; }catch(e){ s._other=[]; } }
     if(!s._inc&&!s._bon&&!s._trv&&!s._other.length&&Number(s.additions)>0) s._inc=Number(s.additions);
     s._otherDed=Number(s.otherDed)||0; s._otherDedLabel=s.otherDedLabel||'';
+    if(!Number(s.actualSalary)) s.actualSalary=Number(s.basic)||0;   // pre-migration slips
+    s._pfOv=(s.pfOverride===0||s.pfOverride)?String(s.pfOverride):'';
+    s._esiOv=(s.esiOverride===0||s.esiOverride)?String(s.esiOverride):'';
+    s._ptOv=(s.ptOverride===0||s.ptOverride)?String(s.ptOverride):'';
     return s;
   }
   /* gather each employee's split additions + other deduction for the backend */
@@ -159,7 +182,10 @@
     var inc=numv(s._inc),bon=numv(s._bon),trv=numv(s._trv);
     var other=(s._other||[]).map(function(o){return {label:String((o&&o.label)||'Other'),amt:numv(o&&o.amt)};}).filter(function(o){return o.amt>0;});
     var od=numv(s._otherDed);
-    if(inc||bon||trv||other.length||od) m[s.empId]={incentive:inc,bonus:bon,travel:trv,other:other,otherDed:od,otherDedLabel:s._otherDedLabel||''};
+    var hasO=hasOv(s._pfOv)||hasOv(s._esiOv)||hasOv(s._ptOv);
+    if(inc||bon||trv||other.length||od||hasO) m[s.empId]={incentive:inc,bonus:bon,travel:trv,other:other,
+      otherDed:od,otherDedLabel:s._otherDedLabel||'',
+      pfOv:(hasOv(s._pfOv)?s._pfOv:''),esiOv:(hasOv(s._esiOv)?s._esiOv:''),ptOv:(hasOv(s._ptOv)?s._ptOv:'')};
   }); return m; }
   function runPay(){ var b=$id('pyRun'); b.disabled=true; b.textContent='Running…'; PAY.month=$id('pyMonth').value||ymNow();
     API.runPayroll(PAY.month, ($id('pyBranch')||{}).value||'', collectAdj()).then(function(r){ b.disabled=false; b.textContent='Run payroll'; if(r&&r.ok){ PAY.slips=(r.slips||[]).map(initSlip); toast('Payroll saved for '+r.slips.length+' staff'); paintPay(); } else toast((r&&r.error)||'Failed',true); }); }
@@ -168,7 +194,7 @@
     if(!PAY.slips.length){ box.innerHTML='<div class="empty">No payslips. Pick a month and Run payroll.</div>'; return; }
     box.innerHTML=
       '<div id="pyKpi" class="pyk-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px"></div>'+
-      '<div class="py2 py2-head"><div>Employee</div><div class="r">Base</div><div class="r" style="color:'+G+'">Additions</div><div class="r" style="color:'+R+'">Deductions</div><div class="r">Net payable</div><div></div></div>'+
+      '<div class="py2 py2-head"><div>Employee</div><div class="r">Actual / Basic</div><div class="r" style="color:'+G+'">Additions</div><div class="r" style="color:'+R+'">Deductions</div><div class="r">Net payable</div><div></div></div>'+
       '<div id="pyRows"></div>'+
       '<div style="font-size:11px;color:#9aa0a6;margin-top:10px">Tap a row to open its Additions &amp; Deductions detail. Edit amounts and Net updates live; press <b>Run payroll</b> to save. PF 12% of basic · ESI 0.75% if gross ≤ ₹21,000 (adding pay can switch ESI off) · PT ₹200 · LOP = base ÷ days × absent.</div>';
     var rows=$id('pyRows');
@@ -177,8 +203,8 @@
       var row=document.createElement('div'); row.className='py-row'; row.setAttribute('data-i',i);
       row.innerHTML=
         '<div class="py2 py-main">'+
-          '<div><b>'+esc(s.name)+'</b><div class="py-sub">'+s.paidDays+(s.totalDays?'/'+s.totalDays:'')+' paid'+(Number(s.lopDays)>0?' · '+s.lopDays+' LOP':'')+'</div></div>'+
-          '<div class="r">'+m0(s.basic||s.earned)+'</div>'+
+          '<div><b>'+esc(s.name)+'</b><div class="py-sub">'+(c.noSalary?'<span style="color:#854F0B">no salary set</span>':(s.paidDays+(s.totalDays?'/'+s.totalDays:'')+' paid'+(Number(s.lopDays)>0?' · '+s.lopDays+' LOP':'')))+(c.grossMode?' · gross':'')+(Number(s.blankDays)>0?' · <span style="color:#854F0B">'+s.blankDays+'d no record</span>':'')+'</div></div>'+
+          '<div class="r">'+(c.noSalary?'—':m0(c.actual)+'<div class="py-sub">basic '+m0(c.basic)+'</div>')+'</div>'+
           '<div class="r" data-c="add" style="color:'+G+'">'+(c.additions?'+'+m0(c.additions):'—')+'</div>'+
           '<div class="r" data-c="ded" style="color:'+R+'">−'+m0(c.ded)+'</div>'+
           '<div class="r" data-c="net" style="font-weight:600">'+m0(c.net)+'</div>'+
@@ -192,6 +218,73 @@
     var bk=$id('pyBank'); if(bk) bk.onclick=function(){ bankXls(computed(),PAY.month); };
     var rg=$id('pyReg'); if(rg) rg.onclick=function(){ registerXls(computed(),PAY.month); };
     var rgp=$id('pyRegPdf'); if(rgp) rgp.onclick=function(){ registerPdf(computed(),PAY.month); };
+    var bulk=$id('pyBulk'); if(bulk) bulk.onclick=openBulkPay;
+    paintLock();
+  }
+  /* Only the Director sees the lock control. Locking freezes a month so a run that has already been
+     paid out cannot be silently recomputed by anyone else. */
+  function isDirector(){ var r=String((S.user&&S.user.Role)||''); return r==='Director'||r==='MD'||r==='Owner'; }
+  function paintLock(){
+    var w=$id('pyLockWrap'); if(!w) return;
+    if(PAY.locked){
+      w.innerHTML=' <span class="py-lockchip">🔒 Locked</span>'+(isDirector()?' <button class="btn ghost sm" id="pyUnlock">Reopen month</button>':'');
+      var ub=$id('pyUnlock'); if(ub) ub.onclick=function(){ setLock('unlock'); };
+    } else {
+      w.innerHTML=isDirector()?' <button class="btn ghost sm" id="pyLock">🔒 Approve &amp; lock</button>':'';
+      var lb=$id('pyLock'); if(lb) lb.onclick=function(){ setLock('lock'); };
+    }
+    var run=$id('pyRun'); if(run){ run.disabled=!!PAY.locked; run.title=PAY.locked?'This month is locked — reopen it first.':''; }
+  }
+  function setLock(mode){
+    var msg=mode==='lock'
+      ? 'Lock '+PAY.month+'? Nobody will be able to re-run or change these figures until you reopen it.'
+      : 'Reopen '+PAY.month+'? Payroll can then be recomputed, which will overwrite the figures already approved.';
+    if(!confirm(msg)) return;
+    API.approvePayroll(PAY.month, ($id('pyBranch')||{}).value||'', mode).then(function(r){
+      if(r&&r.ok){ PAY.locked=(mode==='lock'); toast(mode==='lock'?'Month locked':'Month reopened'); paintLock(); }
+      else toast((r&&r.error)||'Failed',true);
+    });
+  }
+  /* Set salary + PF/ESIC/PT for everyone in one pass, instead of opening each profile. */
+  function openBulkPay(){
+    openModal('Set salaries','<div id="bpBody"><div class="center-load"><span class="loader dark"></span> Loading…</div></div>',
+      '<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="bpSave">Save all</button>');
+    API.listEmployees().then(function(r){
+      var list=((r&&r.employees)||r||[]).filter(function(e){ return String(e.Status)==='Active'; });
+      var b=$id('bpBody'); if(!b) return;
+      if(!list.length){ b.innerHTML='<div class="empty">No active staff.</div>'; return; }
+      b.innerHTML='<div style="font-size:12px;color:#9aa0a6;margin-bottom:8px">Basic is 55% of whatever you type. Untick PF for anyone outside the scheme; tick Gross for staff paid with no deductions at all.</div>'+
+        '<div class="bp-head"><div>Employee</div><div class="r">Actual salary</div><div class="c">PF</div><div class="c">ESIC</div><div class="c">Gross</div></div>'+
+        list.map(function(e,i){
+          var av=(e.ActualSalary===''||e.ActualSalary==null)?(e.BasicSalary||''):e.ActualSalary;
+          return '<div class="bp-row"><div><b>'+esc(e.FullName||e.EmpID)+'</b><div class="py-sub" data-bs="'+i+'"></div></div>'+
+            '<div class="r"><input type="number" min="0" data-bp="'+i+'" value="'+esc(av)+'" placeholder="0" style="width:100px;text-align:right"></div>'+
+            '<div class="c"><input type="checkbox" data-bpf="'+i+'"'+(String(e.PfApplicable).toLowerCase()==='no'?'':' checked')+'></div>'+
+            '<div class="c"><input type="checkbox" data-bes="'+i+'"'+(String(e.EsiApplicable).toLowerCase()==='no'?'':' checked')+'></div>'+
+            '<div class="c"><input type="checkbox" data-bgr="'+i+'"'+(String(e.PayMode).toLowerCase()==='gross'?' checked':'')+'></div></div>';
+        }).join('');
+      function sub(i){
+        var v=Number((b.querySelector('[data-bp="'+i+'"]')||{}).value)||0;
+        var el=b.querySelector('[data-bs="'+i+'"]'); if(!el) return;
+        el.innerHTML=v>0?('basic '+m0(Math.round(v*0.55))+' · HRA '+m0(v-Math.round(v*0.55))+(v>=15000?' · PF ₹1,800':' · PF 12%')):'no salary set';
+      }
+      list.forEach(function(e,i){ sub(i); var inp=b.querySelector('[data-bp="'+i+'"]'); if(inp) inp.oninput=function(){ sub(i); }; });
+      $id('bpSave').onclick=function(){
+        var btn=this; btn.disabled=true; btn.innerHTML='<span class="loader"></span>';
+        var rows=list.map(function(e,i){
+          return { empId:e.EmpID,
+            actualSalary:Number((b.querySelector('[data-bp="'+i+'"]')||{}).value)||0,
+            pf:!!(b.querySelector('[data-bpf="'+i+'"]')||{}).checked,
+            esi:!!(b.querySelector('[data-bes="'+i+'"]')||{}).checked,
+            payMode:((b.querySelector('[data-bgr="'+i+'"]')||{}).checked?'gross':'') };
+        });
+        API.bulkSetPay(rows).then(function(r){
+          btn.disabled=false; btn.textContent='Save all';
+          if(r&&r.ok){ closeModal(); toast('Saved '+r.saved+' staff — press Run payroll to apply'); loadPayslips(); }
+          else toast((r&&r.error)||'Failed',true);
+        });
+      };
+    });
   }
   /* Whole-payroll Salary Register PDF (all staff, grouped earnings/deductions + totals) via print iframe. */
   function registerPdf(slips,month){
@@ -241,33 +334,53 @@
   /* the two-column detail (additions with custom lines + button, deductions with other-deduction + PDF) */
   function buildDetail(s,i){
     var c=pcCalc(s);
-    return '<div class="py-box"><div class="py-bt" style="color:'+G+'">ADDITIONS (+)</div>'+
+    var pfLbl=c.actual>=15000?'Provident fund (flat)':'Provident fund (12% of basic)';
+    return '<div class="py-box"><div class="py-bt" style="color:'+G+'">EARNINGS (+)</div>'+
+        '<div class="py-li"><span>Basic · 55%</span><span>'+m0(c.basic)+'</span></div>'+
+        '<div class="py-li"><span>HRA · 45%</span><span>'+m0(c.hra)+'</span></div>'+
+        (c.grossMode?'<div class="py-li" style="color:#854F0B"><span>Gross pay — no deductions</span><span></span></div>':'')+
         addLi(i,'Incentive','_inc',s._inc)+addLi(i,'Bonus','_bon',s._bon)+addLi(i,'Travel / arrears','_trv',s._trv)+
         otherAddLines(i,s._other)+
         '<button class="py-addbtn" data-oadd="'+i+'">+ Add other addition</button>'+
         '<div class="py-lt"><span>Total additions</span><span data-c="addtot" style="color:'+G+'">'+m0(c.additions)+'</span></div></div>'+
       '<div class="py-box"><div class="py-bt" style="color:'+R+'">DEDUCTIONS (−)</div>'+
-        dedLi('Absent / half-day (LOP '+(s.lopDays||0)+'d)',c.lopAmt)+dedLi('Provident fund (12%)',c.pf)+
-        '<div class="py-li"><span>ESI (0.75%)</span><span data-c="esi">'+(c.esi>0?'−'+m0(c.esi):'—')+'</span></div>'+
-        dedLi('Professional tax',c.pt)+
+        dedLi('Absent / half-day (LOP '+(s.lopDays||0)+'d)',c.lopAmt)+
+        dedOv(i,pfLbl,'_pfOv',s._pfOv,c.pfAuto)+
+        dedOv(i,'ESIC (0.75% of basic)','_esiOv',s._esiOv,c.esiAuto)+
+        dedOv(i,'Professional tax','_ptOv',s._ptOv,c.ptAuto)+
         '<div class="py-li" style="gap:6px"><input data-otherlbl="'+i+'" value="'+esc(s._otherDedLabel||'')+'" placeholder="Other deduction (advance / loan)" style="flex:1;min-width:0"><input type="number" min="0" data-otherded="'+i+'" value="'+(Number(s._otherDed)>0?Number(s._otherDed):'')+'" placeholder="0" style="width:80px"></div>'+
         '<div class="py-lt"><span>Total deductions</span><span data-c="dedtot" style="color:'+R+'">−'+m0(c.ded)+'</span></div>'+
         '<div style="margin-top:8px;text-align:right"><button class="btn ghost sm" data-pdf="'+esc(s.empId)+'">⤓ Download PDF</button></div></div>';
   }
   function addLi(i,label,key,val){ return '<div class="py-li"><span>'+label+'</span><input type="number" min="0" data-i="'+i+'" data-key="'+key+'" value="'+(Number(val)>0?Number(val):'')+'" placeholder="0"></div>'; }
+  /* An editable deduction: leave it blank and the calculated figure (shown greyed as the placeholder)
+     applies; type a number and that wins for this month only. */
+  function dedOv(i,label,key,val,auto){
+    return '<div class="py-li"><span>'+label+'</span><input type="number" min="0" data-dov="'+i+'" data-dk="'+key+'" value="'+(val===''||val==null?'':esc(val))+'" placeholder="'+numv(auto)+'"></div>';
+  }
   function dedLi(label,val){ return '<div class="py-li"><span>'+label+'</span><span>'+(Number(val)>0?'−'+m0(val):'—')+'</span></div>'; }
   function otherAddLines(i,arr){ return (arr||[]).map(function(o,k){ return '<div class="py-li" style="gap:6px"><input data-oi="'+i+'" data-ok="'+k+'" data-of="label" value="'+esc((o&&o.label)||'')+'" placeholder="Reason (e.g. Overtime)" style="flex:1;min-width:0"><input type="number" min="0" data-oi="'+i+'" data-ok="'+k+'" data-of="amt" value="'+(Number(o&&o.amt)>0?Number(o.amt):'')+'" placeholder="0" style="width:80px"><span class="py-rem" data-orem="'+i+'" data-ok="'+k+'">×</span></div>'; }).join(''); }
   /* live view of every slip with its typed additions/deductions applied (for KPIs, exports, slips, PDF) */
   function computed(){ return PAY.slips.map(function(s){ var c=pcCalc(s); var oth=(c.other||[]).map(function(o){return {label:String((o&&o.label)||'Other'),amt:numv(o&&o.amt)};}).filter(function(o){return o.amt>0;});
-    return Object.assign({},s,{additions:c.additions,addIncentive:c.inc,addBonus:c.bon,addTravel:c.trv,addOther:c.addOther,addOtherJson:(oth.length?JSON.stringify(oth):''),otherDed:c.otherDed,otherDedLabel:c.otherDedLabel,gross:c.gross,lopAmt:c.lopAmt,pf:c.pf,esi:c.esi,pt:c.pt,deductions:c.ded,net:c.net,fieldPay:c.additions}); }); }
+    return Object.assign({},s,{additions:c.additions,addIncentive:c.inc,addBonus:c.bon,addTravel:c.trv,addOther:c.addOther,addOtherJson:(oth.length?JSON.stringify(oth):''),otherDed:c.otherDed,otherDedLabel:c.otherDedLabel,gross:c.gross,lopAmt:c.lopAmt,pf:c.pf,esi:c.esi,pt:c.pt,deductions:c.ded,net:c.net,fieldPay:c.additions,actualSalary:c.actual,basic:c.basic,hra:c.hra,payMode:(c.grossMode?'gross':'standard'),pfOverride:(hasOv(s._pfOv)?numv(s._pfOv):''),esiOverride:(hasOv(s._esiOv)?numv(s._esiOv):''),ptOverride:(hasOv(s._ptOv)?numv(s._ptOv):'')}); }); }
   function paintKpi(){
-    var t={g:0,a:0,d:0,n:0}; PAY.slips.forEach(function(s){ var c=pcCalc(s); t.g+=(Number(s.basic)||0)+c.additions; t.a+=c.additions; t.d+=c.ded; t.n+=c.net; });
+    var t={g:0,a:0,d:0,n:0,zero:0,neg:0,gap:0,gapd:0}; PAY.slips.forEach(function(s){ var c=pcCalc(s);
+      t.g+=c.actual; t.a+=c.additions; t.d+=c.ded; t.n+=c.net;
+      if(c.noSalary) t.zero++; if(c.net<0) t.neg++;
+      var bd=Number(s.blankDays)||0; if(bd>0){ t.gap++; t.gapd+=bd; } });
     var k=$id('pyKpi'); if(!k) return;
     k.innerHTML=
-      '<div class="pyk"><div class="pyk-l">Gross salary</div><div class="pyk-v">'+m0(t.g)+'</div></div>'+
+      '<div class="pyk"><div class="pyk-l">Actual salary</div><div class="pyk-v">'+m0(t.g)+'</div></div>'+
       '<div class="pyk"><div class="pyk-l">Additions (+)</div><div class="pyk-v" style="color:'+G+'">+'+m0(t.a)+'</div></div>'+
       '<div class="pyk"><div class="pyk-l">Deductions (−)</div><div class="pyk-v" style="color:'+R+'">−'+m0(t.d)+'</div></div>'+
       '<div class="pyk"><div class="pyk-l">Net payout</div><div class="pyk-v">'+m0(t.n)+'</div></div>';
+    var w=$id('pyWarn'); if(w){
+      var msgs=[];
+      if(t.zero) msgs.push('<b>'+t.zero+' staff have no actual salary set</b> — they stay at ₹0 and are left out of the bank file.');
+      if(t.neg) msgs.push('<b>'+t.neg+' staff have a negative net</b> — deductions exceed their pay this month. Review before paying.');
+      if(t.gap) msgs.push('<b>'+t.gap+' staff have working days with no attendance record</b> ('+t.gapd+' days in total). These are NOT deducted — mark them absent in Attendance if they should be.');
+      w.innerHTML=msgs.length?('<div class="py-warn">'+msgs.join('<br>')+'</div>'):'';
+    }
   }
   function wireRows(){
     var rows=$id('pyRows'); if(!rows) return;
@@ -283,6 +396,8 @@
     row.querySelectorAll('input[data-oi]').forEach(function(inp){ inp.onclick=stop; inp.oninput=function(){ var k=+inp.getAttribute('data-ok'), f=inp.getAttribute('data-of'); s._other[k]=s._other[k]||{label:'',amt:0}; if(f==='amt') s._other[k].amt=numv(inp.value); else s._other[k].label=inp.value; refreshRow(row,s); paintKpi(); }; });
     row.querySelectorAll('[data-orem]').forEach(function(x){ x.onclick=function(e){ e.stopPropagation(); s._other.splice(+x.getAttribute('data-ok'),1); redrawDetail(row,i); }; });
     var addb=row.querySelector('[data-oadd]'); if(addb) addb.onclick=function(e){ e.stopPropagation(); s._other=s._other||[]; s._other.push({label:'',amt:0}); redrawDetail(row,i); };
+    row.querySelectorAll('input[data-dov]').forEach(function(inp){ inp.onclick=stop; inp.oninput=function(){
+      s[inp.getAttribute('data-dk')]=inp.value; refreshRow(row,s); paintKpi(); }; });
     var od=row.querySelector('[data-otherded]'); if(od){ od.onclick=stop; od.oninput=function(){ s._otherDed=numv(od.value); refreshRow(row,s); paintKpi(); }; }
     var ol=row.querySelector('[data-otherlbl]'); if(ol){ ol.onclick=stop; ol.oninput=function(){ s._otherDedLabel=ol.value; }; }
     var pdf=row.querySelector('[data-pdf]'); if(pdf) pdf.onclick=function(e){ e.stopPropagation(); var sc=computed().filter(function(x){return String(x.empId)===pdf.getAttribute('data-pdf');})[0]; payslipPdf(sc,sc.name,PAY.month); };
@@ -295,21 +410,23 @@
     row.querySelector('[data-c="net"]').innerHTML=m0(c.net);
     var at=row.querySelector('[data-c="addtot"]'); if(at) at.innerHTML=m0(c.additions);
     var dt=row.querySelector('[data-c="dedtot"]'); if(dt) dt.innerHTML='−'+m0(c.ded);
-    var es=row.querySelector('[data-c="esi"]'); if(es) es.innerHTML=c.esi>0?'−'+m0(c.esi):'—';
+
   }
   /* Per-staff payslip PDF via a hidden print iframe — lists base, every addition (incl custom) and deduction line. */
   function payslipPdf(s,name,month){
     function ln(l,v,neg){ return '<tr><td style="padding:5px 0;color:#444">'+esc(l)+'</td><td style="padding:5px 0;text-align:right;color:'+(neg?'#A32D2D':'#111')+'">'+(neg?'−':'')+'₹'+money(v)+'</td></tr>'; }
-    var earn=ln('Basic salary',(s.basic!=null?s.basic:s.earned));
+    var actualV=Number(s.actualSalary)||Number(s.basic)||0;
+    var basicV=Math.round(actualV*0.55), hraV=actualV-basicV;
+    var earn=ln('Basic (55%)',basicV)+ln('HRA (45%)',hraV);
     if(Number(s.addIncentive)>0) earn+=ln('Incentive',s.addIncentive);
     if(Number(s.addBonus)>0) earn+=ln('Bonus',s.addBonus);
     if(Number(s.addTravel)>0) earn+=ln('Travel / arrears',s.addTravel);
     var oth=[]; if(s.addOtherJson){ try{ oth=JSON.parse(s.addOtherJson)||[]; }catch(e){} }
     oth.forEach(function(o){ if(Number(o.amt)>0) earn+=ln(o.label||'Other',o.amt); });
-    var grossV=Number(s.basic||s.earned||0)+Number(s.additions||0);
+    var grossV=actualV-Number(s.lopAmt||0)+Number(s.additions||0);
     var ded=''; if(Number(s.lopAmt)>0) ded+=ln('Absent / half-day (LOP '+(s.lopDays||0)+'d)',s.lopAmt,true);
-    if(Number(s.pf)>0) ded+=ln('Provident fund (12%)',s.pf,true);
-    if(Number(s.esi)>0) ded+=ln('ESI (0.75%)',s.esi,true);
+    if(Number(s.pf)>0) ded+=ln(actualV>=15000?'Provident fund (flat)':'Provident fund (12% of basic)',s.pf,true);
+    if(Number(s.esi)>0) ded+=ln('ESIC (0.75% of basic)',s.esi,true);
     if(Number(s.pt)>0) ded+=ln('Professional tax',s.pt,true);
     if(Number(s.otherDed)>0) ded+=ln(s.otherDedLabel||'Other deduction',s.otherDed,true);
     if(!ded) ded=ln('Deductions',0,false);
@@ -329,7 +446,7 @@
   }
   function loadMySlip(){ var m=$id('pyMonth').value||ymNow(); API.myPayslip(m).then(function(r){ var box=$id('pySlip'); if(!box) return; var s=r&&r.ok?r.slip:null; if(!s){ box.innerHTML='<div class="empty">No payslip for '+m+' yet.</div>'; return; }
     var drow=''; if(Number(s.lopAmt)>0) drow+='<div class="psrow"><span>Absent / half-day (LOP)</span><span style="color:#A32D2D">−₹'+money(s.lopAmt)+'</span></div>'; if(Number(s.pf)>0) drow+='<div class="psrow"><span>Provident fund (12%)</span><span style="color:#A32D2D">−₹'+money(s.pf)+'</span></div>'; if(Number(s.esi)>0) drow+='<div class="psrow"><span>ESI (0.75%)</span><span style="color:#A32D2D">−₹'+money(s.esi)+'</span></div>'; if(Number(s.pt)>0) drow+='<div class="psrow"><span>Professional tax</span><span style="color:#A32D2D">−₹'+money(s.pt)+'</span></div>'; if(Number(s.otherDed)>0) drow+='<div class="psrow"><span>'+esc(s.otherDedLabel||'Other deduction')+'</span><span style="color:#A32D2D">−₹'+money(s.otherDed)+'</span></div>';
-    box.innerHTML='<div class="att-card" style="text-align:left"><div style="font-size:11px;color:#666">Paid '+s.paidDays+'/'+s.totalDays+' · LOP '+s.lopDays+'</div><div class="psrow"><span>Basic salary</span><span>₹'+money(s.basic!=null?s.basic:s.earned)+'</span></div>'+(Number(s.additions)>0?'<div class="psrow"><span>Additions</span><span style="color:#0F6E56">+₹'+money(s.additions)+'</span></div>':'')+drow+'<div class="net2">Net ₹'+money(s.net)+'</div><button class="btn" id="myslipDl" style="margin-top:10px">⤓ Download payslip</button></div>';
+    box.innerHTML='<div class="att-card" style="text-align:left"><div style="font-size:11px;color:#666">Paid '+s.paidDays+'/'+s.totalDays+' · LOP '+s.lopDays+'</div><div class="psrow"><span>Basic (55%)</span><span>₹'+money(myBasic(s))+'</span></div><div class="psrow"><span>HRA (45%)</span><span>₹'+money(myActual(s)-myBasic(s))+'</span></div>'+(Number(s.additions)>0?'<div class="psrow"><span>Additions</span><span style="color:#0F6E56">+₹'+money(s.additions)+'</span></div>':'')+drow+'<div class="net2">Net ₹'+money(s.net)+'</div><button class="btn" id="myslipDl" style="margin-top:10px">⤓ Download payslip</button></div>';
     $id('myslipDl').onclick=function(){ payslipPng(s,(S.user&&S.user.FullName)||'',m); }; }); }
   function payslipPng(s,name,month){
     var logo=new Image(); logo.onload=function(){ draw(logo); }; logo.onerror=function(){ draw(null); }; logo.src='icons/login-logo.png';
@@ -342,7 +459,7 @@
       x.strokeStyle='#e2e5ea';x.beginPath();x.moveTo(M,150);x.lineTo(W-M,150);x.stroke();
       var y=190; function rowL(l,v,neg){ x.fillStyle='#555';x.font='15px Arial';x.fillText(l,M,y); x.fillStyle=neg?'#A32D2D':'#222';x.textAlign='right';x.fillText((neg?'−₹':'₹')+money(v),W-M,y);x.textAlign='left'; y+=34; }
       x.fillStyle='#DA1017';x.font='bold 14px Arial';x.fillText('EARNINGS',M,y);y+=28;
-      rowL('Basic salary',(s.basic!=null?s.basic:s.earned));
+      rowL('Basic (55%)',myBasic(s));
       if(Number(s.addIncentive)>0) rowL('Incentive',s.addIncentive);
       if(Number(s.addBonus)>0) rowL('Bonus',s.addBonus);
       if(Number(s.addTravel)>0) rowL('Travel / arrears',s.addTravel);

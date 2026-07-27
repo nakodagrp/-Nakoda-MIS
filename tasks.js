@@ -351,6 +351,18 @@
         items.push({kind:(f.kind==='dailycash'?'dc':'att'), fu:f, id:f.fuKey, title:f.title, name:f.name, phone:f.phone, branchId:f.branchId,
           when:f.detail||'', sortKey:'0000'+(f.date||''), date:f.date, state:f.state});
       });
+      /* v246: a late punch-in is merged into the row of anyone who ALSO has overdue work, so the PC sees
+         one line per person instead of two. A late punch with nothing else outstanding keeps its own row.
+         Every row here is derived live from current status, so the moment the person completes their task
+         the row disappears on the next refresh - the PC does not have to tick it. */
+      var lateOf={};
+      items.forEach(function(i){ if(i.kind==='att' && i.state==='late' && i.fu && i.fu.empId) lateOf[String(i.fu.empId)]=i.fu; });
+      var mergedIds={};
+      items.forEach(function(i){ if(i.kind==='att') return; var k=String(i.empId||i.owner||'');
+        if(k && lateOf[k]){ i.late=lateOf[k]; mergedIds[k]=1; } });
+      if(Object.keys(mergedIds).length){
+        items=items.filter(function(i){ return !(i.kind==='att' && i.state==='late' && i.fu && mergedIds[String(i.fu.empId||'')]); });
+      }
       items.sort(function(a,b){ return a.sortKey<b.sortKey?-1:1; });
       return items;
     }
@@ -363,7 +375,7 @@
       var hint = i.kind==='dc' ? 'The entry itself is still verified by Accounts in Accounts → Daily Entry. If an uploaded report stays unverified for 3 hours it comes back here automatically.'
         : i.kind==='att' ? 'Attendance approval still happens on the Attendance → Approve screen. If a punch stays unapproved for 24 hours it comes back here automatically.'
         : i.kind==='task' ? 'This records that you have informed '+(i.name||'the owner')+' and removes the row from this monitor. The task stays open in their My Tasks until they actually complete it.'
-        : 'This closes the scheduled item on the owner’s calendar.';
+        : 'This records that you chased '+(i.name||'the owner')+' and removes the row from this monitor. The item stays on their calendar until they close it.';
       var body='<div style="font-size:13px;color:#666;margin-bottom:8px"><b>'+esc(i.title)+'</b>'+(i.name?(' · '+esc(i.name)):'')+'</div>'+
         '<div class="field full"><label>Notes (what was done)</label><textarea id="fuNote" class="in" rows="3" placeholder="e.g. Spoke to them — done now"></textarea></div>'+
         '<div style="font-size:11.5px;color:#999;margin-top:6px">'+hint+'</div><div id="fuMsg"></div>';
@@ -382,7 +394,14 @@
             if(r&&r.ok){ ALLT=ALLT.filter(function(t){ return String(t.taskId)!==String(i.id); }); done(); } else fail(r);
           });
         } else if(i.kind==='sch'){
-          API.updateCalEntry(i.id,{status:'done'},i.owner).then(function(r){ if(r&&(r.ok||r.offline)){ ALLC=ALLC.filter(function(c){ return String(c.entryId)!==String(i.id); }); done(); } else fail(r); });
+          /* v246: this used to call updateCalEntry, which the server rejects with "Not authorised for
+             this calendar." — calCanManage_ allows only the calendar's owner, an EA acting for a Director,
+             or SUPER, and a Process Coordinator is none of those. Same fix the task branch above already
+             got: log the chase under SCH|<entryId> so the row leaves the monitor, while the item stays on
+             the owner's calendar until the owner closes it themselves. */
+          API.completeFollowup({fuKey:'SCH|'+i.id, kind:'sch', title:i.title, branchId:i.branchId, empId:i.owner||'', note:note}).then(function(r){
+            if(r&&r.ok){ ALLC=ALLC.filter(function(c){ return String(c.entryId)!==String(i.id); }); done(); } else fail(r);
+          });
         } else {
           var f=i.fu||{};
           API.completeFollowup({fuKey:f.fuKey,kind:f.kind,title:f.title,branchId:f.branchId,empId:f.empId,note:note}).then(function(r){
@@ -403,9 +422,11 @@
       var tasks=all.filter(function(i){return i.kind==='task';}), sch=all.filter(function(i){return i.kind==='sch';});
       var dc=all.filter(function(i){return i.kind==='dc';}), att=all.filter(function(i){return i.kind==='att';});
       var staff={}; all.forEach(function(i){ staff[i.name]=1; });
+      var lateN=all.filter(function(i){ return i.late || (i.kind==='att' && i.state==='late'); }).length;
       document.getElementById('tmKpis').innerHTML=
         '<div class="kpi" style="background:#fdecec"><div class="n" style="color:#C0392B">'+tasks.length+'</div><div class="l">Overdue tasks</div></div>'+
         '<div class="kpi" style="background:#f1effc"><div class="n" style="color:#6f63d6">'+sch.length+'</div><div class="l">Missed schedule</div></div>'+
+        '<div class="kpi" style="background:#fdf0e9"><div class="n" style="color:#993C1D">'+lateN+'</div><div class="l">Late in</div></div>'+
         '<div class="kpi" style="background:#fff7e6"><div class="n" style="color:#b08900">'+Object.keys(staff).length+'</div><div class="l">People to chase</div></div>';
       var fdef=[['all','All ('+all.length+')'],['task','Tasks ('+tasks.length+')'],['sch','Schedule ('+sch.length+')'],['dc','Daily cash ('+dc.length+')'],['att','Attendance ('+att.length+')']];
       document.getElementById('tmFilt').innerHTML=fdef.map(function(f){ return '<button data-f="'+f[0]+'" class="'+(FILT===f[0]?'on':'')+'">'+f[1]+'</button>'; }).join('');
@@ -419,11 +440,14 @@
         var msg=encodeURIComponent('Reminder from Nakoda: '+(i.kind==='task'?'please complete your task “'+i.title+'” — it is overdue.'
           :i.kind==='sch'?'please attend/close your scheduled item “'+i.title+'” — it is overdue.'
           :i.kind==='dc'?(i.state==='verify'?'the daily cash report is waiting for verification ('+i.title+').':'please enter the daily cash report — '+i.title+'.')
+          :i.state==='late'?('you punched in late today ('+String(i.title||'').replace(/^Punched in late - /,'')+'). Please be on time.')
           :'please punch in your attendance — it is past your shift start.'));
         var chip=i.kind==='task'?'<span class="tm-chip task">TASK</span>'
                 :i.kind==='sch'?'<span class="tm-chip sch">SCHEDULE</span>'
                 :i.kind==='dc'?'<span class="tm-chip dc">DAILY CASH</span>':'<span class="tm-chip attc">ATTENDANCE</span>';
         if(isFu && i.state==='verify') chip+=' <span class="tm-chip ver">VERIFY OVERDUE</span>';
+        if(isFu && i.state==='late') chip+=' <span class="tm-chip late">LATE IN</span>';
+        if(i.late) chip+=' <span class="tm-chip late">LATE IN '+esc(i.late.lateAt||'')+' · '+esc(String(i.late.lateMin||''))+'m</span>';
         return '<div class="tm-row">'+
           '<div class="tm-av">'+esc(initials(i.name))+'</div>'+
           '<div class="tm-mid"><div class="tm-nm"><b>'+esc(i.name)+'</b><span class="tm-brn">'+esc(tbn(i.branchId))+'</span>'+chip+(ph?'<span class="tm-ph">📞 '+esc(i.phone)+'</span>':'')+'</div>'+

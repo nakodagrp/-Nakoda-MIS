@@ -282,6 +282,16 @@ body.modal-open #mobileBottomNav{display:none!important}
 .tm-chip.dc{background:#fdf3e0;color:#a06a08}
 .tm-chip.attc{background:#e6f1fb;color:#185fa5}
 .tm-chip.ver{background:#fdeaea;color:#a3271f}
+.tm-chip.late{background:#faece7;color:#993c1d}
+.py-warn{background:#fdf3e0;color:#854f0b;border-radius:8px;padding:10px 12px;font-size:13px;margin:0 0 12px;line-height:1.6}
+.py-lockchip{display:inline-block;background:#e1f5ee;color:#0f6e56;font-size:12px;font-weight:600;padding:5px 11px;border-radius:6px}
+.bp-head,.bp-row{display:grid;grid-template-columns:1.6fr 1fr 52px 52px 52px;gap:8px;align-items:center}
+.bp-head{font-size:11px;color:#9aa0a6;padding:6px 0;border-bottom:1px solid #eee}
+.bp-row{padding:9px 0;border-bottom:1px solid #f3f3f3;font-size:13px}
+.bp-head .r,.bp-row .r{text-align:right}
+.bp-head .c,.bp-row .c{text-align:center}
+.bp-row input[type=checkbox]{width:16px;height:16px}
+@media(max-width:620px){.bp-head,.bp-row{grid-template-columns:1.3fr 88px 40px 40px 40px;gap:5px;font-size:12px}}
 .tm-ph{font-size:11.5px;font-weight:600;color:#185fa5}
 .tm-it{font-size:12.5px;color:#33373d;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tm-late{color:var(--red);font-weight:600}
@@ -460,7 +470,27 @@ table.pm-grid{border-collapse:collapse;font-size:11px;min-width:560px}
 .py-chev{color:#9aa0a6;display:inline-block;transition:transform .15s}
 .py-row.open .py-chev{transform:rotate(90deg)}
 .py-det{grid-template-columns:1fr 1fr;gap:14px;padding:2px 12px 14px}
-@media(max-width:640px){.py-det{grid-template-columns:1fr}.py2{grid-template-columns:1.4fr 1fr 1fr 26px}.py2 .r:nth-child(3),.py2 .r:nth-child(4){display:none}}
+/* v253: the old rule HID the Additions and Deductions columns on a narrow screen, so on a phone or a
+   split window you could only see Actual and Net. Everything now stays on screen — the columns just
+   get tighter, and the sub-line under the salary drops the word "basic" to buy room. */
+@media(max-width:760px){
+  .py-det{grid-template-columns:1fr}
+  .py2{grid-template-columns:1.35fr .82fr .72fr .78fr .86fr 16px;gap:5px}
+  .py2>div{font-size:12px}
+  .py2-head{padding:8px 8px;font-size:9.5px;line-height:1.25}
+  .py-main{padding:11px 8px}
+  .py-sub{font-size:9.5px}
+  .py-det{padding:2px 8px 14px}
+  .py-li input{width:74px}
+}
+@media(max-width:430px){
+  .py2{grid-template-columns:1.2fr .8fr .7fr .76fr .84fr 14px;gap:3px}
+  .py2>div{font-size:11px}
+  .py2-head{font-size:9px;padding:7px 5px}
+  .py-main{padding:10px 5px}
+  .py-det{padding:2px 5px 12px}
+  .py-li input{width:66px}
+}
 .py-box{background:#f6f7f9;border-radius:10px;padding:10px 12px}
 .py-bt{font-size:11px;font-weight:600;letter-spacing:.04em;margin-bottom:6px}
 .py-li{display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:12px;color:#555}
@@ -470,6 +500,10 @@ table.pm-grid{border-collapse:collapse;font-size:11px;min-width:560px}
 .py-addbtn:hover{background:#eef1f5}
 .py-rem{color:#A32D2D;cursor:pointer;font-size:16px;line-height:1;flex-shrink:0}
 .py-li input[data-otherlbl],.py-li input[data-of="label"]{border:1px solid var(--line);border-radius:7px;height:30px;padding:3px 8px;font-size:12px}
+/* Overridable deduction boxes: an empty box shows the calculated figure greyed as its placeholder,
+   so "blank = automatic" is obvious at a glance. A typed value goes solid red. */
+.py-li input[data-dov]{color:#A32D2D;font-weight:600}
+.py-li input[data-dov]::placeholder{color:#b9bec4;font-weight:400}
 .upst{margin-top:4px}
 
 /* ===================== ACCOUNTS ===================== */

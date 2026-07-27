@@ -50,7 +50,7 @@
     upsertCardType:1,issueCard:1,renewCard:1,cancelCard:1,setCardPrice:1,markCardSent:1,markCardActivated:1,
     createTask:1,updateTask:1,setTaskStatus:1,deleteTask:1,createCalEntry:1,updateCalEntry:1,saveRecurring:1,setRecurringActive:1,
     startInstance:1,advanceStage:1,saveProcess:1,saveStage:1,deleteStage:1,reorderStages:1,saveField:1,deleteField:1,
-    checkIn:1,checkOut:1,setAttendance:1,applyLeave:1,setLeave:1,cancelLeave:1,saveHoliday:1,savePolicy:1,ackPolicy:1,submitClaim:1,setClaim:1,runPayroll:1,
+    checkIn:1,checkOut:1,setAttendance:1,applyLeave:1,setLeave:1,cancelLeave:1,saveHoliday:1,savePolicy:1,ackPolicy:1,submitClaim:1,setClaim:1,runPayroll:1,approvePayroll:1,bulkSetPay:1,
     saveDaily:1,verifyDaily:1,rejectDaily:1,addLedger:1,setLedger:1,saveInvoice:1,recordPayment:1,saveBankRows:1,
     saveDeposit:1,verifyDeposit:1,rejectDeposit:1,
     saveItem:1,deleteItem:1,saveVendor:1,deleteVendor:1,saveConsumption:1,saveManualConsumption:1,raiseIndent:1,advanceIndent:1,saveAudit:1,approveAudit:1,
@@ -62,7 +62,7 @@
   var SELF_QUEUE={createEmployee:1,updateEmployee:1,setStatus:1,issueCard:1,renewCard:1,cancelCard:1,markCardSent:1,markCardActivated:1,
     createTask:1,updateTask:1,setTaskStatus:1,deleteTask:1,createCalEntry:1,updateCalEntry:1,startInstance:1,advanceStage:1,attachSelfie:1};
   /* Writes that MUST stay online (auth, server-computed, exact-time, bulk). */
-  var NOQUEUE={login:1,validate:1,logout:1,changePassword:1,resetPassword:1,checkIn:1,checkOut:1,runPayroll:1,uploadFile:1,importOldCards:1,submitQuiz:1,waTest:1,waSendCard:1,saveWaTemplate:1,waTestTemplate:1};
+  var NOQUEUE={login:1,validate:1,logout:1,changePassword:1,resetPassword:1,checkIn:1,checkOut:1,runPayroll:1,approvePayroll:1,bulkSetPay:1,uploadFile:1,importOldCards:1,submitQuiz:1,waTest:1,waSendCard:1,saveWaTemplate:1,waTestTemplate:1};
   function rk(action,payload){ var p=Object.assign({},payload||{}); delete p.token; return 'rc:'+action+':'+JSON.stringify(p); }
   function noTok(payload){ var p=Object.assign({},payload||{}); delete p.token; return p; }
   function enqueue(action,payload){ return obAdd({action:action,payload:noTok(payload),ts:Date.now()}).then(function(){ emit(); return {ok:true,offline:true}; }); }
@@ -369,6 +369,8 @@
     claimApprovals:function(){ return call('claimApprovals',{token:getToken()}); },
     setClaim:function(id,a){ return call('setClaim',{token:getToken(),claimId:id,action:a}); },
     runPayroll:function(m,b,adjustments){ return call('runPayroll',{token:getToken(),month:m,branch:b,adjustments:adjustments||{}}); },
+    approvePayroll:function(m,b,mode){ return call('approvePayroll',{token:getToken(),month:m,branch:b,mode:mode||'lock'}); },
+    bulkSetPay:function(rows){ return call('bulkSetPay',{token:getToken(),rows:rows||[]}); },
     listPayslips:function(m,b){ return call('listPayslips',{token:getToken(),month:m,branch:b}); },
     myPayslip:function(m){ return call('myPayslip',{token:getToken(),month:m}); },
     saveDaily:function(d){ return call('saveDaily',{token:getToken(),data:d}); },
