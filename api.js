@@ -371,6 +371,7 @@
     runPayroll:function(m,b,adjustments){ return call('runPayroll',{token:getToken(),month:m,branch:b,adjustments:adjustments||{}}); },
     approvePayroll:function(m,b,mode){ return call('approvePayroll',{token:getToken(),month:m,branch:b,mode:mode||'lock'}); },
     listBlankDays:function(m,b){ return call('listBlankDays',{token:getToken(),month:m,branch:b}); },
+    monthAttendance:function(m,e){ return call('monthAttendance',{token:getToken(),month:m,empId:e}); },
     confirmAbsent:function(rows){ return call('confirmAbsent',{token:getToken(),rows:rows||[]}); },
     listPayslips:function(m,b){ return call('listPayslips',{token:getToken(),month:m,branch:b}); },
     myPayslip:function(m){ return call('myPayslip',{token:getToken(),month:m}); },

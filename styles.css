@@ -510,6 +510,19 @@ table.pm-grid{border-collapse:collapse;font-size:11px;min-width:560px}
 .bd-day input{width:14px;height:14px;margin:0}
 .bd-alert{background:#fdeaea;color:#a3271f;border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.6}
 .py-lopsub{font-size:10.5px;color:#9aa0a6;margin-top:2px}
+.py-att{grid-column:1/-1;background:#f6f7f9;border-radius:10px;padding:10px 12px;margin-top:2px}
+.py-days{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.py-d{width:34px;height:36px;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:10px;line-height:1.15;cursor:pointer;border:1px solid transparent;user-select:none}
+.py-d b{font-size:11px;font-weight:600}
+.py-d-lock{cursor:default;opacity:.5}
+.py-d-p{background:#e1f5ee;color:#0f6e56}
+.py-d-h{background:#faeeda;color:#854f0b}
+.py-d-a{background:#fdeaea;color:#a3271f}
+.py-d-l{background:#e6f1fb;color:#185fa5}
+.py-d-o{background:#fff;color:#b4b2a9;border-color:#eceae4}
+.py-d-b{background:transparent;color:#a3271f;border:1px dashed #a3271f}
+.py-d-f{background:transparent;color:#c9ccd0;border:1px solid #eceae4}
+@media(max-width:430px){.py-d{width:30px;height:33px;font-size:9px}.py-d b{font-size:10px}}
 .upst{margin-top:4px}
 
 /* ===================== ACCOUNTS ===================== */

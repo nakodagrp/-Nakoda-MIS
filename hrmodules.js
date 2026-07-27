@@ -147,10 +147,12 @@
     var grossMode=String(s.payMode||'')==='gross';
     var pfOn=!grossMode && s.pfOn!==false;
     var esiOn=!grossMode && s.esiOn!==false;
+    /* PF and ESIC shrink with the leave cut; professional tax does not. Same ratio the backend uses. */
+    var ratio=actual>0?(earned/actual):0;
     var pf=0, esi=0, pt=0, pfAuto=0, esiAuto=0, ptAuto=0;
     if(actual>0 && !grossMode){
-      pfAuto=pfOn?((actual>=15000)?1800:Math.round(basic*0.12)):0;
-      esiAuto=esiOn?Math.ceil(basic*0.0075):0;
+      pfAuto=pfOn?Math.round(((actual>=15000)?1800:Math.round(basic*0.12))*ratio):0;
+      esiAuto=esiOn?Math.ceil(basic*0.0075*ratio):0;
       ptAuto=(s.ptAmt===undefined||s.ptAmt===''||s.ptAmt===null)?((actual>=15000)?200:0):(Number(s.ptAmt)||0);
       pf=pfAuto; esi=esiAuto; pt=ptAuto;
       if(hasOv(s._pfOv))  pf=numv(s._pfOv);
@@ -365,7 +367,8 @@
         dedOv(i,'Professional tax','_ptOv',s._ptOv,c.ptAuto)+
         '<div class="py-li" style="gap:6px"><input data-otherlbl="'+i+'" value="'+esc(s._otherDedLabel||'')+'" placeholder="Other deduction (advance / loan)" style="flex:1;min-width:0"><input type="number" min="0" data-otherded="'+i+'" value="'+(Number(s._otherDed)>0?Number(s._otherDed):'')+'" placeholder="0" style="width:80px"></div>'+
         '<div class="py-lt"><span>Total deductions</span><span data-c="dedtot" style="color:'+R+'">−'+m0(c.ded)+'</span></div>'+
-        '<div style="margin-top:8px;text-align:right"><button class="btn ghost sm" data-pdf="'+esc(s.empId)+'">⤓ Download PDF</button></div></div>';
+        '<div style="margin-top:8px;text-align:right"><button class="btn ghost sm" data-pdf="'+esc(s.empId)+'">⤓ Download PDF</button></div></div>'+
+      '<div class="py-att" data-att="'+i+'"><div class="py-bt" style="color:#185FA5">ATTENDANCE</div><div class="center-load" style="padding:8px 0"><span class="loader dark"></span></div></div>';
   }
   function addLi(i,label,key,val){ return '<div class="py-li"><span>'+label+'</span><input type="number" min="0" data-i="'+i+'" data-key="'+key+'" value="'+(Number(val)>0?Number(val):'')+'" placeholder="0"></div>'; }
   /* An editable deduction: leave it blank and the calculated figure (shown greyed as the placeholder)
@@ -384,8 +387,9 @@
     if(Number(s.lopHalf)>0) parts.push(s.lopHalf+' half-day');
     if(Number(s.lopUnpaid)>0) parts.push(s.lopUnpaid+' unpaid leave');
     if(Number(s.blankDays)>0) parts.push(s.blankDays+' no record');
+    if(Number(s.lopFree)>0) parts.push('<span style="color:#0F6E56">'+s.lopFree+' free (Sunday staff)</span>');
     return '<div class="py-li" style="align-items:flex-start"><span>Absent / half-day (LOP '+(d%1?d.toFixed(1):d)+'d)'+
-      (parts.length?'<div class="py-lopsub">'+esc(parts.join(' · '))+'</div>':'')+'</span>'+
+      (parts.length?'<div class="py-lopsub">'+parts.join(' · ')+'</div>':'')+'</span>'+
       '<span>'+(Number(val)>0?'−'+m0(val):'—')+'</span></div>';
   }
   function dedLi(label,val){ return '<div class="py-li"><span>'+label+'</span><span>'+(Number(val)>0?'−'+m0(val):'—')+'</span></div>'; }
@@ -420,7 +424,9 @@
       if(sset) sset.onclick=function(e){ e.stopPropagation();
         if(typeof openEmpModal==='function') openEmpModal(sset.getAttribute('data-setsal'));
         else toast('Open Staff → Edit → Work & pay to set the salary.',true); };
-      main.onclick=function(e){ if(e.target.tagName==='INPUT'||e.target.tagName==='BUTTON'||e.target.className==='py-rem'||e.target.hasAttribute('data-setsal')) return; var open=det.style.display!=='none'; det.style.display=open?'none':'grid'; row.classList.toggle('open',!open); };
+      main.onclick=function(e){ if(e.target.tagName==='INPUT'||e.target.tagName==='BUTTON'||e.target.className==='py-rem'||e.target.hasAttribute('data-setsal')) return;
+        var open=det.style.display!=='none'; det.style.display=open?'none':'grid'; row.classList.toggle('open',!open);
+        if(!open) loadAtt(row, +row.getAttribute('data-i')); };
       wireDetail(row, +row.getAttribute('data-i'));
     });
   }
@@ -437,6 +443,54 @@
     var od=row.querySelector('[data-otherded]'); if(od){ od.onclick=stop; od.oninput=function(){ s._otherDed=numv(od.value); refreshRow(row,s); paintKpi(); }; }
     var ol=row.querySelector('[data-otherlbl]'); if(ol){ ol.onclick=stop; ol.oninput=function(){ s._otherDedLabel=ol.value; }; }
     var pdf=row.querySelector('[data-pdf]'); if(pdf) pdf.onclick=function(e){ e.stopPropagation(); var sc=computed().filter(function(x){return String(x.empId)===pdf.getAttribute('data-pdf');})[0]; payslipPdf(sc,sc.name,PAY.month); };
+  }
+  /* The month, day by day, on the row itself. Tap a day to change it; the change is written straight
+     into Attendance (with an audit note) and payroll picks it up on the next Run payroll. */
+  var ATT={};
+  var ASTYLE={ present:['py-d-p','P'], half:['py-d-h','½'], absent:['py-d-a','A'], leave:['py-d-l','L'],
+    holiday:['py-d-o','H'], off:['py-d-o','·'], blank:['py-d-b','—'], future:['py-d-f',''] };
+  function loadAtt(row,i){
+    var box=row.querySelector('[data-att="'+i+'"]'); if(!box) return;
+    var s=PAY.slips[i]; if(!s) return;
+    if(ATT[s.empId]){ paintAtt(row,i); return; }
+    API.monthAttendance(PAY.month, s.empId).then(function(r){
+      if(r&&r.ok){ ATT[s.empId]=r; paintAtt(row,i); }
+      else box.innerHTML='<div class="py-lopsub">'+esc((r&&r.error)||'Could not load attendance.')+'</div>';
+    });
+  }
+  function paintAtt(row,i){
+    var box=row.querySelector('[data-att="'+i+'"]'); if(!box) return;
+    var s=PAY.slips[i], d=ATT[s.empId]; if(!d) return;
+    box.innerHTML='<div class="py-bt" style="color:#185FA5">ATTENDANCE · tap a day to change it</div>'+
+      '<div class="py-days">'+d.days.map(function(x){
+        var y=ASTYLE[x.status]||ASTYLE.blank;
+        return '<span class="py-d '+y[0]+(x.locked?' py-d-lock':'')+'" data-day="'+esc(x.date)+'" title="'+esc(x.date+(x.label?(' · '+x.label):''))+'"><b>'+x.day+'</b>'+y[1]+'</span>';
+      }).join('')+'</div>'+
+      '<div class="py-lopsub" style="margin-top:6px">P present · ½ half · A absent · L leave · H holiday · · weekly off · — no record'+
+        (d.sundayWorks?(' · <span style="color:#0F6E56">works Sundays, '+d.freeLeave+' free leave days</span>'):'')+'</div>';
+    box.querySelectorAll('[data-day]').forEach(function(el){
+      if(el.className.indexOf('py-d-lock')>=0) return;
+      el.onclick=function(ev){ ev.stopPropagation(); pickDay(s, el.getAttribute('data-day'), row, i); };
+    });
+  }
+  function pickDay(s,date,row,i){
+    var opts=[['present','Present'],['half','Half day'],['absent','Absent']];
+    openModal('Change '+date,'<div style="font-size:13px;color:#666;margin-bottom:10px">'+esc(s.name)+' · '+esc(date)+'</div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">'+opts.map(function(o){
+        return '<button class="btn ghost" data-set="'+o[0]+'">'+o[1]+'</button>'; }).join('')+'</div>'+
+      '<div style="font-size:11.5px;color:#9aa0a6;margin-top:10px">Writes straight into Attendance with a note recording the change. Press Run payroll afterwards to apply it.</div><div id="pdMsg"></div>',
+      '<button class="btn ghost" onclick="closeModal()">Cancel</button>');
+    document.querySelectorAll('[data-set]').forEach(function(b){
+      b.onclick=function(){
+        var st=b.getAttribute('data-set');
+        document.querySelectorAll('[data-set]').forEach(function(x){ x.disabled=true; });
+        API.confirmAbsent([{empId:s.empId,date:date,status:st}]).then(function(r){
+          if(r&&r.ok){ delete ATT[s.empId]; closeModal(); toast(date+' set to '+st+' — press Run payroll to apply'); loadAtt(row,i); }
+          else { var m=$id('pdMsg'); if(m) m.innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>';
+                 document.querySelectorAll('[data-set]').forEach(function(x){ x.disabled=false; }); }
+        });
+      };
+    });
   }
   function redrawDetail(row,i){ var det=row.querySelector('.py-det'); det.innerHTML=buildDetail(PAY.slips[i],i); det.style.display='grid'; row.classList.add('open'); wireDetail(row,i); refreshRow(row,PAY.slips[i]); paintKpi(); }
   function refreshRow(row,s){
