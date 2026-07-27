@@ -285,13 +285,7 @@ body.modal-open #mobileBottomNav{display:none!important}
 .tm-chip.late{background:#faece7;color:#993c1d}
 .py-warn{background:#fdf3e0;color:#854f0b;border-radius:8px;padding:10px 12px;font-size:13px;margin:0 0 12px;line-height:1.6}
 .py-lockchip{display:inline-block;background:#e1f5ee;color:#0f6e56;font-size:12px;font-weight:600;padding:5px 11px;border-radius:6px}
-.bp-head,.bp-row{display:grid;grid-template-columns:1.6fr 1fr 52px 52px 52px;gap:8px;align-items:center}
-.bp-head{font-size:11px;color:#9aa0a6;padding:6px 0;border-bottom:1px solid #eee}
-.bp-row{padding:9px 0;border-bottom:1px solid #f3f3f3;font-size:13px}
-.bp-head .r,.bp-row .r{text-align:right}
-.bp-head .c,.bp-row .c{text-align:center}
-.bp-row input[type=checkbox]{width:16px;height:16px}
-@media(max-width:620px){.bp-head,.bp-row{grid-template-columns:1.3fr 88px 40px 40px 40px;gap:5px;font-size:12px}}
+}
 .tm-ph{font-size:11.5px;font-weight:600;color:#185fa5}
 .tm-it{font-size:12.5px;color:#33373d;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tm-late{color:var(--red);font-weight:600}
@@ -502,8 +496,18 @@ table.pm-grid{border-collapse:collapse;font-size:11px;min-width:560px}
 .py-li input[data-otherlbl],.py-li input[data-of="label"]{border:1px solid var(--line);border-radius:7px;height:30px;padding:3px 8px;font-size:12px}
 /* Overridable deduction boxes: an empty box shows the calculated figure greyed as its placeholder,
    so "blank = automatic" is obvious at a glance. A typed value goes solid red. */
-.py-li input[data-dov]{color:#A32D2D;font-weight:600}
-.py-li input[data-dov]::placeholder{color:#b9bec4;font-weight:400}
+/* A deduction box shows the CALCULATED amount in grey. Type over it and it turns red to mark it
+   as a manual figure for this month, with a ↺ to put the automatic number back. */
+.py-ovw{display:inline-flex;align-items:center;gap:5px}
+.py-li input[data-dov].auto{color:#8b9096;font-weight:400}
+.py-li input[data-dov].ov{color:#A32D2D;font-weight:600;border-color:#e6b8b8}
+.py-reset{cursor:pointer;color:#9aa0a6;font-size:14px;line-height:1;user-select:none}
+.py-reset:hover{color:#A32D2D}
+.py-setsal{color:#185FA5;cursor:pointer;font-weight:500}
+.py-setsal:hover{text-decoration:underline}
+.bd-day{display:inline-flex;align-items:center;gap:5px;font-size:12px;border:1px solid var(--line);border-radius:7px;padding:5px 9px;cursor:pointer;background:#fff}
+.bd-day:hover{background:#f6f7f9}
+.bd-day input{width:14px;height:14px;margin:0}
 .upst{margin-top:4px}
 
 /* ===================== ACCOUNTS ===================== */

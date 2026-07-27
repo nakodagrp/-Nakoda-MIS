@@ -360,9 +360,11 @@
       var mergedIds={};
       items.forEach(function(i){ if(i.kind==='att') return; var k=String(i.empId||i.owner||'');
         if(k && lateOf[k]){ i.late=lateOf[k]; mergedIds[k]=1; } });
-      if(Object.keys(mergedIds).length){
-        items=items.filter(function(i){ return !(i.kind==='att' && i.state==='late' && i.fu && mergedIds[String(i.fu.empId||'')]); });
-      }
+      /* v254: a late punch-in on its own is NOT chased. Once someone has punched, the arrival is
+         recorded, the half-day rule has already applied and their approver has the task — there is
+         nothing left for the PC to chase. Late only earns a place here as a badge on someone who
+         ALSO has outstanding work, which is what the monitor is for. */
+      items=items.filter(function(i){ return !(i.kind==='att' && i.state==='late'); });
       items.sort(function(a,b){ return a.sortKey<b.sortKey?-1:1; });
       return items;
     }
