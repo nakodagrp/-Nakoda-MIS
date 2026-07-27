@@ -16,7 +16,7 @@
   function money(v){ return Math.round(n(v)).toLocaleString('en-IN'); }
   function today(){ return new Date().toISOString().slice(0,10); }
 
-  var PU = { branch:'', filter:'all', list:[], items:[], vendors:[], canManage:false, canUse:false, canBill:false, me:'' };
+  var PU = { branch:'', filter:'all', list:[], items:[], vendors:[], canManage:false, canUse:false, canBill:false, newBill:false, me:'' };
 
   var STAGES = [['raised','Raised'],['given','Given'],['received','Received'],['billed','Bill'],['paid','Pay']];
 
@@ -52,7 +52,7 @@
       var m = r[0], l = r[1];
       if(!l || !l.ok){ box.innerHTML = '<div class="empty">' + esc((l && l.error) || 'Could not load.') + '</div>'; return; }
       if(m && m.ok){ PU.items = m.items||[]; PU.vendors = m.vendors||[]; }
-      PU.list = l.indents||[]; PU.canManage = !!l.canManage; PU.canUse = !!l.canUse; PU.canBill = !!l.canBill; PU.me = l.me||'';
+      PU.list = l.indents||[]; PU.canManage = !!l.canManage; PU.canUse = !!l.canUse; PU.canBill = !!l.canBill; PU.newBill = (l.canBill !== undefined); PU.me = l.me||'';
       paint(box);
     });
   };
@@ -104,7 +104,16 @@
   function actionFor(ind){
     if(ind.stage === 'raised')   return {show:PU.canManage, label:'Give order'};
     if(ind.stage === 'given')    return {show:PU.canUse,    label:'Receive'};
-    if(ind.stage === 'received') return {show:PU.canBill && ind.source === 'vendor', label:'Submit bill'};
+    /* The Submit bill button used to be gated on PU.canBill alone, which the server never sent, so
+       it was permanently false and NOBODY could reach the bill step.
+       Managers are gated on canManage, which the server has always sent - so this works against the
+       current backend with no Apps Script deploy. The person who raised the indent is only offered
+       the button once the newer backend is live (detected by canBill being present at all), because
+       the older puApiBill would reject them with "Not authorised". */
+    if(ind.stage === 'received'){
+      var mayBill = PU.canManage || (PU.newBill && String(ind.raisedBy) === String(PU.me));
+      return {show: mayBill && ind.source === 'vendor', label:'Submit bill'};
+    }
     if(ind.stage === 'billed')   return {show:false,        label:''};
     return {show:false, label:''};
   }
