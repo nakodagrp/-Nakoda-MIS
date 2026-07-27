@@ -194,15 +194,17 @@
      picks it up through the same LOP maths as any other absence. One source of truth. */
   function openBlankDays(){
     openModal('Missing attendance days','<div id="bdBody"><div class="center-load"><span class="loader dark"></span> Loading…</div></div>',
-      '<button class="btn ghost" onclick="closeModal()">Close</button><button class="btn" id="bdSave">Mark selected absent</button>');
+      '<button class="btn ghost" onclick="closeModal()">Close</button><button class="btn ghost" id="bdPresent">Mark present</button><button class="btn" id="bdSave">Mark absent</button>');
     var b0=$id('bdSave'); if(b0) b0.disabled=true;
+    var b1=$id('bdPresent'); if(b1) b1.disabled=true;
     API.listBlankDays(PAY.month, ($id('pyBranch')||{}).value||'').then(function(r){
       var b=$id('bdBody'); if(!b) return;
       if(!r||!r.ok){ b.innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; return; }
       var people=r.people||[];
       if(!people.length){ b.innerHTML='<div class="empty">No gaps — every working day this month has a record.</div>'; return; }
       var total=0; people.forEach(function(p){ total+=p.days.length; });
-      b.innerHTML='<div style="font-size:12px;color:#9aa0a6;margin-bottom:10px;line-height:1.6"><b>'+total+' working days</b> across <b>'+people.length+' staff</b> have no attendance record. Sundays, holidays, approved leave and days before joining are already excluded.<br>Tick only the days the person genuinely did not work. Each tick writes an approved <b>absent</b> day into Attendance; the deduction follows on the next Run payroll.</div>'+
+      b.innerHTML='<div class="bd-alert"><b>'+total+' working days</b> across <b>'+people.length+' staff</b> have no attendance record, and every one of them is <b>already being deducted</b> as lost pay.<br>Sundays, holidays, approved leave and days before joining are excluded.</div>'+
+        '<div style="font-size:12px;color:#9aa0a6;margin:8px 0 10px;line-height:1.6">Tick the days where the punch simply failed and press <b>Mark present</b> — that writes a present day into Attendance and the deduction goes away. Use <b>Mark absent</b> to make a genuine absence explicit.</div>'+
         people.map(function(p,pi){
           return '<div style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px">'+
             '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px"><b style="font-size:13px">'+esc(p.name)+'</b>'+
@@ -210,27 +212,34 @@
             '<div style="display:flex;flex-wrap:wrap;gap:6px">'+p.days.map(function(d,di){
               return '<label class="bd-day"><input type="checkbox" data-bd="'+pi+'" data-bdd="'+di+'"> '+esc(dLabel(d))+'</label>'; }).join('')+'</div></div>';
         }).join('');
-      function sync(){ var n=b.querySelectorAll('input[data-bd]:checked').length; var bt=$id('bdSave');
-        if(bt){ bt.disabled=!n; bt.textContent=n?('Mark '+n+' day'+(n>1?'s':'')+' absent'):'Mark selected absent'; } }
+      function sync(){ var n=b.querySelectorAll('input[data-bd]:checked').length;
+        var bt=$id('bdSave'), bp=$id('bdPresent');
+        if(bt){ bt.disabled=!n; bt.textContent=n?('Mark '+n+' absent'):'Mark absent'; }
+        if(bp){ bp.disabled=!n; bp.textContent=n?('Mark '+n+' present'):'Mark present'; } }
       b.querySelectorAll('input[data-bd]').forEach(function(c){ c.onchange=sync; });
       b.querySelectorAll('[data-bdall]').forEach(function(x){ x.onclick=function(){
         var pi=x.getAttribute('data-bdall'), boxes=b.querySelectorAll('input[data-bd="'+pi+'"]'), any=false;
         boxes.forEach(function(c){ if(!c.checked) any=true; });
         boxes.forEach(function(c){ c.checked=any; }); sync(); }; });
       sync();
-      $id('bdSave').onclick=function(){
-        var bt=this, rows=[];
+      function apply(status){
+        var rows=[];
         b.querySelectorAll('input[data-bd]:checked').forEach(function(c){
           var p=people[+c.getAttribute('data-bd')];
-          rows.push({empId:p.empId, date:p.days[+c.getAttribute('data-bdd')], status:'absent'}); });
+          rows.push({empId:p.empId, date:p.days[+c.getAttribute('data-bdd')], status:status}); });
         if(!rows.length) return;
-        if(!confirm('Mark '+rows.length+' day'+(rows.length>1?'s':'')+' as absent? This is recorded in Attendance and will reduce pay on the next Run payroll.')) return;
-        bt.disabled=true; bt.innerHTML='<span class="loader"></span>';
+        var msg=(status==='present')
+          ? 'Mark '+rows.length+' day'+(rows.length>1?'s':'')+' as PRESENT? The pay currently deducted for them is restored on the next Run payroll.'
+          : 'Mark '+rows.length+' day'+(rows.length>1?'s':'')+' as ABSENT? They are already deducted; this makes the absence explicit in Attendance.';
+        if(!confirm(msg)) return;
+        var bt=$id('bdSave'), bp=$id('bdPresent');
+        if(bt) bt.disabled=true; if(bp) bp.disabled=true;
         API.confirmAbsent(rows).then(function(r2){
-          bt.disabled=false; bt.textContent='Mark selected absent';
-          if(r2&&r2.ok){ closeModal(); toast(r2.saved+' day'+(r2.saved>1?'s':'')+' marked absent — press Run payroll to apply'); loadPayslips(); }
-          else toast((r2&&r2.error)||'Failed',true); });
-      };
+          if(r2&&r2.ok){ closeModal(); toast(r2.saved+' day'+(r2.saved>1?'s':'')+' marked '+status+' — press Run payroll to apply'); loadPayslips(); }
+          else { toast((r2&&r2.error)||'Failed',true); sync(); } });
+      }
+      $id('bdSave').onclick=function(){ apply('absent'); };
+      $id('bdPresent').onclick=function(){ apply('present'); };
     });
   }
   function dLabel(ds){ try{ var p=String(ds).split('-'), d=new Date(+p[0],+p[1]-1,+p[2]);
@@ -250,7 +259,7 @@
       var row=document.createElement('div'); row.className='py-row'; row.setAttribute('data-i',i);
       row.innerHTML=
         '<div class="py2 py-main">'+
-          '<div><b>'+esc(s.name)+'</b><div class="py-sub">'+(c.noSalary?'<span class="py-setsal" data-setsal="'+esc(s.empId)+'">set salary →</span>':(s.paidDays+(s.totalDays?'/'+s.totalDays:'')+' paid'+(Number(s.lopDays)>0?' · '+s.lopDays+' LOP':'')))+(c.grossMode?' · gross':'')+(Number(s.blankDays)>0?' · <span style="color:#854F0B">'+s.blankDays+'d no record</span>':'')+'</div></div>'+
+          '<div><b>'+esc(s.name)+'</b><div class="py-sub">'+(c.noSalary?'<span class="py-setsal" data-setsal="'+esc(s.empId)+'">set salary →</span>':(s.paidDays+(s.totalDays?'/'+s.totalDays:'')+' paid'+(Number(s.lopDays)>0?' · '+s.lopDays+' LOP':'')))+(c.grossMode?' · gross':'')+(Number(s.blankDays)>0?' · <span style="color:#A32D2D">'+s.blankDays+'d no record</span>':'')+'</div></div>'+
           '<div class="r">'+(c.noSalary?'—':m0(c.actual)+'<div class="py-sub">basic '+m0(c.basic)+'</div>')+'</div>'+
           '<div class="r" data-c="add" style="color:'+G+'">'+(c.additions?'+'+m0(c.additions):'—')+'</div>'+
           '<div class="r" data-c="ded" style="color:'+R+'">−'+m0(c.ded)+'</div>'+
@@ -350,7 +359,7 @@
         '<button class="py-addbtn" data-oadd="'+i+'">+ Add other addition</button>'+
         '<div class="py-lt"><span>Total additions</span><span data-c="addtot" style="color:'+G+'">'+m0(c.additions)+'</span></div></div>'+
       '<div class="py-box"><div class="py-bt" style="color:'+R+'">DEDUCTIONS (−)</div>'+
-        dedLi('Absent / half-day (LOP '+(s.lopDays||0)+'d)',c.lopAmt)+
+        dedLop(s,c.lopAmt)+
         dedOv(i,pfLbl,'_pfOv',s._pfOv,c.pfAuto)+
         dedOv(i,'ESIC (0.75% of basic)','_esiOv',s._esiOv,c.esiAuto)+
         dedOv(i,'Professional tax','_ptOv',s._ptOv,c.ptAuto)+
@@ -366,6 +375,18 @@
     return '<div class="py-li"><span>'+label+'</span><span class="py-ovw">'+
       (ov?'<span class="py-reset" data-drst="'+i+'" data-dk="'+key+'" title="Back to the calculated amount">↺</span>':'')+
       '<input type="number" min="0" data-dov="'+i+'" data-dk="'+key+'" class="'+(ov?'ov':'auto')+'" value="'+(ov?esc(val):numv(auto))+'"></span></div>';
+  }
+  /* Read-only, driven entirely by Attendance. The sub-line shows exactly what made up the days so
+     an unexpected cut can be traced without leaving the screen. */
+  function dedLop(s,val){
+    var d=Number(s.lopDays)||0, parts=[];
+    if(Number(s.lopAbsent)>0) parts.push(s.lopAbsent+' absent');
+    if(Number(s.lopHalf)>0) parts.push(s.lopHalf+' half-day');
+    if(Number(s.lopUnpaid)>0) parts.push(s.lopUnpaid+' unpaid leave');
+    if(Number(s.blankDays)>0) parts.push(s.blankDays+' no record');
+    return '<div class="py-li" style="align-items:flex-start"><span>Absent / half-day (LOP '+(d%1?d.toFixed(1):d)+'d)'+
+      (parts.length?'<div class="py-lopsub">'+esc(parts.join(' · '))+'</div>':'')+'</span>'+
+      '<span>'+(Number(val)>0?'−'+m0(val):'—')+'</span></div>';
   }
   function dedLi(label,val){ return '<div class="py-li"><span>'+label+'</span><span>'+(Number(val)>0?'−'+m0(val):'—')+'</span></div>'; }
   function otherAddLines(i,arr){ return (arr||[]).map(function(o,k){ return '<div class="py-li" style="gap:6px"><input data-oi="'+i+'" data-ok="'+k+'" data-of="label" value="'+esc((o&&o.label)||'')+'" placeholder="Reason (e.g. Overtime)" style="flex:1;min-width:0"><input type="number" min="0" data-oi="'+i+'" data-ok="'+k+'" data-of="amt" value="'+(Number(o&&o.amt)>0?Number(o.amt):'')+'" placeholder="0" style="width:80px"><span class="py-rem" data-orem="'+i+'" data-ok="'+k+'">×</span></div>'; }).join(''); }
@@ -387,7 +408,7 @@
       var msgs=[];
       if(t.zero) msgs.push('<b>'+t.zero+' staff have no actual salary set</b> — they stay at ₹0 and are left out of the bank file.');
       if(t.neg) msgs.push('<b>'+t.neg+' staff have a negative net</b> — deductions exceed their pay this month. Review before paying.');
-      if(t.gap) msgs.push('<b>'+t.gap+' staff have working days with no attendance record</b> ('+t.gapd+' days in total). Nothing is deducted until you confirm — use <b>Review missing days</b>.');
+      if(t.gap) msgs.push('<b>'+t.gap+' staff have working days with no attendance record</b> ('+t.gapd+' days in total) and these <b>are being deducted</b>. If a punch simply failed, fix it in <b>Review missing days</b>.');
       w.innerHTML=msgs.length?('<div class="py-warn">'+msgs.join('<br>')+'</div>'):'';
     }
   }

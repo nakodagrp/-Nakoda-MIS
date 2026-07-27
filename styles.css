@@ -508,6 +508,8 @@ table.pm-grid{border-collapse:collapse;font-size:11px;min-width:560px}
 .bd-day{display:inline-flex;align-items:center;gap:5px;font-size:12px;border:1px solid var(--line);border-radius:7px;padding:5px 9px;cursor:pointer;background:#fff}
 .bd-day:hover{background:#f6f7f9}
 .bd-day input{width:14px;height:14px;margin:0}
+.bd-alert{background:#fdeaea;color:#a3271f;border-radius:8px;padding:10px 12px;font-size:13px;line-height:1.6}
+.py-lopsub{font-size:10.5px;color:#9aa0a6;margin-top:2px}
 .upst{margin-top:4px}
 
 /* ===================== ACCOUNTS ===================== */
