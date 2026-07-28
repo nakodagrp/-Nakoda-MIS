@@ -107,34 +107,28 @@
     var files=Array.prototype.slice.call(this.files||[]); this.value='';
     files.forEach(function(f){
       if(PRFILES.length>=5){ toast('Max 5 files',true); return; }
-      if(f.size>8*1024*1024){ toast('"'+f.name+'" is over 8 MB',true); return; }
-      var item={name:f.name,url:'',status:'uploading'}; PRFILES.push(item); paintFiles();
-      var fr=new FileReader();
-      fr.onload=function(){ var s=fr.result,i=s.indexOf(',');
-        API.uploadFile({base64:s.slice(i+1),fileName:f.name,mimeType:f.type,subPath:'PayRequests/'+today()}).then(function(r){
-          if(r&&r.ok){ item.url=r.url; item.status='done'; } else { item.status='error'; }
-          paintFiles();
-        },function(){ item.status='error'; paintFiles(); });
-      };
-      fr.readAsDataURL(f);
+      var item={name:f.name,url:'',status:'uploading',msg:''}; PRFILES.push(item); paintFiles();
+      API.upload(f,'PayRequests/'+today(),function(m){ item.msg=m; paintFiles(); }).then(function(r){
+        item.url=r.url; item.status='done'; item.msg=''; paintFiles();
+      }, function(e){ item.status='error'; item.msg=(e&&e.message)||'Upload failed'; paintFiles(); });
     });
   }
   function paintFiles(){ var el=$id('prfFileList'); if(!el) return;
-    el.innerHTML=PRFILES.map(function(f,i){ var tag=f.status==='uploading'?' <span style="color:#888">uploading…</span>':(f.status==='error'?' <span style="color:#DA1017">failed</span>':' ✓'); return '<div>'+esc(f.name)+tag+' <a href="javascript:void(0)" data-rm="'+i+'" style="color:#DA1017">remove</a></div>'; }).join('');
+    el.innerHTML=PRFILES.map(function(f,i){
+      var tag=f.status==='uploading'?(' <span style="color:#888">'+esc(f.msg||'uploading…')+'</span>')
+             :(f.status==='error'?(' <span style="color:#DA1017">'+esc(f.msg||'failed')+'</span>'):' ✓');
+      return '<div>'+esc(f.name)+tag+' <a href="javascript:void(0)" data-rm="'+i+'" style="color:#DA1017">remove</a></div>'; }).join('');
     el.querySelectorAll('[data-rm]').forEach(function(a){ a.onclick=function(){ PRFILES.splice(+a.getAttribute('data-rm'),1); paintFiles(); }; });
   }
   function onPickQr(){ var f=this.files&&this.files[0]; this.value=''; if(!f) return;
-    if(f.size>8*1024*1024){ toast('QR image is over 8 MB',true); return; }
-    PRQR={name:f.name,url:'',status:'uploading'}; paintQr();
-    var fr=new FileReader();
-    fr.onload=function(){ var s=fr.result,i=s.indexOf(',');
-      API.uploadFile({base64:s.slice(i+1),fileName:f.name,mimeType:f.type,subPath:'PayRequests/'+today()}).then(function(r){
-        if(r&&r.ok){ PRQR.url=r.url; PRQR.status='done'; } else { PRQR.status='error'; } paintQr();
-      },function(){ PRQR.status='error'; paintQr(); }); };
-    fr.readAsDataURL(f);
+    PRQR={name:f.name,url:'',status:'uploading',msg:''}; paintQr();
+    API.upload(f,'PayRequests/'+today(),function(m){ if(PRQR){ PRQR.msg=m; paintQr(); } }).then(function(r){
+      if(PRQR){ PRQR.url=r.url; PRQR.status='done'; PRQR.msg=''; paintQr(); }
+    }, function(e){ if(PRQR){ PRQR.status='error'; PRQR.msg=(e&&e.message)||'Upload failed'; paintQr(); } });
   }
   function paintQr(){ var el=$id('prfQrList'); if(!el) return; if(!PRQR){ el.innerHTML=''; return; }
-    var tag=PRQR.status==='uploading'?' <span style="color:#888">uploading…</span>':(PRQR.status==='error'?' <span style="color:#DA1017">failed</span>':' ✓');
+    var tag=PRQR.status==='uploading'?(' <span style="color:#888">'+esc(PRQR.msg||'uploading…')+'</span>')
+           :(PRQR.status==='error'?(' <span style="color:#DA1017">'+esc(PRQR.msg||'failed')+'</span>'):' ✓');
     el.innerHTML='<div>'+esc(PRQR.name)+tag+' <a href="javascript:void(0)" id="prfQrRm" style="color:#DA1017">remove</a></div>';
     var rm=$id('prfQrRm'); if(rm) rm.onclick=function(){ PRQR=null; paintQr(); };
   }

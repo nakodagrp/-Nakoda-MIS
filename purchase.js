@@ -31,14 +31,9 @@
 
   function upload(file, sub){
     return new Promise(function(res){
-      if(file.size > 8*1024*1024){ toast('File too large (max 8MB)', true); return res(''); }
-      var fr = new FileReader();
-      fr.onload = function(){
-        var d = fr.result, i = d.indexOf(',');
-        API.uploadFile({base64:d.slice(i+1), fileName:file.name, mimeType:file.type, subPath:sub||'Purchase'})
-          .then(function(r){ res(r && r.ok ? r.url : ''); }, function(){ res(''); });
-      };
-      fr.readAsDataURL(file);
+      API.upload(file, sub||'Purchase', function(m){ try{ toast(m); }catch(e){} })
+        .then(function(r){ res(r.url); },
+              function(e){ toast((e && e.message) || 'Upload failed', true); res(''); });
     });
   }
 

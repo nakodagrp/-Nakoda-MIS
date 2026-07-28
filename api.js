@@ -37,10 +37,10 @@
   /* ---------- network ---------- */
   function apiUrl(){ return (window.NAKODA_CONFIG&&window.NAKODA_CONFIG.API_URL)||''; }
   function configured(){ var u=apiUrl(); return u && u.indexOf('PASTE_YOUR')<0; }
-  function NET(action, payload){
+  function NET(action, payload, timeoutMs){
     var body=JSON.stringify(Object.assign({action:action}, payload||{}));
     var ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
-    var to=ctrl?setTimeout(function(){ try{ctrl.abort();}catch(e){} }, 60000):null;   // never hang forever
+    var to=ctrl?setTimeout(function(){ try{ctrl.abort();}catch(e){} }, timeoutMs||60000):null;   // never hang forever
     return fetch(apiUrl(),{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body,redirect:'follow',signal:ctrl?ctrl.signal:undefined})
       .then(function(r){ return r.json(); })
       .then(function(j){ if(to) clearTimeout(to); return j; }, function(e){ if(to) clearTimeout(to); throw e; });
@@ -63,19 +63,100 @@
     createTask:1,updateTask:1,setTaskStatus:1,deleteTask:1,createCalEntry:1,updateCalEntry:1,startInstance:1,advanceStage:1,attachSelfie:1};
   /* Writes that MUST stay online (auth, server-computed, exact-time, bulk). */
   var NOQUEUE={login:1,validate:1,logout:1,changePassword:1,resetPassword:1,checkIn:1,checkOut:1,runPayroll:1,approvePayroll:1,confirmAbsent:1,uploadFile:1,importOldCards:1,submitQuiz:1,waTest:1,waSendCard:1,saveWaTemplate:1,waTestTemplate:1};
+  /* ---------------- ATTACHMENTS ----------------------------------------------------
+     A phone photo of a report is 4-8 MB. Sent as base64 it grows by a third, so ~10 MB was
+     going up a branch connection against a hard 60-second abort — the request was killed
+     before it finished and every failure printed the same fixed line, with r.error thrown
+     away, so there was nothing to act on.
+     Images are now resized on the device first (6 MB -> roughly 300 KB), uploads alone get a
+     longer ceiling, a network blip retries once, and the real reason is surfaced. */
+  var UPLOAD_MAX_PX = 1600, UPLOAD_QUALITY = 0.82, UPLOAD_PDF_MAX = 8*1024*1024, UPLOAD_TIMEOUT = 180000;
+  function fsize(b){ return b<1048576 ? (Math.round(b/1024)+' KB') : ((b/1048576).toFixed(1)+' MB'); }
+  /* Resolves to null when there is nothing worth doing — a PDF, a small photo, or any failure.
+     Never rejects: if compression cannot run we simply send the original. */
+  function shrinkImage(file){
+    return new Promise(function(resolve){
+      if(!file || !/^image\//i.test(file.type||'')) return resolve(null);
+      if(typeof document==='undefined' || !document.createElement) return resolve(null);
+      var url, img=new Image();
+      try{ url=URL.createObjectURL(file); }catch(e){ return resolve(null); }
+      img.onload=function(){
+        try{
+          var w=img.naturalWidth||img.width, h=img.naturalHeight||img.height;
+          if(!w||!h){ URL.revokeObjectURL(url); return resolve(null); }
+          var scale=Math.min(1, UPLOAD_MAX_PX/Math.max(w,h));
+          if(scale>=1 && file.size<600*1024){ URL.revokeObjectURL(url); return resolve(null); }   // already small
+          var cw=Math.max(1,Math.round(w*scale)), ch=Math.max(1,Math.round(h*scale));
+          var c=document.createElement('canvas'); c.width=cw; c.height=ch;
+          var x=c.getContext('2d');
+          x.fillStyle='#fff'; x.fillRect(0,0,cw,ch);       // flatten transparency, JPEG has none
+          x.drawImage(img,0,0,cw,ch);
+          c.toBlob(function(b){
+            URL.revokeObjectURL(url);
+            if(!b || b.size>=file.size) return resolve(null);   // never send something bigger
+            resolve({blob:b, name:String(file.name||'photo').replace(/\.[^.]+$/,'')+'.jpg', type:'image/jpeg', was:file.size});
+          },'image/jpeg',UPLOAD_QUALITY);
+        }catch(e){ try{URL.revokeObjectURL(url);}catch(_){ } resolve(null); }
+      };
+      img.onerror=function(){ try{URL.revokeObjectURL(url);}catch(_){ } resolve(null); };
+      img.src=url;
+    });
+  }
+  function readB64(blob){
+    return new Promise(function(res,rej){
+      var fr=new FileReader();
+      fr.onload=function(){ var d=String(fr.result||''), i=d.indexOf(',');
+        if(i<0) return rej(new Error('Could not read that file.'));
+        res(d.slice(i+1)); };
+      fr.onerror=function(){ rej(new Error('Could not read that file.')); };
+      try{ fr.readAsDataURL(blob); }catch(e){ rej(new Error('Could not read that file.')); }
+    });
+  }
+  function uploadSmart(file, subPath, onStatus){
+    onStatus = onStatus || function(){};
+    if(!file) return Promise.reject(new Error('No file selected.'));
+    if(typeof navigator!=='undefined' && navigator.onLine===false)
+      return Promise.reject(new Error('You are offline — reconnect to attach this file.'));
+    onStatus('Preparing…');
+    return shrinkImage(file).then(function(small){
+      var blob = small ? small.blob : file;
+      var name = small ? small.name : (file.name||'file');
+      var type = small ? small.type : (file.type||'application/octet-stream');
+      if(!small && blob.size > UPLOAD_PDF_MAX)
+        throw new Error('That file is '+fsize(blob.size)+'. Documents need to be under 8 MB.');
+      onStatus(small ? ('Shrunk '+fsize(small.was)+' → '+fsize(blob.size)+', uploading…')
+                     : ('Uploading '+fsize(blob.size)+'…'));
+      return readB64(blob).then(function(b64){
+        function attempt(left){
+          return call('uploadFile',{token:getToken(),base64:b64,fileName:name,mimeType:type,subPath:subPath||''}, UPLOAD_TIMEOUT)
+            .then(function(r){
+              if(r && r.ok) return r;
+              throw new Error((r && r.error) || 'The server rejected the upload.');   // a real answer — do not retry
+            }, function(){
+              if(left>0){ onStatus('Connection dropped — retrying…'); return attempt(left-1); }
+              throw new Error((typeof navigator!=='undefined' && navigator.onLine===false)
+                ? 'You are offline — reconnect to attach this file.'
+                : 'Upload timed out. The connection is too slow right now — try again.');
+            });
+        }
+        return attempt(1);
+      });
+    });
+  }
+
   function rk(action,payload){ var p=Object.assign({},payload||{}); delete p.token; return 'rc:'+action+':'+JSON.stringify(p); }
   function noTok(payload){ var p=Object.assign({},payload||{}); delete p.token; return p; }
   function enqueue(action,payload){ return obAdd({action:action,payload:noTok(payload),ts:Date.now()}).then(function(){ emit(); return {ok:true,offline:true}; }); }
   function readGet(action,payload){ return kvGet(rk(action,payload)).then(function(c){ if(c){ try{c=JSON.parse(JSON.stringify(c));}catch(e){} c.offline=true; return c; } return {ok:false,offline:true,error:'Not available offline yet — open this once while online.'}; }); }
-  function call(action, payload){
+  function call(action, payload, timeoutMs){
     var isWrite=WRITES[action], queueable=isWrite && !SELF_QUEUE[action] && !NOQUEUE[action];
     if(!isWrite){                                   /* READ: cache-first fallback, instant when offline */
       if(!navigator.onLine) return readGet(action,payload);
-      return NET(action,payload).then(function(r){ if(r&&r.ok){ kvSet(rk(action,payload),r); } return r; }).catch(function(){ return readGet(action,payload); });
+      return NET(action,payload,timeoutMs).then(function(r){ if(r&&r.ok){ kvSet(rk(action,payload),r); } return r; }).catch(function(){ return readGet(action,payload); });
     }
     if(queueable && !navigator.onLine) return enqueue(action,payload);     /* WRITE offline: save instantly to outbox */
-    if(queueable) return NET(action,payload).catch(function(){ return enqueue(action,payload); });
-    return NET(action,payload);                      /* self-queued (method handles) or online-only */
+    if(queueable) return NET(action,payload,timeoutMs).catch(function(){ return enqueue(action,payload); });
+    return NET(action,payload,timeoutMs);            /* self-queued (method handles) or online-only */
   }
 
   /* ---------- status broadcasting ---------- */
@@ -223,7 +304,9 @@
     },
 
     listBranchesFull:function(){ return call('listBranches',{token:getToken()}); },
-    uploadFile:function(args){ return call('uploadFile',Object.assign({token:getToken()},args||{})); },
+    uploadFile:function(args){ return call('uploadFile',Object.assign({token:getToken()},args||{}), UPLOAD_TIMEOUT); },
+    /* Preferred entry point for every attachment in the app — see uploadSmart below. */
+    upload:function(file, subPath, onStatus){ return uploadSmart(file, subPath, onStatus); },
     createBranch:function(data){ return call('createBranch',{token:getToken(),data:data}); },
     updateBranch:function(id,data){ return call('updateBranch',{token:getToken(),branchId:id,data:data}); },
     waTest:function(branchId,phone,keyOverride){

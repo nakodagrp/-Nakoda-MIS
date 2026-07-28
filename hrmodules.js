@@ -92,11 +92,12 @@
       '</div><div style="font-size:11px;color:#888">Saving notifies all staff &amp; resets the UNDERSTOOD acknowledgement.</div><div id="poMsg"></div>';
     openModal(p.policyId?'Edit policy':'New policy', body, '<button class="btn" id="poSave">'+(p.policyId?'Save (new version)':'Post')+'</button>');
     var pf=$id('poFile');
-    if(pf) pf.onchange=function(){ var f=this.files[0]; if(!f) return; if(f.size>8*1024*1024){ toast('File too large (max 8MB)',true); this.value=''; return; }
-      var s=$id('poFileSt'); s.textContent='Uploading…'; var fr=new FileReader();
-      fr.onload=function(){ var d=fr.result,i=d.indexOf(',');
-        API.uploadFile({base64:d.slice(i+1),fileName:f.name,mimeType:f.type,subPath:'Policies'}).then(function(r){ if(r&&r.ok){ fileUrl=r.url; s.textContent='✓ '+f.name+' — tap to replace'; } else { s.textContent='Upload failed — tap to retry'; } },function(){ s.textContent='Upload failed — tap to retry'; }); };
-      fr.readAsDataURL(f); };
+    if(pf) pf.onchange=function(){ var f=this.files[0], input=this; if(!f) return;
+      var s=$id('poFileSt');
+      API.upload(f,'Policies',function(m){ s.textContent=m; })
+        .then(function(r){ fileUrl=r.url; s.textContent='✓ '+f.name+' — tap to replace'; },
+              function(e){ s.innerHTML='<span style="color:#A32D2D">'+esc(e&&e.message?e.message:'Upload failed')+'</span> — tap to retry'; input.value=''; });
+    };
     $id('poSave').onclick=function(){ var t=$id('poT').value.trim(); if(!t){ $id('poMsg').innerHTML='<div class="msg error">Title required.</div>'; return; } this.disabled=true;
       API.savePolicy({policyId:p.policyId,title:t,body:$id('poB').value,fileUrl:fileUrl}).then(function(r){ if(r&&r.ok){ closeModal(); toast('Policy posted'); renderPolicy(); } else $id('poMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; }); };
   }

@@ -173,11 +173,15 @@
     var st={b2cDocUrl:'',b2dDocUrl:'',otherDocUrl:'',testXlUrl:''};
     function recalc(){ var t=0; ['dlB2cCash','dlB2cBank','dlOther'].forEach(function(id){ t+=Number(($id(id)||{}).value)||0; }); $id('dlTotal').textContent='₹'+money(t); }
     ['dlB2cCash','dlB2cBank','dlOther'].forEach(function(id){ var el=$id(id); if(el) el.addEventListener('input',recalc); });
-    function bindUpload(inputId,stEl,stKey,label){ var inp=$id(inputId); if(!inp) return; inp.onchange=function(){ var f=this.files[0]; if(!f) return; if(f.size>8*1024*1024){ toast('File too large (max 8MB)',true); this.value=''; return; }
-      var s=$id(stEl); s.textContent='Uploading…'; var fr=new FileReader();
-      fr.onload=function(){ var d=fr.result,i=d.indexOf(',');
-        API.uploadFile({base64:d.slice(i+1),fileName:f.name,mimeType:f.type,subPath:'DailyBusiness/'+(($id('dlDate')||{}).value||'')}).then(function(r){ if(r&&r.ok){ st[stKey]=r.url; s.innerHTML='✓ '+esc(f.name)+' — tap to replace'; } else { s.textContent='Upload failed — tap to retry'; } }, function(){ s.textContent='Upload failed — tap to retry'; }); };
-      fr.readAsDataURL(f); }; }
+    /* API.upload resizes photos on the device, retries a dropped connection once and reports the
+       real reason if it still fails — the old code sent the full-size photo and printed a fixed line. */
+    function bindUpload(inputId,stEl,stKey,label){ var inp=$id(inputId); if(!inp) return; inp.onchange=function(){
+      var f=this.files[0], input=this; if(!f) return;
+      var s=$id(stEl);
+      API.upload(f,'DailyBusiness/'+(($id('dlDate')||{}).value||''),function(m){ s.textContent=m; })
+        .then(function(r){ st[stKey]=r.url; s.innerHTML='✓ '+esc(f.name)+' — tap to replace'; },
+              function(e){ s.innerHTML='<span style="color:#A32D2D">'+esc(e&&e.message?e.message:'Upload failed')+'</span> — tap to retry'; input.value=''; });
+    }; }
     bindUpload('dlB2cDoc','dlB2cDocSt','b2cDocUrl');
     bindUpload('dlOtherDoc','dlOtherDocSt','otherDocUrl');
     bindUpload('dlXl','dlXlSt','testXlUrl');

@@ -14,14 +14,11 @@
   function wireFileInputs(fields,pfx){ (fields||[]).forEach(function(f){ if(f.fieldType!=='file') return;
     var inp=document.getElementById(pfx+f.fieldId+'_f'); if(!inp) return;
     inp.onchange=function(){ var file=inp.files&&inp.files[0]; if(!file) return;
-      if(file.size>8*1024*1024){ toast('File too large (max 8MB)',true); inp.value=''; return; }
-      var st=document.getElementById(pfx+f.fieldId+'_st'); if(st) st.textContent='Uploading…';
-      var fr=new FileReader(); fr.onload=function(){ var s=fr.result,i=s.indexOf(',');
-        API.uploadFile({base64:s.slice(i+1),mimeType:file.type,fileName:file.name,subPath:'ProcessFiles'}).then(function(r){
-          if(r&&r.ok){ var h=document.getElementById(pfx+f.fieldId); if(h) h.value=r.url; if(st) st.innerHTML='Attached ✓ <a href="'+esc(r.url)+'" target="_blank">view</a>'; }
-          else { if(st) st.textContent=(r&&r.error)||'Upload failed'; }
-        },function(){ if(st) st.textContent='Uploading a file needs internet.'; });
-      }; fr.readAsDataURL(file);
+      var st=document.getElementById(pfx+f.fieldId+'_st');
+      API.upload(file,'ProcessFiles',function(m){ if(st) st.textContent=m; }).then(function(r){
+        var h=document.getElementById(pfx+f.fieldId); if(h) h.value=r.url;
+        if(st) st.innerHTML='Attached ✓ <a href="'+esc(r.url)+'" target="_blank">view</a>';
+      }, function(e){ if(st) st.textContent=(e&&e.message)||'Upload failed'; inp.value=''; });
     };
   }); }
   function fieldsHtml(fields,pfx){ return (fields||[]).map(function(f){ return '<div class="field full"><label>'+esc(f.label)+(f.required?' *':'')+'</label>'+inputFor(f,pfx)+'</div>'; }).join(''); }

@@ -77,16 +77,10 @@
     var inp=document.getElementById('b_lhFile');
     inp.onchange=function(){
       var f=inp.files[0]; if(!f) return;
-      if(f.size>4*1024*1024){ toast('File too large (max 4MB).',true); inp.value=''; return; }
-      var st=document.getElementById('b_lhStatus'); st.textContent='Uploading…';
-      var fr=new FileReader();
-      fr.onload=function(){ var s=fr.result, i=s.indexOf(',');
-        API.uploadFile({base64:s.slice(i+1), mimeType:f.type, fileName:f.name, subPath:'Letterheads'}).then(function(r){
-          if(r.ok){ lhUrl=r.url; lhFileId=r.fileId; st.innerHTML='Uploaded ✓ <a href="'+esc(r.url)+'" target="_blank">view</a>'; }
-          else { st.textContent=r.error||'Upload failed'; }
-        }).catch(function(){ st.textContent='Uploading a letterhead needs an internet connection.'; });
-      };
-      fr.readAsDataURL(f);
+      var st=document.getElementById('b_lhStatus');
+      API.upload(f,'Letterheads',function(m){ st.textContent=m; }).then(function(r){
+        lhUrl=r.url; lhFileId=r.fileId; st.innerHTML='Uploaded ✓ <a href="'+esc(r.url)+'" target="_blank">view</a>';
+      }, function(e){ st.textContent=(e&&e.message)||'Upload failed'; inp.value=''; });
     };
 
     /* fill template override dropdown from the WhatsApp Templates registry */

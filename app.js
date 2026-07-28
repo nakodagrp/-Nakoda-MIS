@@ -834,21 +834,21 @@ function bindDocField(idPrefix, key, multi, onDone, onPendingChange){
     inp.onchange=function(){
       var files=inp.files; if(!files||!files.length) return;
       [].forEach.call(files,function(f){
-        if(f.size>4*1024*1024){ toast(f.name+' too large (max 4MB)',true); return; }
+        /* Photos of an Aadhaar or PAN card are the worst offenders for size — API.upload resizes
+           them on the device, so the old 4MB rejection no longer turns people away. */
         if(onPendingChange) onPendingChange(1);
-        var wrap=$(idPrefix+'wrap_'+key); if(wrap && !multi) wrap.innerHTML='<div class="upst" style="font-size:12px;color:#666">Uploading '+esc(f.name)+'…</div>';
-        var fr=new FileReader(); fr.onload=function(){ var s=fr.result,i=s.indexOf(',');
-          API.uploadFile({base64:s.slice(i+1),mimeType:f.type,fileName:f.name,subPath:'EmployeeDocs'}).then(function(r){
-            if(onPendingChange) onPendingChange(-1);
-            if(r.ok){
-              onDone(key,r.url,f.name);
-              if(!multi){ var w=$(idPrefix+'wrap_'+key); if(w) w.innerHTML=docFieldUploadedHtml(r.url,f.name,key,idPrefix); wireReplace(); }
-            } else { var w2=$(idPrefix+'wrap_'+key); if(w2) w2.innerHTML='<div class="upst" style="font-size:12px;color:#b23b3b">'+esc(r.error||'Upload failed')+'</div><input type="file" id="'+idPrefix+'_'+key+'" accept="image/*,application/pdf">'; wireInput(); }
-          }, function(){
-            if(onPendingChange) onPendingChange(-1);
-            var w3=$(idPrefix+'wrap_'+key); if(w3) w3.innerHTML='<div class="upst" style="font-size:12px;color:#b23b3b">Uploading a document needs internet.</div><input type="file" id="'+idPrefix+'_'+key+'" accept="image/*,application/pdf">'; wireInput();
-          });
-        }; fr.readAsDataURL(f);
+        function setSt(msg,bad){ var w=$(idPrefix+'wrap_'+key);
+          if(w && !multi) w.innerHTML='<div class="upst" style="font-size:12px;color:'+(bad?'#b23b3b':'#666')+'">'+esc(msg)+'</div>'
+            +(bad?'<input type="file" id="'+idPrefix+'_'+key+'" accept="image/*,application/pdf">':''); }
+        setSt('Preparing '+f.name+'…');
+        API.upload(f,'EmployeeDocs',function(m){ setSt(m); }).then(function(r){
+          if(onPendingChange) onPendingChange(-1);
+          onDone(key,r.url,f.name);
+          if(!multi){ var w=$(idPrefix+'wrap_'+key); if(w) w.innerHTML=docFieldUploadedHtml(r.url,f.name,key,idPrefix); wireReplace(); }
+        }, function(e){
+          if(onPendingChange) onPendingChange(-1);
+          setSt((e&&e.message)||'Upload failed',1); wireInput();
+        });
       });
     };
   }
