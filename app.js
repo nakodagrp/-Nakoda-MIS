@@ -344,136 +344,93 @@ function isMonitorRole(){ var u=S.user||{}; return (S.perms&&S.perms.level==='SU
    (no branch business/cash figures, no other departments' tiles, no staff list). */
 function isConsultantRole(){ return /consultant/i.test(String((S.user||{}).Role||'')); }
 /* ============================================================================
-   v262: DASHBOARD "TASKS & SCHEDULE" BLOCK
-   The Process Flow Monitor board, brought onto the main dashboard directly under the greeting row,
-   so overdue work is the first thing anyone sees instead of something they have to navigate to.
-   Scope is decided server-side (apiDashFollowups → dashScopeOf_): all branches for Director/Ops/PC,
-   own branch for a branch manager, own rows for everyone else. Reuses the .tm-* / .kpi styles the
-   monitor already ships, so there is no new CSS.
+   v262: DASHBOARD "MY TASKS" BLOCK
+   Sits directly under the greeting row. A summary of the signed-in person's OWN tasks — Today,
+   Overdue, Upcoming, Done — plus their next few items. Built entirely from DASH.tasks, which
+   loadDashboard already fetches, so it costs ZERO extra server calls and paints from the same
+   IndexedDB cache when offline.
+
+   Buckets are deliberately identical to the My Tasks chips (tasks.js bucket()), including the two
+   special cases, so the numbers here can never disagree with the numbers there:
+     - a done task is 'done' whatever its due date
+     - 'nrlead' (not-responding follow-ups) stay out of Today/Overdue
+     - leave and attendance approvals always count as Today, since they need immediate action
    ============================================================================ */
-var DASHFU={tasks:[],entries:[],items:[],scope:'me',canComplete:false,loaded:false};
-var DASHFU_FILT='all';
-/* tasks.js has its own todayStr() but it lives inside that file's IIFE, so it is not reachable here. */
-function dtToday(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
-function dtLateLabel(dueDate,dueTime){
-  var d=new Date((dueDate||'')+'T'+((dueTime||'00:00').slice(0,5))+':00');
-  if(isNaN(d.getTime())) return '';
-  var days=Math.floor((new Date()-d)/86400000);
-  return days<=0?'today':(days===1?'1 day overdue':days+' days overdue');
+function dtBucket(t){
+  if(String(t.status)==='done') return 'done';
+  if(String(t.source)==='nrlead') return 'nr';
+  if(String(t.source)==='leave'||String(t.source)==='attendance') return 'today';
+  var tdy=todayD(), ds=dd10(t.dueDate);
+  if(ds && ds<tdy) return 'overdue';
+  if(ds && ds>tdy) return 'upcoming';
+  return 'today';
 }
-function dtCollect(){
-  var tdy=dtToday(), nowMin=new Date().getHours()*60+new Date().getMinutes(), out=[];
-  (DASHFU.tasks||[]).forEach(function(t){
-    out.push({kind:'task', id:t.taskId, title:t.title, name:t.assigneeName, phone:t.assigneePhone, branchId:t.branchId,
-      empId:t.assignedToEmpId, when:(t.dueDate||'')+' '+(t.dueTime||''), sortKey:(t.dueDate||'')+(t.dueTime||'00:00'),
-      late:dtLateLabel(t.dueDate,t.dueTime)});
-  });
-  (DASHFU.entries||[]).forEach(function(c){
-    var p=String(c.endTime||c.startTime||'').split(':'), endMin=p.length>1?(parseInt(p[0],10)*60+parseInt(p[1],10)+(c.endTime?0:30)):0;
-    if(!((c.date<tdy) || (c.date===tdy && endMin && endMin<nowMin))) return;    // only genuinely missed items
-    out.push({kind:'sch', id:c.entryId, title:c.title, name:c.assigneeName, phone:c.assigneePhone, branchId:c.branchId,
-      empId:c.ownerEmpId, when:(c.date||'')+' '+(c.startTime||'')+(c.endTime?'–'+c.endTime:''),
-      sortKey:(c.date||'')+(c.startTime||'00:00'), late:dtLateLabel(c.date,c.startTime)});
-  });
-  (DASHFU.items||[]).forEach(function(f){
-    if(f.kind==='dailycash' && String(branchName(f.branchId)||'').toUpperCase().indexOf('DIGITAL')>=0) return;
-    out.push({kind:(f.kind==='dailycash'?'dc':'att'), fu:f, id:f.fuKey, title:f.title, name:f.name, phone:f.phone,
-      branchId:f.branchId, empId:f.empId, when:f.detail||'', sortKey:'0000'+(f.date||''), state:f.state, late:''});
-  });
-  out.sort(function(a,b){ return String(a.sortKey).localeCompare(String(b.sortKey)); });
-  return out;
+function dtBadge(t){
+  var m={ training:['#eafaf3','#1aa37a','🎓 Training'], process:['#eafaf3','#1aa37a','📁 CRM stage'],
+          attendance:['#fdeaea','#a3271f','🕒 Attendance'], leave:['#eef7ee','#1a7f37','🌴 Leave'],
+          nrlead:['#fff4e8','#c47f00','↻ Not responding'], accounts:['#eef2ff','#4253c5','📊 Daily cash'],
+          deposit:['#eef2ff','#4253c5','🏦 Deposit'], recurring:['#f3f0ff','#6f63d6','🔁 Recurring'],
+          calendar:['#eef6ff','#2563c9','📅 Calendar'] };
+  var d=m[String(t.source)];
+  if(!d && String(t.source)==='assigned') d=['#eef2ff','#4253c5','Assigned by '+(t.assignedByName||'manager')];
+  if(!d) return '';
+  return '<span style="background:'+d[0]+';color:'+d[1]+';border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600;white-space:nowrap">'+esc(d[2])+'</span>';
+}
+function dtDue(t){
+  var tdy=todayD(), ds=dd10(t.dueDate);
+  if(!ds) return 'No date';
+  if(ds===tdy) return 'Today'+(t.dueTime?(' '+String(t.dueTime).slice(0,5)):'');
+  var days=Math.round((new Date(tdy+'T00:00')-new Date(ds+'T00:00'))/86400000);
+  if(days===1) return '1 day overdue';
+  if(days>1)   return days+' days overdue';
+  if(days===-1) return 'Tomorrow';
+  return ds;
 }
 function renderDashTasks(){
   var box=$('dashTasks'); if(!box) return;
-  var all=dtCollect();
-  var tasks=all.filter(function(i){return i.kind==='task';}), sch=all.filter(function(i){return i.kind==='sch';});
-  var dc=all.filter(function(i){return i.kind==='dc';}), att=all.filter(function(i){return i.kind==='att';});
-  var people={}; all.forEach(function(i){ if(i.name) people[i.name]=1; });
-  var lateN=att.filter(function(i){ return i.state==='late'; }).length;
-  var mine=(DASHFU.scope==='me');
-  if(!DASHFU.loaded && !all.length){
-    box.innerHTML='<div class="card" style="padding:14px"><div class="center-load"><span class="loader dark"></span> Loading tasks…</div></div>';
-    return;
-  }
+  var all=(DASH.tasks||[]).filter(function(t){ return String(t.status)!=='deleted'; });
   if(!all.length){
-    box.innerHTML='<div class="card" style="padding:16px"><div class="section-label" style="margin:0 0 6px">Tasks &amp; schedule</div>'+
-      '<div class="empty" style="padding:10px 0">Nothing overdue right now. 🎉</div></div>';
+    box.innerHTML='<div class="card" style="padding:14px 16px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'+
+        '<div class="section-label" style="margin:0">My tasks</div>'+
+        '<a href="#" id="dtAll" style="font-size:12.5px;font-weight:600">View all ↗</a></div>'+
+      '<div class="empty" style="padding:10px 0">Nothing assigned to you right now. 🎉</div></div>';
+    var e0=$('dtAll'); if(e0) e0.onclick=function(ev){ ev.preventDefault(); go('tasks'); };
     return;
   }
-  var fdef=[['all','All ('+all.length+')'],['task','Tasks ('+tasks.length+')'],['sch','Schedule ('+sch.length+')'],
-            ['dc','Daily cash ('+dc.length+')'],['att','Attendance ('+att.length+')']];
-  var list = DASHFU_FILT==='task'?tasks : DASHFU_FILT==='sch'?sch : DASHFU_FILT==='dc'?dc : DASHFU_FILT==='att'?att : all;
+  var b={today:[],overdue:[],upcoming:[],done:[],nr:[]};
+  all.forEach(function(t){ (b[dtBucket(t)]||b.today).push(t); });
+  /* Overdue first, then today, then upcoming — the order someone should actually work through. */
+  var next=b.overdue.concat(b.today).concat(b.upcoming).sort(function(x,y){
+    var bx=dtBucket(x), by=dtBucket(y), r={overdue:0,today:1,upcoming:2};
+    if(r[bx]!==r[by]) return r[bx]-r[by];
+    return String(dd10(x.dueDate)+(x.dueTime||'')).localeCompare(String(dd10(y.dueDate)+(y.dueTime||'')));
+  }).slice(0,3);
+  var tile=function(n,label,bg,fg){ return '<div class="kpi" style="background:'+bg+'"><div class="n" style="color:'+fg+'">'+n+'</div><div class="l">'+label+'</div></div>'; };
   box.innerHTML='<div class="card" style="padding:14px 16px">'+
     '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">'+
-      '<div class="section-label" style="margin:0">Tasks &amp; schedule</div>'+
-      '<span style="font-size:11.5px;color:#9aa0a6">'+(mine?'your open items':DASHFU.scope==='branch'?esc(branchName((S.user||{}).Branch)):'all branches')+'</span>'+
+      '<div class="section-label" style="margin:0">My tasks</div>'+
+      '<a href="#" id="dtAll" style="font-size:12.5px;font-weight:600">View all ↗</a>'+
     '</div>'+
-    '<div class="kpis" style="margin-bottom:10px">'+
-      '<div class="kpi" style="background:#fdecec"><div class="n" style="color:#C0392B">'+tasks.length+'</div><div class="l">Overdue tasks</div></div>'+
-      '<div class="kpi" style="background:#f1effc"><div class="n" style="color:#6f63d6">'+sch.length+'</div><div class="l">Missed schedule</div></div>'+
-      '<div class="kpi" style="background:#fdf0e9"><div class="n" style="color:#993C1D">'+lateN+'</div><div class="l">Late in</div></div>'+
-      '<div class="kpi" style="background:#fff7e6"><div class="n" style="color:#b08900">'+Object.keys(people).length+'</div><div class="l">'+(mine?'Items to clear':'People to chase')+'</div></div>'+
+    '<div class="kpis" style="margin-bottom:'+(next.length?'10px':'0')+'">'+
+      tile(b.today.length,   'Today',    '#f6f7f9','#2b2b2b')+
+      tile(b.overdue.length, 'Overdue',  '#fdecec','#C0392B')+
+      tile(b.upcoming.length,'Upcoming', '#f6f7f9','#2b2b2b')+
+      tile(b.done.length,    'Done',     '#eef7ee','#1a7f37')+
     '</div>'+
-    '<div class="tmfilt" id="dtFilt">'+fdef.map(function(f){ return '<button data-f="'+f[0]+'" class="'+(DASHFU_FILT===f[0]?'on':'')+'">'+f[1]+'</button>'; }).join('')+'</div>'+
-    '<div id="dtList"></div>'+
-    (all.length>list.length||list.length>6?'<div style="text-align:right;margin-top:2px"><a href="#" id="dtAll" style="font-size:12.5px;font-weight:600">Open '+(mine?'My Tasks':'Process Flow Monitor')+' ↗</a></div>':'')+
-  '</div>';
-  var lb=$('dtList'), shown=list.slice(0,6);
-  lb.innerHTML=shown.length?shown.map(function(i,idx){
-    var ph=String(i.phone||'').replace(/\D/g,'');
-    var msg=encodeURIComponent('Reminder from Nakoda: '+(i.kind==='task'?'please complete your task “'+i.title+'” — it is overdue.'
-      :i.kind==='sch'?'please attend/close your scheduled item “'+i.title+'” — it is overdue.'
-      :i.kind==='dc'?(i.state==='verify'?'the daily cash report is waiting for verification ('+i.title+').':'please enter the daily cash report — '+i.title+'.')
-      :'please punch in your attendance — it is past your shift start.'));
-    var chip=i.kind==='task'?'<span class="tm-chip task">TASK</span>'
-            :i.kind==='sch'?'<span class="tm-chip sch">SCHEDULE</span>'
-            :i.kind==='dc'?'<span class="tm-chip dc">DAILY CASH</span>':'<span class="tm-chip attc">ATTENDANCE</span>';
-    return '<div class="tm-row">'+
-      '<div class="tm-av">'+esc(initials(i.name))+'</div>'+
-      '<div class="tm-mid"><div class="tm-nm"><b>'+esc(i.name||'—')+'</b><span class="tm-brn">'+esc(branchName(i.branchId))+'</span>'+chip+
-        (ph&&!mine?'<span class="tm-ph">📞 '+esc(i.phone)+'</span>':'')+'</div>'+
-      '<div class="tm-it">'+esc(i.title)+' · '+esc(String(i.when||'').trim())+(i.late?' · <span class="tm-late">'+esc(i.late)+'</span>':'')+'</div></div>'+
-      '<div class="tm-acts">'+
-        ((ph&&!mine)?('<a href="tel:'+ph+'" class="tm-call">📞 <span>Call</span></a><a href="https://wa.me/91'+ph+'?text='+msg+'" target="_blank" rel="noopener" class="tm-wa">💬 <span>WhatsApp</span></a>'):'')+
-        (DASHFU.canComplete?'<button class="tm-donebtn" data-dd="'+idx+'">✓ <span>Completed</span></button>':'')+
-      '</div></div>';
-  }).join(''):'<div class="empty">Nothing in this filter.</div>';
-
-  document.querySelectorAll('#dtFilt button').forEach(function(b){
-    b.onclick=function(){ DASHFU_FILT=b.getAttribute('data-f'); renderDashTasks(); };
-  });
-  var oa=$('dtAll'); if(oa) oa.onclick=function(ev){ ev.preventDefault(); go(mine?'tasks':'taskmon'); };
-  /* Chasing a person is logged the same way the monitor logs it (PC_Followups), so the row leaves
-     both boards at once and the underlying task stays open for whoever actually has to do it. */
-  lb.querySelectorAll('[data-dd]').forEach(function(b){
-    b.onclick=function(){
-      var i=shown[parseInt(b.getAttribute('data-dd'),10)]; if(!i) return;
-      var note=window.prompt('Add a note for the record (what did you tell them?)','');
-      if(note===null) return;
-      b.disabled=true;
-      var key=i.kind==='task'?('TASK|'+i.id):i.kind==='sch'?('SCH|'+i.id):(i.fu&&i.fu.fuKey);
-      API.completeFollowup({fuKey:key, kind:i.kind, title:i.title, branchId:i.branchId, empId:i.empId||'', note:note}).then(function(r){
-        if(r&&r.ok){
-          if(i.kind==='task') DASHFU.tasks=(DASHFU.tasks||[]).filter(function(x){ return String(x.taskId)!==String(i.id); });
-          else if(i.kind==='sch') DASHFU.entries=(DASHFU.entries||[]).filter(function(x){ return String(x.entryId)!==String(i.id); });
-          else DASHFU.items=(DASHFU.items||[]).filter(function(x){ return String(x.fuKey)!==String(key); });
-          renderDashTasks(); toast('Logged — row cleared');
-        } else { toast((r&&r.error)||'Could not log that',true); b.disabled=false; }
-      });
-    };
-  });
-}
-function loadDashTasks(){
-  API.cachedDashFollowups().then(function(d){
-    if(d){ DASHFU.tasks=d.tasks||[]; DASHFU.entries=d.entries||[]; DASHFU.items=d.items||[];
-      DASHFU.scope=d.scope||'me'; DASHFU.canComplete=!!d.canComplete; DASHFU.loaded=true; renderDashTasks(); }
-    else renderDashTasks();
-  });
-  API.dashFollowups().then(function(r){
-    if(r&&r.ok){ DASHFU.tasks=r.tasks||[]; DASHFU.entries=r.entries||[]; DASHFU.items=r.items||[];
-      DASHFU.scope=r.scope||'me'; DASHFU.canComplete=!!r.canComplete; }
-    DASHFU.loaded=true; renderDashTasks();
-  }).catch(function(){ DASHFU.loaded=true; renderDashTasks(); });
+    (next.length?('<div id="dtList" style="border-top:1px solid var(--line);padding-top:4px"></div>'):'');
+  var e1=$('dtAll'); if(e1) e1.onclick=function(ev){ ev.preventDefault(); go('tasks'); };
+  var lb=$('dtList'); if(!lb) return;
+  lb.innerHTML=next.map(function(t,i){
+    var od=dtBucket(t)==='overdue';
+    return '<div data-dt="'+i+'" style="display:flex;align-items:center;gap:10px;padding:9px 0'+(i<next.length-1?';border-bottom:1px solid #f4f5f7':'')+';cursor:pointer">'+
+      '<span style="width:7px;height:7px;border-radius:50%;background:'+(od?'#DA1017':'#c9ccd1')+';flex:none"></span>'+
+      '<div style="flex:1;min-width:0">'+
+        '<div style="font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.title||'')+'</div>'+
+        '<div style="font-size:11.5px;color:'+(od?'#A32D2D':'#8a8f98')+'">'+esc(dtDue(t))+'</div>'+
+      '</div>'+dtBadge(t)+'</div>';
+  }).join('');
+  lb.querySelectorAll('[data-dt]').forEach(function(el){ el.onclick=function(){ go('tasks'); }; });
 }
 
 function loadDashboard(){
@@ -482,7 +439,6 @@ function loadDashboard(){
   var lvl=S.perms&&S.perms.level;
   var scope=(S.perms&&S.perms.canManageAll)?'org-wide':(lvl==='BRANCH_MGR'?('branch: '+branchName(u.Branch)):(lvl==='BRANCH_VIEW'?('branch: '+branchName(u.Branch)+' (view)'):(S.perms&&S.perms.canViewAll?'all branches (view)':'self-service')));
   $('greetMeta').textContent=[u.Role,(u.OfficeType==='Branch'?branchName(u.Branch):'Corporate Office'),scope].filter(Boolean).join(' · ');
-  loadDashTasks();
   if(!DASH.emps.length && !DASH.cards.length) $('kpis').innerHTML='<div class="kpi"><div class="n"><span class="loader dark"></span></div><div class="l">Loading…</div></div>';
   Promise.all([API.cachedEmployees(),API.cachedCards(),API.cachedPrices(),API.cachedTasks(),API.cachedCalendar(u.EmpID),API.cachedProcesses()]).then(function(a){
     if(a[0]) DASH.emps=a[0]; if(a[1]) DASH.cards=a[1]; DASH.prices=priceMap(a[2]||[]); if(a[3]) DASH.tasks=a[3]; if(a[4]) DASH.cal=a[4]; if(a[5]) DASH.procs=a[5];
@@ -556,6 +512,9 @@ function renderDashboard(){
   try{
   var u=S.user||{}, lvl=S.perms&&S.perms.level, isManager=S.perms&&S.perms.canViewAll, isBranchMgr=lvl==='BRANCH_MGR', isMon=isMonitorRole();
   var tdy=todayD();
+  /* v262: My tasks block under the greeting. Repaints here so it follows the same data as the rest of
+     the dashboard; wrapped so a fault in it can never take the whole dashboard down. */
+  try{ renderDashTasks(); }catch(_dt){}
   var myT=(DASH.tasks||[]).filter(function(t){return t.status!=='deleted';});
   var myToday=myT.filter(function(t){return t.status!=='done' && dd10(t.dueDate)===tdy;}).length;
   var myOver=myT.filter(function(t){var d=dd10(t.dueDate); return t.status!=='done' && d && d<tdy;}).length;
