@@ -462,6 +462,7 @@
     listDaily:function(b,ym){ return call('listDaily',{token:getToken(),branch:b,ym:ym}); },
     getDaily:function(id){ return call('getDaily',{token:getToken(),dayId:id}); },
     getAttendance:function(attId){ return call('getAttendance',{token:getToken(),attId:attId}); },
+    getTaskDetail:function(taskId){ return call('getTaskDetail',{token:getToken(),taskId:taskId}); },
     verifyDaily:function(id){ return call('verifyDaily',{token:getToken(),dayId:id}); },
     rejectDaily:function(id,reason){ return call('rejectDaily',{token:getToken(),dayId:id,reason:reason||''}); },
     saveDeposit:function(d){ return call('saveDeposit',{token:getToken(),data:d}); },

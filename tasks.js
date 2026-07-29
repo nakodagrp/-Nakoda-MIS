@@ -251,6 +251,55 @@
       '</div>';
   }
 
+  /* ============================================================================================
+     v263: GENERIC TASK DETAIL PANEL
+     Every task type that links to a record (indent, bank deposit, leave, CRM stage, asset audit,
+     stock deduction) renders through this one function. The server decides WHAT to show and returns
+     a normalised spec — see apiGetTaskDetail — so adding another task type later needs no change
+     here at all. Same stat-tile layout as the attendance panel, so it reflows on a phone.
+     ============================================================================================ */
+  var TD_TONE={ok:'#1a7f37', warn:'#b08900', bad:'#A32D2D', '':''};
+  function specPanelHtml(sp){
+    function tone(t){ var c=TD_TONE[String(t||'')]; return c?(' style="color:'+c+'"'):''; }
+    function stat(l,v,t){
+      return '<div style="background:#f6f7f9;border-radius:7px;padding:7px 9px;min-width:0">'+
+        '<div style="font-size:10.5px;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(l)+'</div>'+
+        '<div style="font-size:14px;margin-top:1px;overflow-wrap:anywhere"'+tone(t)+'>'+esc(v)+'</div></div>';
+    }
+    var h='<div id="tdSpec" style="border:1px solid var(--line);border-radius:10px;padding:11px;margin-top:10px">';
+    h+='<div style="font-weight:700;font-size:12.5px;margin-bottom:8px">'+esc(sp.header||'')+
+       (sp.badge?(' · <span style="font-weight:600;color:#686868">'+esc(sp.badge)+'</span>'):'')+'</div>';
+    if(sp.stats && sp.stats.length){
+      h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:8px">'+
+         sp.stats.map(function(s){ return stat(s.l,s.v,s.tone); }).join('')+'</div>';
+    }
+    if(sp.rows && sp.rows.length){
+      h+='<div style="border-top:1px solid var(--line);margin-top:9px;padding-top:8px;font-size:12.5px">'+
+         sp.rows.map(function(r){ return '<div style="display:flex;justify-content:space-between;gap:10px;padding:3px 0">'+
+           '<span style="color:#888;flex:none">'+esc(r.l)+'</span><span style="text-align:right;overflow-wrap:anywhere">'+esc(r.v)+'</span></div>'; }).join('')+'</div>';
+    }
+    if(sp.items && sp.items.list && sp.items.list.length){
+      h+='<div style="border-top:1px solid var(--line);margin-top:9px;padding-top:8px">'+
+         '<div style="font-size:10.5px;color:#888;letter-spacing:.3px;margin-bottom:5px">'+esc(sp.items.label||'ITEMS')+'</div>'+
+         sp.items.list.map(function(i,ix,arr){
+           return '<div style="display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:4px 0'+
+             (ix<arr.length-1?';border-bottom:1px solid #f4f5f7':'')+'">'+
+             '<span style="overflow-wrap:anywhere">'+esc(i.l)+'</span><span'+tone(i.tone)+' style="color:#686868;flex:none">'+esc(i.v)+'</span></div>';
+         }).join('')+'</div>';
+    }
+    if(sp.note) h+='<div style="background:#f6f7f9;border-radius:7px;padding:8px;margin-top:9px;font-size:12.5px;color:#686868;white-space:pre-line">'+esc(sp.note)+'</div>';
+    if(sp.chips && sp.chips.length){
+      h+='<div style="border-top:1px solid var(--line);margin-top:8px;padding-top:8px;display:flex;gap:6px;flex-wrap:wrap;font-size:10.5px">'+
+         sp.chips.map(function(c){ var ok=String(c.tone)==='ok';
+           return '<span style="background:'+(ok?'#EAF3DE':'#f1efe8')+';color:'+(ok?'#3B6D11':'#5F5E5A')+';padding:2px 8px;border-radius:12px">'+esc(c.t)+'</span>'; }).join('')+'</div>';
+    }
+    if(sp.files && sp.files.length){
+      h+='<div style="margin-top:9px;display:flex;flex-direction:column;gap:5px;font-size:12.5px">'+
+         sp.files.map(function(f){ return '<a href="'+esc(f.url)+'" target="_blank" rel="noopener" style="color:var(--red);font-weight:600">📎 '+esc(f.l)+' ↗</a>'; }).join('')+'</div>';
+    }
+    return h+'</div>';
+  }
+
   function dailyPanelHtml(e){
     function m(n){ return '₹'+Math.round(Number(n)||0).toLocaleString('en-IN'); }
     var b2cCash=Number(e.b2cCash)||0,b2cBank=Number(e.b2cBank)||0,b2dCash=Number(e.b2dCash)||0,b2dBank=Number(e.b2dBank)||0;
@@ -278,16 +327,25 @@
     var isDaily=(t.source==='accounts' && t.instanceId);
     var isDep=(t.source==='deposit' && t.instanceId);
     var isAtt=(t.source==='attendance' && t.instanceId);   /* instanceId holds the attId — see ensureAttApprovalTasks_ */
+    /* v263: every other task type that links to a record renders through the generic spec panel.
+       The server decides what to show (apiGetTaskDetail), so this list is the only place the client
+       needs to know a type exists. Tasks with no instanceId — indents raised before this build —
+       simply keep showing their description, which is why nothing needed backfilling. */
+    var SPEC_SRC={purchase:1,deposit:1,leave:1,process:1,asset:1,stock:1};
+    var isSpec=(SPEC_SRC[String(t.source)] && t.instanceId);
     var clHtml=cl.length?('<div style="background:#f6f7f9;border-radius:8px;padding:10px;margin-top:10px">'+cl.map(function(it,i){
       return '<label style="display:flex;align-items:flex-start;gap:9px;padding:4px 0;font-size:13px;cursor:pointer"><input type="checkbox" data-ci="'+i+'"'+(it.done?' checked':'')+' style="transform:scale(1.2);margin-top:2px"><span'+(it.done?' style="text-decoration:line-through;color:#999"':'')+'>'+esc(it.text)+'</span></label>';
     }).join('')+'</div>'):'';
     var body='<div style="font-size:13px;color:#8a8f98;margin-bottom:8px"><span class="pdot" style="background:'+(PRI[t.priority]||'#999')+'"></span> Due '+esc(dueLabel(t))+' · '+esc(t.priority||'Normal')+' · <b style="color:'+(t.status==='done'?'#1a7f37':'#DA1017')+'">'+(t.status==='done'?'Done':'Open')+'</b></div>'+
       /* The attendance task's own description just repeats "go and review it in Attendance", which the
          inline panel now makes redundant — so it is suppressed in favour of the real figures. */
-      ((t.description && !isAtt)?'<div style="font-size:13px;background:#f6f7f9;border-radius:8px;padding:10px;white-space:pre-line">'+esc(t.description)+'</div>':'')+
+      /* Once a panel is showing the real figures the task's own description just repeats
+         "go and open X to review it", so it is suppressed for those types. */
+      ((t.description && !isAtt && !isSpec)?'<div style="font-size:13px;background:#f6f7f9;border-radius:8px;padding:10px;white-space:pre-line">'+esc(t.description)+'</div>':'')+
       clHtml+
       (isDaily?'<div id="tdDaily" style="font-size:13px;color:#888;margin-top:10px">Loading entry…</div>':'')+
       (isAtt?'<div id="tdAtt" style="font-size:13px;color:#888;margin-top:10px">Loading attendance…</div>':'')+
+      (isSpec?'<div id="tdSpec" style="font-size:13px;color:#888;margin-top:10px">Loading details…</div>':'')+
       ((isDaily||isDep||isAtt)?'<div style="margin-top:10px"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Notes</label>'+
         '<textarea id="tdNote" rows="2" placeholder="Optional note — required as the reason if you Reject" style="width:100%;border:1px solid #d9d9d9;border-radius:8px;padding:8px;font-size:13px"></textarea></div>':'')+
       '<div style="font-size:11px;color:#aaa;margin-top:10px">'+(t.source==='assigned'?('Assigned by '+esc(t.assignedByName||'manager')):'Created by you · self task')+'</div>';
@@ -317,6 +375,16 @@
       API.getAttendance(t.instanceId).then(function(r){ var box=document.getElementById('tdAtt'); if(!box) return;
         if(r&&r.ok&&r.entry){ box.outerHTML=attPanelHtml(r.entry); }
         else { box.textContent=(r&&r.error)||'Could not load the attendance record.'; } });
+    }
+    if(isSpec){
+      API.getTaskDetail(t.taskId).then(function(r){ var box=document.getElementById('tdSpec'); if(!box) return;
+        if(r&&r.ok&&r.spec){ box.outerHTML=specPanelHtml(r.spec); }
+        /* spec:null means the linked record could not be resolved (an older task, or one whose record
+           was deleted). Fall back to the task's own description rather than showing an error. */
+        else if(r&&r.ok){ box.outerHTML=t.description
+          ? '<div style="font-size:13px;background:#f6f7f9;border-radius:8px;padding:10px;white-space:pre-line;margin-top:10px">'+esc(t.description)+'</div>'
+          : '<div style="font-size:12.5px;color:#9aa0a6;margin-top:10px">No linked record for this task.</div>'; }
+        else { box.textContent=(r&&r.error)||'Could not load the details.'; } });
     }
     document.getElementById('tdComplete').onclick=function(){
       /* Approving writes approvalStatus=approved on the attendance row. The server then closes EVERY
