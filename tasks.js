@@ -241,8 +241,26 @@
         stat('Shift', esc(shift||'—'))+
         stat('Late by', lateTxt)+
         stat('Geo', geoTxt)+
-        stat('Status', esc(a.status||'—'))+
+        /* v263: Status is editable here. Same four values and the same labels as the dropdown on the
+           Attendance screen (attendance.js stLabel), so the two can never disagree. The choice is held
+           locally and written together with the approval — see tdComplete — so closing the popup
+           discards it rather than half-applying a change. */
+        (a.canApprove
+          ? '<div style="background:#fff;border:1.5px solid var(--red);border-radius:7px;padding:5px 7px;min-width:0">'+
+              '<div style="font-size:10.5px;color:#888">Status</div>'+
+              '<select id="tdAttStatus" data-nocombo data-was="'+esc(a.status||'')+'" style="width:100%;border:0;background:transparent;font-size:14px;padding:0;margin-top:1px;outline:none">'+
+                ['present','half','leave','absent'].map(function(v){
+                  var lbl={present:'Full day',half:'Half day',leave:'Leave',absent:'Absent'}[v];
+                  return '<option value="'+v+'"'+(String(a.status)===v?' selected':'')+'>'+lbl+'</option>';
+                }).join('')+
+              '</select></div>'
+          : stat('Status', esc(a.status||'—')))+
       '</div>'+
+      /* Changing status changes that month's pay, so say so plainly if the payslip already exists. */
+      (a.canApprove && a.payrollStatus
+        ? '<div style="margin-top:7px;font-size:11.5px;color:#b08900;background:#fff7e6;border-radius:6px;padding:6px 8px">'+
+          '⚠ Payroll for this month is already '+esc(a.payrollStatus)+'. Changing the status will not update the payslip on its own.</div>'
+        : '')+
       (a.addrIn?('<div style="border-top:1px solid var(--line);margin-top:7px;padding-top:7px;font-size:12.5px;color:#686868">📍 '+esc(a.addrIn)+
         (mapUrl?(' · <a href="'+esc(mapUrl)+'" target="_blank" rel="noopener" style="color:var(--red);font-weight:600">open map ↗</a>'):'')+'</div>')
         :(mapUrl?('<div style="border-top:1px solid var(--line);margin-top:7px;padding-top:7px;font-size:12.5px"><a href="'+esc(mapUrl)+'" target="_blank" rel="noopener" style="color:var(--red);font-weight:600">📍 open punch-in location ↗</a></div>'):''))+
@@ -394,6 +412,11 @@
         var ab=this; ab.disabled=true;
         var an=((document.getElementById('tdNote')||{}).value||'').trim();
         var ap={approvalStatus:'approved'}; if(an) ap.notes=an;
+        /* v263: carry the Status dropdown along with the approval — one write, and picking a status
+           then closing without approving deliberately discards it. Only sent when it differs from
+           what the record already says, so a plain approval does not rewrite the status column. */
+        var sel=document.getElementById('tdAttStatus');
+        if(sel && sel.value && sel.value!==String(sel.getAttribute('data-was')||'')) ap.status=sel.value;
         API.setAttendance(t.instanceId,ap).then(function(r){
           if(r&&r.ok){ closeModal(); toast('Attendance approved'); if(window.renderMyTasks) window.renderMyTasks(); else paintList(); }
           else { toast((r&&r.error)||'Could not approve',true); ab.disabled=false; }
