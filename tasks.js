@@ -182,6 +182,47 @@
       API.updateCalEntry(t.calId,{status:nc},curOwner()).then(function(){ API.cachedCalendar(curOwner()).then(function(e){ if(e){ CALITEMS=e.filter(function(x){return String(x.status)!=='deleted';}).map(calToItem); paintList(); } }); }); return; }
     var ns=t.status==='done'?'open':'done'; t.status=ns; t._pending=true; paintList(); API.setTaskStatus(id,ns).then(function(){ return API.listMyTasks(); }).then(function(r){ if(r&&r.ok) TASKS=r.tasks||[]; paintList(); }); }
 
+  /* v262: inline attendance panel for the "Approve attendance" task. Before this the task carried only
+     a sentence telling the approver to go and look the punch up in the Attendance screen, which meant
+     leaving My Tasks, finding the row, deciding, then coming back to tick the task. Everything needed
+     to decide now renders in the task itself. Mirrors dailyPanelHtml above, which the daily-collection
+     verify task already uses. */
+  function attPanelHtml(a){
+    var late=(a.lateMin==null)?null:Number(a.lateMin);
+    var lateTxt=late==null?'—':(late<=0?'<span style="color:#1a7f37">On time</span>'
+      :'<span style="color:#b08900">'+(late>=60?(Math.floor(late/60)+'h '+(late%60)+'m'):(late+' min'))+'</span>');
+    var geo=String(a.geoOkIn||'').toLowerCase();
+    var geoTxt=geo==='yes'||geo==='true'?'<span style="color:#1a7f37">In range</span>'
+      :geo==='no'||geo==='false'?'<span style="color:#A32D2D">Out of range</span>':'—';
+    var shift=(a.shiftStart||'')+(a.shiftEnd?('–'+a.shiftEnd):'');
+    var mapUrl=(a.latIn!==''&&a.latIn!=null&&a.lngIn!==''&&a.lngIn!=null)
+      ? ('https://maps.google.com/?q='+encodeURIComponent(a.latIn+','+a.lngIn)) : '';
+    function shot(url,label,empty){
+      if(!url) return '<div style="flex:1"><div style="font-size:11px;color:#888;margin-bottom:4px">'+label+'</div>'+
+        '<div style="height:78px;background:#f6f7f9;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11.5px;color:#b6b9be">'+empty+'</div></div>';
+      return '<div style="flex:1"><div style="font-size:11px;color:#888;margin-bottom:4px">'+label+'</div>'+
+        '<a href="'+esc(url)+'" target="_blank" rel="noopener" style="display:block"><img src="'+esc(url)+'" alt="'+label+'" '+
+        'style="width:100%;height:78px;object-fit:cover;border-radius:6px;background:#e8eaed" loading="lazy"></a></div>';
+    }
+    return '<div id="tdAtt" style="border:1px solid var(--line);border-radius:10px;padding:11px;margin-top:10px">'+
+      '<div style="font-weight:700;font-size:12.5px;margin-bottom:8px">'+esc(a.empName||a.empId||'')+' · '+esc(a.date||'')+
+        (String(a.approvalStatus)==='approved'?' · <span style="color:#1a7f37">approved</span>':'')+'</div>'+
+      '<table style="width:100%;font-size:13px;border-collapse:collapse;table-layout:fixed">'+
+      '<tr><td style="color:#888;padding:3px 0">Check in</td><td style="text-align:right">'+esc(a.checkIn||'—')+'</td>'+
+        '<td style="color:#888;text-align:right;padding-left:10px">Check out</td><td style="text-align:right">'+esc(a.checkOut||'—')+'</td></tr>'+
+      '<tr><td style="color:#888;padding:3px 0">Shift</td><td style="text-align:right">'+esc(shift||'—')+'</td>'+
+        '<td style="color:#888;text-align:right;padding-left:10px">Late by</td><td style="text-align:right">'+lateTxt+'</td></tr>'+
+      '<tr><td style="color:#888;padding:3px 0">Geo</td><td style="text-align:right">'+geoTxt+'</td>'+
+        '<td style="color:#888;text-align:right;padding-left:10px">Status</td><td style="text-align:right">'+esc(a.status||'—')+'</td></tr>'+
+      '</table>'+
+      (a.addrIn?('<div style="border-top:1px solid var(--line);margin-top:7px;padding-top:7px;font-size:12.5px;color:#686868">📍 '+esc(a.addrIn)+
+        (mapUrl?(' · <a href="'+esc(mapUrl)+'" target="_blank" rel="noopener" style="color:var(--red);font-weight:600">open map ↗</a>'):'')+'</div>')
+        :(mapUrl?('<div style="border-top:1px solid var(--line);margin-top:7px;padding-top:7px;font-size:12.5px"><a href="'+esc(mapUrl)+'" target="_blank" rel="noopener" style="color:var(--red);font-weight:600">📍 open punch-in location ↗</a></div>'):''))+
+      '<div style="display:flex;gap:10px;margin-top:10px">'+shot(a.selfieInUrl,'Selfie in','No selfie')+shot(a.selfieOutUrl,'Selfie out','Not yet')+'</div>'+
+      (a.notes?('<div style="margin-top:8px;font-size:12.5px;color:#686868">'+esc(a.notes)+'</div>'):'')+
+      '</div>';
+  }
+
   function dailyPanelHtml(e){
     function m(n){ return '₹'+Math.round(Number(n)||0).toLocaleString('en-IN'); }
     var b2cCash=Number(e.b2cCash)||0,b2cBank=Number(e.b2cBank)||0,b2dCash=Number(e.b2dCash)||0,b2dBank=Number(e.b2dBank)||0;
@@ -208,18 +249,24 @@
     if(t.source==='training' && t.instanceId && window.openTrainingVideo){ window.openTrainingVideo(t.instanceId); return; }
     var isDaily=(t.source==='accounts' && t.instanceId);
     var isDep=(t.source==='deposit' && t.instanceId);
+    var isAtt=(t.source==='attendance' && t.instanceId);   /* instanceId holds the attId — see ensureAttApprovalTasks_ */
     var clHtml=cl.length?('<div style="background:#f6f7f9;border-radius:8px;padding:10px;margin-top:10px">'+cl.map(function(it,i){
       return '<label style="display:flex;align-items:flex-start;gap:9px;padding:4px 0;font-size:13px;cursor:pointer"><input type="checkbox" data-ci="'+i+'"'+(it.done?' checked':'')+' style="transform:scale(1.2);margin-top:2px"><span'+(it.done?' style="text-decoration:line-through;color:#999"':'')+'>'+esc(it.text)+'</span></label>';
     }).join('')+'</div>'):'';
     var body='<div style="font-size:13px;color:#8a8f98;margin-bottom:8px"><span class="pdot" style="background:'+(PRI[t.priority]||'#999')+'"></span> Due '+esc(dueLabel(t))+' · '+esc(t.priority||'Normal')+' · <b style="color:'+(t.status==='done'?'#1a7f37':'#DA1017')+'">'+(t.status==='done'?'Done':'Open')+'</b></div>'+
-      (t.description?'<div style="font-size:13px;background:#f6f7f9;border-radius:8px;padding:10px;white-space:pre-line">'+esc(t.description)+'</div>':'')+
+      /* The attendance task's own description just repeats "go and review it in Attendance", which the
+         inline panel now makes redundant — so it is suppressed in favour of the real figures. */
+      ((t.description && !isAtt)?'<div style="font-size:13px;background:#f6f7f9;border-radius:8px;padding:10px;white-space:pre-line">'+esc(t.description)+'</div>':'')+
       clHtml+
       (isDaily?'<div id="tdDaily" style="font-size:13px;color:#888;margin-top:10px">Loading entry…</div>':'')+
-      ((isDaily||isDep)?'<div style="margin-top:10px"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Notes</label>'+
+      (isAtt?'<div id="tdAtt" style="font-size:13px;color:#888;margin-top:10px">Loading attendance…</div>':'')+
+      ((isDaily||isDep||isAtt)?'<div style="margin-top:10px"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Notes</label>'+
         '<textarea id="tdNote" rows="2" placeholder="Optional note — required as the reason if you Reject" style="width:100%;border:1px solid #d9d9d9;border-radius:8px;padding:8px;font-size:13px"></textarea></div>':'')+
       '<div style="font-size:11px;color:#aaa;margin-top:10px">'+(t.source==='assigned'?('Assigned by '+esc(t.assignedByName||'manager')):'Created by you · self task')+'</div>';
-    var completeLabel=(isDaily||isDep)?(t.status==='done'?'Reopen':'✓ Verify & complete'):(t.status==='done'?'Reopen':'✓ Complete');
-    var rejectBtn=((isDaily||isDep)&&t.status!=='done')?'<button class="btn ghost" id="tdReject" style="color:#A32D2D;border-color:#e3b1b1">✕ Reject</button>':'';
+    var completeLabel=(isDaily||isDep)?(t.status==='done'?'Reopen':'✓ Verify & complete')
+      :isAtt?(t.status==='done'?'Reopen':'✓ Approve & complete')
+      :(t.status==='done'?'Reopen':'✓ Complete');
+    var rejectBtn=((isDaily||isDep||isAtt)&&t.status!=='done')?'<button class="btn ghost" id="tdReject" style="color:#A32D2D;border-color:#e3b1b1">✕ Reject</button>':'';
     var foot='<button class="btn ghost" onclick="closeModal()">Close</button><button class="btn ghost" id="tdEdit">Edit</button>'+rejectBtn+'<button class="btn" id="tdComplete">'+completeLabel+'</button>';
     openModal(t.title, body, foot);
     document.querySelectorAll('#modalRoot [data-ci]').forEach(function(cb){ cb.onchange=function(){ cl[parseInt(cb.getAttribute('data-ci'),10)].done=cb.checked; var sp=cb.parentNode.querySelector('span'); if(sp) sp.style.cssText=cb.checked?'text-decoration:line-through;color:#999':''; t.checklist=cl; t._pending=true; API.updateTask(t.taskId,{checklist:cl}); }; });
@@ -229,13 +276,34 @@
       var note=((document.getElementById('tdNote')||{}).value||'').trim();
       if(!note){ toast('Write the reason in the Notes box first, then tap Reject.',true); return; }
       rj.disabled=true;
-      var rp=isDep?API.rejectDeposit(t.instanceId,note):API.rejectDaily(t.instanceId,note);
-      rp.then(function(r){ if(r&&r.ok){ closeModal(); toast(isDep?'Deposit rejected':'Entry rejected — the sender has been notified'); if(window.renderMyTasks) window.renderMyTasks(); else paintList(); } else { toast((r&&r.error)||'Could not reject',true); rj.disabled=false; } });
+      /* v262: rejecting an attendance punch marks it absent and leaves the task open with the reason,
+         so the employee and the approver both still see it. It is deliberately NOT a silent close. */
+      var rp=isAtt?API.setAttendance(t.instanceId,{approvalStatus:'rejected',status:'absent',notes:note})
+        :isDep?API.rejectDeposit(t.instanceId,note):API.rejectDaily(t.instanceId,note);
+      rp.then(function(r){ if(r&&r.ok){ closeModal(); toast(isAtt?'Attendance rejected':isDep?'Deposit rejected':'Entry rejected — the sender has been notified'); if(window.renderMyTasks) window.renderMyTasks(); else paintList(); } else { toast((r&&r.error)||'Could not reject',true); rj.disabled=false; } });
     };
     if(isDaily){
       API.getDaily(t.instanceId).then(function(r){ var box=document.getElementById('tdDaily'); if(!box) return; if(r&&r.ok&&r.entry){ box.outerHTML=dailyPanelHtml(r.entry); } else { box.textContent=(r&&r.error)||'Could not load entry.'; } });
     }
+    if(isAtt){
+      API.getAttendance(t.instanceId).then(function(r){ var box=document.getElementById('tdAtt'); if(!box) return;
+        if(r&&r.ok&&r.entry){ box.outerHTML=attPanelHtml(r.entry); }
+        else { box.textContent=(r&&r.error)||'Could not load the attendance record.'; } });
+    }
     document.getElementById('tdComplete').onclick=function(){
+      /* Approving writes approvalStatus=approved on the attendance row. The server then closes EVERY
+         "Approve attendance" task for that employee+date (markAttTasksDone_ / markAttTasksDoneForEmpDate_),
+         so this button does not need to set the task status itself. */
+      if(isAtt && t.status!=='done'){
+        var ab=this; ab.disabled=true;
+        var an=((document.getElementById('tdNote')||{}).value||'').trim();
+        var ap={approvalStatus:'approved'}; if(an) ap.notes=an;
+        API.setAttendance(t.instanceId,ap).then(function(r){
+          if(r&&r.ok){ closeModal(); toast('Attendance approved'); if(window.renderMyTasks) window.renderMyTasks(); else paintList(); }
+          else { toast((r&&r.error)||'Could not approve',true); ab.disabled=false; }
+        });
+        return;
+      }
       if((isDaily||isDep) && t.status!=='done'){
         var btn=this; btn.disabled=true;
         var vp=isDep?API.verifyDeposit(t.instanceId):API.verifyDaily(t.instanceId);

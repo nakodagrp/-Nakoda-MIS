@@ -8,7 +8,12 @@
   function money(n){ return Math.round(Number(n)||0).toLocaleString('en-IN'); }
   function lvl(){ return (S.perms&&S.perms.level)||''; }
   function isInvestor(){ return lvl()==='BRANCH_VIEW'; }
-  function canEnter(){ return lvl()==='SUPER'||lvl()==='HR_ADMIN'||lvl()==='BRANCH_MGR'||lvl()==='MANAGER'||['CRM','Accounts','Operations Manager','Process Coordinator'].indexOf(S.user&&S.user.Role)>=0; }
+  /* General Accounts write gate — invoices, expenses, bank deposits. CRM keeps all of these. */
+  function canEnter(){ return lvl()==='SUPER'||lvl()==='HR_ADMIN'||lvl()==='BRANCH_MGR'||lvl()==='MANAGER'||['CRM','Accounts','Operations Manager','Process Coordinator','Senior Technician'].indexOf(S.user&&S.user.Role)>=0; }
+  /* v262: the daily cash report specifically moved off CRM onto Senior Technician, so it needs its own
+     gate — canEnter() above covers five separate actions and CRM is only losing this one. Mirrors
+     accDaily_ in Code.gs; the server is the real check, this only hides the button. */
+  function canDaily(){ return lvl()==='SUPER'||lvl()==='HR_ADMIN'||lvl()==='BRANCH_MGR'||lvl()==='MANAGER'||['Accounts','Operations Manager','Process Coordinator','Senior Technician'].indexOf(S.user&&S.user.Role)>=0; }
   function canVerify(){ return lvl()==='SUPER'||lvl()==='HR_ADMIN'||(S.user&&(S.user.Role==='Accounts'||S.user.Role==='Process Coordinator')); }
   function canViewAll(){ return S.perms&&S.perms.canViewAll; }
 
@@ -89,7 +94,10 @@
     var PAGE=15, total=all.length, pages=Math.max(1,Math.ceil(total/PAGE));
     if(ACC.dailyPage>=pages) ACC.dailyPage=pages-1; if(ACC.dailyPage<0) ACC.dailyPage=0;
     var start=ACC.dailyPage*PAGE, rows=all.slice(start,start+PAGE);
-    var actions=canEnter()?'<div class="fin-actions"><button class="btn" id="dlyAdd">+ Daily entry</button><button class="btn ghost" id="dlyDep">🏦 Bank deposit</button></div>':'';
+    /* v262: the two buttons are gated separately now — CRM lost + Daily entry but kept Bank deposit. */
+    var dlyBtn=canDaily()?'<button class="btn" id="dlyAdd">+ Daily entry</button>':'';
+    var depBtn=canEnter()?'<button class="btn ghost" id="dlyDep">🏦 Bank deposit</button>':'';
+    var actions=(dlyBtn||depBtn)?('<div class="fin-actions">'+dlyBtn+depBtn+'</div>'):'';
     box.innerHTML=actions+
       '<div class="table-wrap"><table><thead><tr><th>Branch</th><th>Date</th><th>B2C cash</th><th>B2C bank</th><th>Other</th><th>Patients</th><th>Tests</th><th>Collection</th><th>Docs</th><th>Status</th><th>Reject</th></tr></thead><tbody>'+
       (rows.length?rows.map(function(d){ var coll=(Number(d.cashIn)||0)+(Number(d.bankIn)||0)+(Number(d.other)||0); var stt=String(d.status);
@@ -110,7 +118,7 @@
     var brs=(S.meta&&S.meta.branches)||[];
     var brField=canViewAll()?'<div class="field full"><label>Branch *</label><select id="dpBranch" class="in"><option value="">Select branch</option>'+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'"'+(b.BranchID===ACC.branch?' selected':'')+'>'+esc(b.BranchName)+'</option>';}).join('')+'</select></div>':'';
     var body='<div class="grid2">'+brField+
-      '<div class="field"><label>Date</label><input id="dpDate" class="in" type="date" value="'+(new Date().toISOString().slice(0,10))+'"></div>'+
+      '<div class="field"><label>Date</label><input id="dpDate" class="in" type="date" value="'+todayLocal()+'"></div>'+
       '<div class="field"><label>Amount deposited to bank (₹)</label><input id="dpAmt" class="in" type="number" inputmode="numeric"></div>'+
       '<div class="field"><label>Slip no. / bank</label><input id="dpSlip" class="in" type="text" placeholder="e.g. slip-8821 · HDFC"></div>'+
       '<div class="field full"><label>Note (optional)</label><input id="dpNote" class="in" type="text"></div></div>'+
@@ -157,7 +165,7 @@
         (extra||'')+
         '<label class="dl-file"><span id="dl'+t+'DocSt">📎 Attach '+t.toUpperCase()+' document (PDF)</span><input id="dl'+t+'Doc" type="file" accept="application/pdf,image/*" hidden></label></div>'; }
     var body='<div class="grid2">'+brField+
-      '<div class="field"><label>Date</label><input id="dlDate" class="in" type="date" value="'+(new Date().toISOString().slice(0,10))+'"></div>'+
+      '<div class="field"><label>Date</label><input id="dlDate" class="in" type="date" value="'+todayLocal()+'"></div>'+
       '<div class="field"><label>Patients served</label><input id="dlPat" class="in" type="number" inputmode="numeric"></div></div>'+
       incBlock('B2c','B2C income (walk-in / patient)','')+
       '<div class="dl-blk"><div class="dl-blk-h">Other income (B2B — credit, billed monthly)</div>'+
@@ -211,7 +219,7 @@
     var body='<div class="grid2"><div class="field"><label>Party type</label><select id="ivType" class="in"><option>B2B</option><option>B2D</option><option>B2Camp</option><option>B2C</option></select></div>'+
       '<div class="field"><label>Party name</label><input id="ivParty" class="in"></div>'+
       '<div class="field"><label>GSTIN (optional)</label><input id="ivGstin" class="in"></div><div class="field"><label>GST %</label><input id="ivGst" class="in" type="number" value="0"></div>'+
-      '<div class="field"><label>Date</label><input id="ivDate" class="in" type="date" value="'+(new Date().toISOString().slice(0,10))+'"></div><div class="field"><label>Due date</label><input id="ivDue" class="in" type="date"></div>'+
+      '<div class="field"><label>Date</label><input id="ivDate" class="in" type="date" value="'+todayLocal()+'"></div><div class="field"><label>Due date</label><input id="ivDue" class="in" type="date"></div>'+
       '<div class="field full"><label>Items</label><div id="ivItems"></div><button type="button" class="btn ghost sm" id="ivAddIt">+ Add item</button></div></div>'+
       '<div class="tot" id="ivTot"></div><div id="ivMsg"></div>';
     openModal('New invoice', body, '<button class="btn" id="ivSave">Generate invoice</button>');
@@ -310,7 +318,7 @@
   function openExpenseForm(){
     var st={bill:'',qr:''};
     var body='<div class="grid2"><div class="field"><label>Type</label><select id="exType" class="in"><option value="expense">Expense</option><option value="income">Income</option></select></div>'+
-      '<div class="field"><label>Date</label><input id="exDate" class="in" type="date" value="'+(new Date().toISOString().slice(0,10))+'"></div>'+
+      '<div class="field"><label>Date</label><input id="exDate" class="in" type="date" value="'+todayLocal()+'"></div>'+
       '<div class="field"><label>Category</label><select id="exCat" class="in">'+EXP_CATS.map(function(c){return '<option>'+c+'</option>';}).join('')+'</select></div>'+
       '<div class="field"><label>Amount (₹)</label><input id="exAmt" class="in" type="number"></div>'+
       '<div class="field"><label>Mode</label><select id="exMode" class="in"><option>Cash</option><option>Bank</option><option>UPI</option></select></div>'+
@@ -348,13 +356,18 @@
     }
     return rows;
   }
-  function isoDate(s){ s=String(s).trim(); var m=s.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/); if(m){ var y=m[3].length===2?('20'+m[3]):m[3]; return y+'-'+('0'+m[2]).slice(-2)+'-'+('0'+m[1]).slice(-2); } var d=new Date(s); return isNaN(d)?s.slice(0,10):d.toISOString().slice(0,10); }
+  /* v261: new Date().toISOString() reports UTC, so between midnight and 05:30 India time it
+     returns YESTERDAY and every date box opened with the wrong day already filled in. */
+  function todayLocal(){ var d=new Date();
+    return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+  function isoDate(s){ s=String(s).trim(); var m=s.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/); if(m){ var y=m[3].length===2?('20'+m[3]):m[3]; return y+'-'+('0'+m[2]).slice(-2)+'-'+('0'+m[1]).slice(-2); } var d=new Date(s); if(isNaN(d)) return s.slice(0,10);
+    return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
   var BANKROWS=[];
   function loadBank(){
     var box=$id('accBody'), brs=(S.meta&&S.meta.branches)||[];
     box.innerHTML='<div class="fin-card" style="padding:14px;margin-bottom:14px"><div class="fin-h" style="margin:-14px -14px 12px">Reconcile — collection vs bank</div>'+
       '<div class="acc-top"><select class="in" id="rcBranch" style="max-width:160px">'+(canViewAll()?'<option value="">Pick branch</option>':'')+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'"'+(b.BranchID===ACC.branch?' selected':'')+'>'+esc(b.BranchName)+'</option>';}).join('')+'</select>'+
-      '<input class="in" id="rcDate" type="date" style="max-width:160px" value="'+(new Date().toISOString().slice(0,10))+'"><button class="btn" id="rcGo">Check</button></div><div id="rcOut"></div></div>'+
+      '<input class="in" id="rcDate" type="date" style="max-width:160px" value="'+todayLocal()+'"><button class="btn" id="rcGo">Check</button></div><div id="rcOut"></div></div>'+
       '<div class="fin-h" style="border-radius:8px">Import bank statement</div>'+
       '<div class="up" style="margin:12px 0" id="bkDrop">⬆ Choose statement (.csv / .xlsx)<input type="file" id="bkFile" accept=".csv,.xlsx,.xls" style="display:block;margin:8px auto 0"></div>'+
       '<div id="bkTableWrap"></div>';

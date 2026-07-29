@@ -358,6 +358,12 @@
     cachedFollowups:function(){ return kvGet('pcfu'); },
     pcFollowups:function(){ return call('pcFollowups',{token:getToken()}).then(function(r){ if(r.ok) kvSet('pcfu',r.items); return r; }).catch(function(){ return kvGet('pcfu').then(function(i){ return {ok:true,items:i||[],offline:true}; }); }); },
     completeFollowup:function(data){ return call('completeFollowup',{token:getToken(),data:data}); },
+    /* v262: single bundled call behind the dashboard "Tasks & schedule" block. Cached like every
+       other dashboard read, so the block paints instantly from IndexedDB and refreshes behind it —
+       and still shows real content when the device is offline. */
+    cachedDashFollowups:function(){ return kvGet('dashfu'); },
+    dashFollowups:function(){ return call('dashFollowups',{token:getToken()}).then(function(r){ if(r.ok) kvSet('dashfu',{tasks:r.tasks,entries:r.entries,items:r.items,scope:r.scope,canComplete:r.canComplete}); return r; })
+      .catch(function(){ return kvGet('dashfu').then(function(d){ d=d||{}; return {ok:true,tasks:d.tasks||[],entries:d.entries||[],items:d.items||[],scope:d.scope||'me',canComplete:!!d.canComplete,offline:true}; }); }); },
     cachedAllTasks:function(){ return kvGet('alltasks'); },
     listAllTasks:function(filter){ return call('listAllTasks',{token:getToken(),filter:filter||{}}).then(function(r){ if(r.ok) kvSet('alltasks',r.tasks); return r; }).catch(function(){ return kvGet('alltasks').then(function(t){ return {ok:true,tasks:t||[],offline:true}; }); }); },
     calendarTargets:function(){ return call('calendarTargets',{token:getToken()}).then(function(r){ if(r.ok) kvSet('caltargets',r.targets); return r; }).catch(function(){ return kvGet('caltargets').then(function(t){ return {ok:true,targets:t||[]}; }); }); },
@@ -461,6 +467,7 @@
     saveDaily:function(d){ return call('saveDaily',{token:getToken(),data:d}); },
     listDaily:function(b,ym){ return call('listDaily',{token:getToken(),branch:b,ym:ym}); },
     getDaily:function(id){ return call('getDaily',{token:getToken(),dayId:id}); },
+    getAttendance:function(attId){ return call('getAttendance',{token:getToken(),attId:attId}); },
     verifyDaily:function(id){ return call('verifyDaily',{token:getToken(),dayId:id}); },
     rejectDaily:function(id,reason){ return call('rejectDaily',{token:getToken(),dayId:id,reason:reason||''}); },
     saveDeposit:function(d){ return call('saveDeposit',{token:getToken(),data:d}); },

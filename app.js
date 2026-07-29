@@ -220,7 +220,9 @@ function applyPerms(){
   document.querySelectorAll('[data-page="recurring"]').forEach(function(n){ n.classList.toggle('hidden',!canRec); });
   var canBuild=(S.perms.level==='SUPER')||(S.user && S.user.Role==='Executive Assistant');
   document.querySelectorAll('[data-page="builder"]').forEach(function(n){ n.classList.toggle('hidden',!canBuild); });
-  var canAcc=S.perms.canViewAll||S.perms.level==='BRANCH_MGR'||S.perms.level==='BRANCH_VIEW'||(S.user && ['CRM','Accounts'].indexOf(S.user.Role)>=0);
+  /* v262: Senior Technician gets the same daily-collection authority CRM has — nav entry here,
+     the + Daily entry button in accounts.js canEnter(), and the server gate in Code.gs accEnter_. */
+  var canAcc=S.perms.canViewAll||S.perms.level==='BRANCH_MGR'||S.perms.level==='BRANCH_VIEW'||(S.user && ['CRM','Accounts','Senior Technician'].indexOf(S.user.Role)>=0);
   document.querySelectorAll('[data-page="accounts"]').forEach(function(n){ n.classList.toggle('hidden',!canAcc); });
   var canMD=(S.perms.level==='SUPER')||(S.user && ['Director','Executive Assistant'].indexOf(S.user.Role)>=0);
   document.querySelectorAll('[data-page="mdinbox"]').forEach(function(n){ n.classList.toggle('hidden',!canMD); });
@@ -341,12 +343,146 @@ function isMonitorRole(){ var u=S.user||{}; return (S.perms&&S.perms.level==='SU
 /* v197: franchise consultant — MANAGER-level access but a trimmed, franchise-only dashboard
    (no branch business/cash figures, no other departments' tiles, no staff list). */
 function isConsultantRole(){ return /consultant/i.test(String((S.user||{}).Role||'')); }
+/* ============================================================================
+   v262: DASHBOARD "TASKS & SCHEDULE" BLOCK
+   The Process Flow Monitor board, brought onto the main dashboard directly under the greeting row,
+   so overdue work is the first thing anyone sees instead of something they have to navigate to.
+   Scope is decided server-side (apiDashFollowups → dashScopeOf_): all branches for Director/Ops/PC,
+   own branch for a branch manager, own rows for everyone else. Reuses the .tm-* / .kpi styles the
+   monitor already ships, so there is no new CSS.
+   ============================================================================ */
+var DASHFU={tasks:[],entries:[],items:[],scope:'me',canComplete:false,loaded:false};
+var DASHFU_FILT='all';
+/* tasks.js has its own todayStr() but it lives inside that file's IIFE, so it is not reachable here. */
+function dtToday(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function dtLateLabel(dueDate,dueTime){
+  var d=new Date((dueDate||'')+'T'+((dueTime||'00:00').slice(0,5))+':00');
+  if(isNaN(d.getTime())) return '';
+  var days=Math.floor((new Date()-d)/86400000);
+  return days<=0?'today':(days===1?'1 day overdue':days+' days overdue');
+}
+function dtCollect(){
+  var tdy=dtToday(), nowMin=new Date().getHours()*60+new Date().getMinutes(), out=[];
+  (DASHFU.tasks||[]).forEach(function(t){
+    out.push({kind:'task', id:t.taskId, title:t.title, name:t.assigneeName, phone:t.assigneePhone, branchId:t.branchId,
+      empId:t.assignedToEmpId, when:(t.dueDate||'')+' '+(t.dueTime||''), sortKey:(t.dueDate||'')+(t.dueTime||'00:00'),
+      late:dtLateLabel(t.dueDate,t.dueTime)});
+  });
+  (DASHFU.entries||[]).forEach(function(c){
+    var p=String(c.endTime||c.startTime||'').split(':'), endMin=p.length>1?(parseInt(p[0],10)*60+parseInt(p[1],10)+(c.endTime?0:30)):0;
+    if(!((c.date<tdy) || (c.date===tdy && endMin && endMin<nowMin))) return;    // only genuinely missed items
+    out.push({kind:'sch', id:c.entryId, title:c.title, name:c.assigneeName, phone:c.assigneePhone, branchId:c.branchId,
+      empId:c.ownerEmpId, when:(c.date||'')+' '+(c.startTime||'')+(c.endTime?'–'+c.endTime:''),
+      sortKey:(c.date||'')+(c.startTime||'00:00'), late:dtLateLabel(c.date,c.startTime)});
+  });
+  (DASHFU.items||[]).forEach(function(f){
+    if(f.kind==='dailycash' && String(branchName(f.branchId)||'').toUpperCase().indexOf('DIGITAL')>=0) return;
+    out.push({kind:(f.kind==='dailycash'?'dc':'att'), fu:f, id:f.fuKey, title:f.title, name:f.name, phone:f.phone,
+      branchId:f.branchId, empId:f.empId, when:f.detail||'', sortKey:'0000'+(f.date||''), state:f.state, late:''});
+  });
+  out.sort(function(a,b){ return String(a.sortKey).localeCompare(String(b.sortKey)); });
+  return out;
+}
+function renderDashTasks(){
+  var box=$('dashTasks'); if(!box) return;
+  var all=dtCollect();
+  var tasks=all.filter(function(i){return i.kind==='task';}), sch=all.filter(function(i){return i.kind==='sch';});
+  var dc=all.filter(function(i){return i.kind==='dc';}), att=all.filter(function(i){return i.kind==='att';});
+  var people={}; all.forEach(function(i){ if(i.name) people[i.name]=1; });
+  var lateN=att.filter(function(i){ return i.state==='late'; }).length;
+  var mine=(DASHFU.scope==='me');
+  if(!DASHFU.loaded && !all.length){
+    box.innerHTML='<div class="card" style="padding:14px"><div class="center-load"><span class="loader dark"></span> Loading tasks…</div></div>';
+    return;
+  }
+  if(!all.length){
+    box.innerHTML='<div class="card" style="padding:16px"><div class="section-label" style="margin:0 0 6px">Tasks &amp; schedule</div>'+
+      '<div class="empty" style="padding:10px 0">Nothing overdue right now. 🎉</div></div>';
+    return;
+  }
+  var fdef=[['all','All ('+all.length+')'],['task','Tasks ('+tasks.length+')'],['sch','Schedule ('+sch.length+')'],
+            ['dc','Daily cash ('+dc.length+')'],['att','Attendance ('+att.length+')']];
+  var list = DASHFU_FILT==='task'?tasks : DASHFU_FILT==='sch'?sch : DASHFU_FILT==='dc'?dc : DASHFU_FILT==='att'?att : all;
+  box.innerHTML='<div class="card" style="padding:14px 16px">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">'+
+      '<div class="section-label" style="margin:0">Tasks &amp; schedule</div>'+
+      '<span style="font-size:11.5px;color:#9aa0a6">'+(mine?'your open items':DASHFU.scope==='branch'?esc(branchName((S.user||{}).Branch)):'all branches')+'</span>'+
+    '</div>'+
+    '<div class="kpis" style="margin-bottom:10px">'+
+      '<div class="kpi" style="background:#fdecec"><div class="n" style="color:#C0392B">'+tasks.length+'</div><div class="l">Overdue tasks</div></div>'+
+      '<div class="kpi" style="background:#f1effc"><div class="n" style="color:#6f63d6">'+sch.length+'</div><div class="l">Missed schedule</div></div>'+
+      '<div class="kpi" style="background:#fdf0e9"><div class="n" style="color:#993C1D">'+lateN+'</div><div class="l">Late in</div></div>'+
+      '<div class="kpi" style="background:#fff7e6"><div class="n" style="color:#b08900">'+Object.keys(people).length+'</div><div class="l">'+(mine?'Items to clear':'People to chase')+'</div></div>'+
+    '</div>'+
+    '<div class="tmfilt" id="dtFilt">'+fdef.map(function(f){ return '<button data-f="'+f[0]+'" class="'+(DASHFU_FILT===f[0]?'on':'')+'">'+f[1]+'</button>'; }).join('')+'</div>'+
+    '<div id="dtList"></div>'+
+    (all.length>list.length||list.length>6?'<div style="text-align:right;margin-top:2px"><a href="#" id="dtAll" style="font-size:12.5px;font-weight:600">Open '+(mine?'My Tasks':'Process Flow Monitor')+' ↗</a></div>':'')+
+  '</div>';
+  var lb=$('dtList'), shown=list.slice(0,6);
+  lb.innerHTML=shown.length?shown.map(function(i,idx){
+    var ph=String(i.phone||'').replace(/\D/g,'');
+    var msg=encodeURIComponent('Reminder from Nakoda: '+(i.kind==='task'?'please complete your task “'+i.title+'” — it is overdue.'
+      :i.kind==='sch'?'please attend/close your scheduled item “'+i.title+'” — it is overdue.'
+      :i.kind==='dc'?(i.state==='verify'?'the daily cash report is waiting for verification ('+i.title+').':'please enter the daily cash report — '+i.title+'.')
+      :'please punch in your attendance — it is past your shift start.'));
+    var chip=i.kind==='task'?'<span class="tm-chip task">TASK</span>'
+            :i.kind==='sch'?'<span class="tm-chip sch">SCHEDULE</span>'
+            :i.kind==='dc'?'<span class="tm-chip dc">DAILY CASH</span>':'<span class="tm-chip attc">ATTENDANCE</span>';
+    return '<div class="tm-row">'+
+      '<div class="tm-av">'+esc(initials(i.name))+'</div>'+
+      '<div class="tm-mid"><div class="tm-nm"><b>'+esc(i.name||'—')+'</b><span class="tm-brn">'+esc(branchName(i.branchId))+'</span>'+chip+
+        (ph&&!mine?'<span class="tm-ph">📞 '+esc(i.phone)+'</span>':'')+'</div>'+
+      '<div class="tm-it">'+esc(i.title)+' · '+esc(String(i.when||'').trim())+(i.late?' · <span class="tm-late">'+esc(i.late)+'</span>':'')+'</div></div>'+
+      '<div class="tm-acts">'+
+        ((ph&&!mine)?('<a href="tel:'+ph+'" class="tm-call">📞 <span>Call</span></a><a href="https://wa.me/91'+ph+'?text='+msg+'" target="_blank" rel="noopener" class="tm-wa">💬 <span>WhatsApp</span></a>'):'')+
+        (DASHFU.canComplete?'<button class="tm-donebtn" data-dd="'+idx+'">✓ <span>Completed</span></button>':'')+
+      '</div></div>';
+  }).join(''):'<div class="empty">Nothing in this filter.</div>';
+
+  document.querySelectorAll('#dtFilt button').forEach(function(b){
+    b.onclick=function(){ DASHFU_FILT=b.getAttribute('data-f'); renderDashTasks(); };
+  });
+  var oa=$('dtAll'); if(oa) oa.onclick=function(ev){ ev.preventDefault(); go(mine?'tasks':'taskmon'); };
+  /* Chasing a person is logged the same way the monitor logs it (PC_Followups), so the row leaves
+     both boards at once and the underlying task stays open for whoever actually has to do it. */
+  lb.querySelectorAll('[data-dd]').forEach(function(b){
+    b.onclick=function(){
+      var i=shown[parseInt(b.getAttribute('data-dd'),10)]; if(!i) return;
+      var note=window.prompt('Add a note for the record (what did you tell them?)','');
+      if(note===null) return;
+      b.disabled=true;
+      var key=i.kind==='task'?('TASK|'+i.id):i.kind==='sch'?('SCH|'+i.id):(i.fu&&i.fu.fuKey);
+      API.completeFollowup({fuKey:key, kind:i.kind, title:i.title, branchId:i.branchId, empId:i.empId||'', note:note}).then(function(r){
+        if(r&&r.ok){
+          if(i.kind==='task') DASHFU.tasks=(DASHFU.tasks||[]).filter(function(x){ return String(x.taskId)!==String(i.id); });
+          else if(i.kind==='sch') DASHFU.entries=(DASHFU.entries||[]).filter(function(x){ return String(x.entryId)!==String(i.id); });
+          else DASHFU.items=(DASHFU.items||[]).filter(function(x){ return String(x.fuKey)!==String(key); });
+          renderDashTasks(); toast('Logged — row cleared');
+        } else { toast((r&&r.error)||'Could not log that',true); b.disabled=false; }
+      });
+    };
+  });
+}
+function loadDashTasks(){
+  API.cachedDashFollowups().then(function(d){
+    if(d){ DASHFU.tasks=d.tasks||[]; DASHFU.entries=d.entries||[]; DASHFU.items=d.items||[];
+      DASHFU.scope=d.scope||'me'; DASHFU.canComplete=!!d.canComplete; DASHFU.loaded=true; renderDashTasks(); }
+    else renderDashTasks();
+  });
+  API.dashFollowups().then(function(r){
+    if(r&&r.ok){ DASHFU.tasks=r.tasks||[]; DASHFU.entries=r.entries||[]; DASHFU.items=r.items||[];
+      DASHFU.scope=r.scope||'me'; DASHFU.canComplete=!!r.canComplete; }
+    DASHFU.loaded=true; renderDashTasks();
+  }).catch(function(){ DASHFU.loaded=true; renderDashTasks(); });
+}
+
 function loadDashboard(){
   var u=S.user||{};
   $('greetHello').textContent=greetWord()+', '+(u.FullName||'');
   var lvl=S.perms&&S.perms.level;
   var scope=(S.perms&&S.perms.canManageAll)?'org-wide':(lvl==='BRANCH_MGR'?('branch: '+branchName(u.Branch)):(lvl==='BRANCH_VIEW'?('branch: '+branchName(u.Branch)+' (view)'):(S.perms&&S.perms.canViewAll?'all branches (view)':'self-service')));
   $('greetMeta').textContent=[u.Role,(u.OfficeType==='Branch'?branchName(u.Branch):'Corporate Office'),scope].filter(Boolean).join(' · ');
+  loadDashTasks();
   if(!DASH.emps.length && !DASH.cards.length) $('kpis').innerHTML='<div class="kpi"><div class="n"><span class="loader dark"></span></div><div class="l">Loading…</div></div>';
   Promise.all([API.cachedEmployees(),API.cachedCards(),API.cachedPrices(),API.cachedTasks(),API.cachedCalendar(u.EmpID),API.cachedProcesses()]).then(function(a){
     if(a[0]) DASH.emps=a[0]; if(a[1]) DASH.cards=a[1]; DASH.prices=priceMap(a[2]||[]); if(a[3]) DASH.tasks=a[3]; if(a[4]) DASH.cal=a[4]; if(a[5]) DASH.procs=a[5];
