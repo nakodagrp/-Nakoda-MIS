@@ -197,12 +197,26 @@
     var shift=(a.shiftStart||'')+(a.shiftEnd?('–'+a.shiftEnd):'');
     var mapUrl=(a.latIn!==''&&a.latIn!=null&&a.lngIn!==''&&a.lngIn!=null)
       ? ('https://maps.google.com/?q='+encodeURIComponent(a.latIn+','+a.lngIn)) : '';
+    /* Drive's "uc?export=view" links no longer render inside an <img> — Google returns a redirect/403,
+       which is why the selfie showed as a broken image. The thumbnail endpoint does render. Same
+       conversion attendance.js:driveImg() already uses; duplicated here because that one lives inside
+       attendance.js's IIFE and is not reachable from this file. */
+    function driveImg(url){
+      if(!url) return '';
+      var m=String(url).match(/[\/|=]([a-zA-Z0-9_-]{25,})/);
+      return m ? ('https://drive.google.com/thumbnail?id='+m[1]+'&sz=w600') : url;
+    }
     function shot(url,label,empty){
       if(!url) return '<div style="flex:1"><div style="font-size:11px;color:#888;margin-bottom:4px">'+label+'</div>'+
-        '<div style="height:78px;background:#f6f7f9;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11.5px;color:#b6b9be">'+empty+'</div></div>';
+        '<div style="height:110px;background:#f6f7f9;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11.5px;color:#b6b9be">'+empty+'</div></div>';
+      /* onerror keeps a failed image from showing browser chrome/alt text — it becomes a neutral tile
+         with a link, so the approver can still open the original in Drive. */
       return '<div style="flex:1"><div style="font-size:11px;color:#888;margin-bottom:4px">'+label+'</div>'+
-        '<a href="'+esc(url)+'" target="_blank" rel="noopener" style="display:block"><img src="'+esc(url)+'" alt="'+label+'" '+
-        'style="width:100%;height:78px;object-fit:cover;border-radius:6px;background:#e8eaed" loading="lazy"></a></div>';
+        '<a href="'+esc(url)+'" target="_blank" rel="noopener" style="display:block;position:relative">'+
+        '<img src="'+esc(driveImg(url))+'" alt="'+label+'" loading="lazy" '+
+        'style="width:100%;height:110px;object-fit:cover;border-radius:6px;background:#e8eaed;display:block" '+
+        'onerror="this.style.display=\'none\';this.parentNode.insertAdjacentHTML(\'beforeend\',\'<div style=&quot;height:110px;background:#f6f7f9;border:1px dashed #ccc;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11.5px;color:#9aa0a6&quot;>Open photo &#8599;</div>\')">'+
+        '</a></div>';
     }
     return '<div id="tdAtt" style="border:1px solid var(--line);border-radius:10px;padding:11px;margin-top:10px">'+
       '<div style="font-weight:700;font-size:12.5px;margin-bottom:8px">'+esc(a.empName||a.empId||'')+' · '+esc(a.date||'')+
@@ -566,6 +580,32 @@
 
   window.renderMyTasks=renderMyTasks;
   window.openTaskDetail=openTaskDetail;
+  /* ============================================================================
+     v262: the dashboard "My tasks" block reuses THIS file's logic rather than
+     reimplementing it. The first version had its own copy of the bucket rules and counted only
+     DASH.tasks, so the dashboard read Overdue 4 / Upcoming 0 / Done 152 while this page read
+     13 / 4 / 188 — because this page counts dedupTasks(tasks + calendar entries). Exporting the
+     real functions means the two can never disagree again.
+     ============================================================================ */
+  window.taskShared={
+    calToItem:calToItem,      // calendar entry -> task-shaped item
+    dedup:dedupTasks,         // same de-duplication (process/nrlead collapse by instance)
+    bucket:bucket,            // today | overdue | upcoming | done | nr
+    dueLabel:dueLabel,        // "Today 09:52" / "28 Jul"
+    pri:PRI,                  // priority dot colours
+    /* Open the same popup from the dashboard. TASKS/CALITEMS are empty until this page has been
+       visited, so byId() would find nothing — seed them from the dashboard's own copy first.
+       Harmless to overwrite: renderMyTasks() re-fetches whenever the page is opened. */
+    open:function(taskId, tasks, calEntries){
+      TASKS=(tasks||[]).slice();
+      CALITEMS=(calEntries||[]).filter(function(x){ return String(x.status)!=='deleted'; }).map(calToItem);
+      if(String(taskId).indexOf('CAL::')===0){
+        var it=byId(taskId);
+        if(it && window.openCalendarEntryById){ window.openCalendarEntryById(it.calId, function(){ if(window.renderDashTasks) window.renderDashTasks(); }); return; }
+      }
+      openTaskDetail(taskId);
+    }
+  };
   window.renderTaskMonitor=function(){ renderTaskMonitor(); try{ if(window.renderSAOverdue) window.renderSAOverdue(document.getElementById('saOverdue')); }catch(e){}
     try{ if(window.renderPUOverdue) window.renderPUOverdue(document.getElementById('puOverdue')); }catch(e){} };
 })();

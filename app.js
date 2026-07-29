@@ -345,50 +345,46 @@ function isMonitorRole(){ var u=S.user||{}; return (S.perms&&S.perms.level==='SU
 function isConsultantRole(){ return /consultant/i.test(String((S.user||{}).Role||'')); }
 /* ============================================================================
    v262: DASHBOARD "MY TASKS" BLOCK
-   Sits directly under the greeting row. A summary of the signed-in person's OWN tasks — Today,
-   Overdue, Upcoming, Done — plus their next few items. Built entirely from DASH.tasks, which
-   loadDashboard already fetches, so it costs ZERO extra server calls and paints from the same
-   IndexedDB cache when offline.
+   Sits under the greeting row. Four count tiles that double as filters, and a scrollable list of
+   real task cards underneath — same .tcard markup and same popup as the My Tasks page.
 
-   Buckets are deliberately identical to the My Tasks chips (tasks.js bucket()), including the two
-   special cases, so the numbers here can never disagree with the numbers there:
-     - a done task is 'done' whatever its due date
-     - 'nrlead' (not-responding follow-ups) stay out of Today/Overdue
-     - leave and attendance approvals always count as Today, since they need immediate action
+   Counts and buckets come from window.taskShared (exported by tasks.js), NOT from a local copy.
+   An earlier version reimplemented the bucket rules and counted only DASH.tasks, so the dashboard
+   showed Overdue 4 / Upcoming 0 / Done 152 while My Tasks showed 13 / 4 / 188 — the page counts
+   dedupTasks(tasks + calendar entries). Sharing the real functions makes drift impossible.
+
+   Costs no extra server calls: DASH.tasks and DASH.cal are already loaded by loadDashboard.
    ============================================================================ */
-function dtBucket(t){
-  if(String(t.status)==='done') return 'done';
-  if(String(t.source)==='nrlead') return 'nr';
-  if(String(t.source)==='leave'||String(t.source)==='attendance') return 'today';
-  var tdy=todayD(), ds=dd10(t.dueDate);
-  if(ds && ds<tdy) return 'overdue';
-  if(ds && ds>tdy) return 'upcoming';
-  return 'today';
-}
+var DT_FILTER='today';
+var DT_SRC={ tasks:[], cal:[] };
+/* Approval-type tasks can't be ticked off — completing them means approving something, which needs
+   the popup (attendance figures, leave dates, daily-cash totals). Clicking their box opens it. */
+var DT_APPROVAL={attendance:1,leave:1,accounts:1,deposit:1,training:1};
 function dtBadge(t){
   var m={ training:['#eafaf3','#1aa37a','🎓 Training'], process:['#eafaf3','#1aa37a','📁 CRM stage'],
           attendance:['#fdeaea','#a3271f','🕒 Attendance'], leave:['#eef7ee','#1a7f37','🌴 Leave'],
           nrlead:['#fff4e8','#c47f00','↻ Not responding'], accounts:['#eef2ff','#4253c5','📊 Daily cash'],
           deposit:['#eef2ff','#4253c5','🏦 Deposit'], recurring:['#f3f0ff','#6f63d6','🔁 Recurring'],
-          calendar:['#eef6ff','#2563c9','📅 Calendar'] };
+          calendar:['#ECEAFB','#5046b8','📅 Calendar'] };
   var d=m[String(t.source)];
   if(!d && String(t.source)==='assigned') d=['#eef2ff','#4253c5','Assigned by '+(t.assignedByName||'manager')];
   if(!d) return '';
-  return '<span style="background:'+d[0]+';color:'+d[1]+';border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600;white-space:nowrap">'+esc(d[2])+'</span>';
+  return '<span style="background:'+d[0]+';color:'+d[1]+';border-radius:12px;font-size:10px;padding:1px 8px;font-weight:600">'+esc(d[2])+'</span>';
 }
-function dtDue(t){
-  var tdy=todayD(), ds=dd10(t.dueDate);
-  if(!ds) return 'No date';
-  if(ds===tdy) return 'Today'+(t.dueTime?(' '+String(t.dueTime).slice(0,5)):'');
-  var days=Math.round((new Date(tdy+'T00:00')-new Date(ds+'T00:00'))/86400000);
-  if(days===1) return '1 day overdue';
-  if(days>1)   return days+' days overdue';
-  if(days===-1) return 'Tomorrow';
-  return ds;
+function dtItems(){
+  var S=window.taskShared;
+  var tasks=(DASH.tasks||[]).filter(function(t){ return String(t.status)!=='deleted'; });
+  var cal=(DASH.cal||[]).filter(function(c){ return String(c.status)!=='deleted'; });
+  DT_SRC={tasks:tasks, cal:cal};
+  if(!S) return tasks;                                    /* tasks.js not loaded yet — degrade, never throw */
+  return S.dedup(tasks.concat(cal.map(S.calToItem)));
 }
 function renderDashTasks(){
   var box=$('dashTasks'); if(!box) return;
-  var all=(DASH.tasks||[]).filter(function(t){ return String(t.status)!=='deleted'; });
+  var S=window.taskShared, all=dtItems();
+  var bucketOf=S?S.bucket:function(t){ return String(t.status)==='done'?'done':'today'; };
+  var b={today:[],overdue:[],upcoming:[],done:[],nr:[]};
+  all.forEach(function(t){ (b[bucketOf(t)]||b.today).push(t); });
   if(!all.length){
     box.innerHTML='<div class="card" style="padding:14px 16px">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'+
@@ -398,40 +394,72 @@ function renderDashTasks(){
     var e0=$('dtAll'); if(e0) e0.onclick=function(ev){ ev.preventDefault(); go('tasks'); };
     return;
   }
-  var b={today:[],overdue:[],upcoming:[],done:[],nr:[]};
-  all.forEach(function(t){ (b[dtBucket(t)]||b.today).push(t); });
-  /* Overdue first, then today, then upcoming — the order someone should actually work through. */
-  var next=b.overdue.concat(b.today).concat(b.upcoming).sort(function(x,y){
-    var bx=dtBucket(x), by=dtBucket(y), r={overdue:0,today:1,upcoming:2};
-    if(r[bx]!==r[by]) return r[bx]-r[by];
-    return String(dd10(x.dueDate)+(x.dueTime||'')).localeCompare(String(dd10(y.dueDate)+(y.dueTime||'')));
-  }).slice(0,3);
-  var tile=function(n,label,bg,fg){ return '<div class="kpi" style="background:'+bg+'"><div class="n" style="color:'+fg+'">'+n+'</div><div class="l">'+label+'</div></div>'; };
+  if(!b[DT_FILTER] || !b[DT_FILTER].length){
+    DT_FILTER=b.today.length?'today':(b.overdue.length?'overdue':(b.upcoming.length?'upcoming':'done'));
+  }
+  var defs=[['today','Today','#fdecec','#C0392B'],['overdue','Overdue','#fdecec','#C0392B'],
+            ['upcoming','Upcoming','#f6f7f9','#2b2b2b'],['done','Done','#eef7ee','#1a7f37']];
   box.innerHTML='<div class="card" style="padding:14px 16px">'+
     '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">'+
       '<div class="section-label" style="margin:0">My tasks</div>'+
       '<a href="#" id="dtAll" style="font-size:12.5px;font-weight:600">View all ↗</a>'+
     '</div>'+
-    '<div class="kpis" style="margin-bottom:'+(next.length?'10px':'0')+'">'+
-      tile(b.today.length,   'Today',    '#f6f7f9','#2b2b2b')+
-      tile(b.overdue.length, 'Overdue',  '#fdecec','#C0392B')+
-      tile(b.upcoming.length,'Upcoming', '#f6f7f9','#2b2b2b')+
-      tile(b.done.length,    'Done',     '#eef7ee','#1a7f37')+
-    '</div>'+
-    (next.length?('<div id="dtList" style="border-top:1px solid var(--line);padding-top:4px"></div>'):'');
+    '<div class="kpis" style="margin-bottom:11px">'+defs.map(function(d){
+      var on=(DT_FILTER===d[0]);
+      return '<div class="kpi" data-dtf="'+d[0]+'" style="background:'+(on?d[2]:'#f6f7f9')+';cursor:pointer;border:2px solid '+(on?'var(--red)':'transparent')+'">'+
+        '<div class="n" style="color:'+d[3]+'">'+b[d[0]].length+'</div><div class="l">'+d[1]+'</div></div>';
+    }).join('')+'</div>'+
+    /* ~4 cards then scroll, so Star performers and the KPI row stay within reach */
+    '<div id="dtList" style="max-height:250px;overflow-y:auto;overscroll-behavior:contain;padding-right:4px;border-top:1px solid var(--line);padding-top:10px"></div>'+
+  '</div>';
   var e1=$('dtAll'); if(e1) e1.onclick=function(ev){ ev.preventDefault(); go('tasks'); };
-  var lb=$('dtList'); if(!lb) return;
-  lb.innerHTML=next.map(function(t,i){
-    var od=dtBucket(t)==='overdue';
-    return '<div data-dt="'+i+'" style="display:flex;align-items:center;gap:10px;padding:9px 0'+(i<next.length-1?';border-bottom:1px solid #f4f5f7':'')+';cursor:pointer">'+
-      '<span style="width:7px;height:7px;border-radius:50%;background:'+(od?'#DA1017':'#c9ccd1')+';flex:none"></span>'+
-      '<div style="flex:1;min-width:0">'+
-        '<div style="font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.title||'')+'</div>'+
-        '<div style="font-size:11.5px;color:'+(od?'#A32D2D':'#8a8f98')+'">'+esc(dtDue(t))+'</div>'+
-      '</div>'+dtBadge(t)+'</div>';
-  }).join('');
-  lb.querySelectorAll('[data-dt]').forEach(function(el){ el.onclick=function(){ go('tasks'); }; });
+  document.querySelectorAll('#dashTasks [data-dtf]').forEach(function(el){
+    el.onclick=function(){ DT_FILTER=el.getAttribute('data-dtf'); renderDashTasks(); };
+  });
+  var list=b[DT_FILTER]||[], lb=$('dtList');
+  /* Overdue first within a bucket, then by due date/time — the order to work through. */
+  list=list.slice().sort(function(x,y){
+    return String(String(x.dueDate||'').slice(0,10)+(x.dueTime||'')).localeCompare(String(String(y.dueDate||'').slice(0,10)+(y.dueTime||'')));
+  });
+  if(DT_FILTER==='done') list.reverse();
+  lb.innerHTML=list.map(function(t){
+    var done=String(t.status)==='done', tag=dtBadge(t);
+    var dl=S?S.dueLabel(t):(String(t.dueDate||'').slice(0,10)||'No date');
+    var over=(bucketOf(t)==='overdue');
+    var dot=t.isCal?'#7F77DD':((S&&S.pri[t.priority])||'#999');
+    return '<div class="tcard'+(done?' tdone':'')+'" data-dtid="'+esc(t.taskId)+'">'+
+      '<span class="tbox'+(done?' on':'')+'" data-dttog="'+esc(t.taskId)+'"></span>'+
+      '<div class="tbody">'+
+        '<div class="ttitle">'+esc(t.title||'')+'</div>'+
+        (tag?'<div style="margin-top:3px">'+tag+'</div>':'')+
+        '<div class="tmeta"><span class="pdot" style="background:'+dot+'"></span>'+
+          '<span'+(over?' style="color:#C0392B;font-weight:600"':'')+'>'+esc(dl)+'</span>'+
+          (t.isCal?'':' · '+esc(t.priority||'Normal'))+'</div>'+
+      '</div></div>';
+  }).join('')||'<div class="empty">Nothing here.</div>';
+  lb.querySelectorAll('[data-dtid]').forEach(function(el){
+    el.onclick=function(ev){
+      var id=el.getAttribute('data-dtid'), tog=ev.target.getAttribute('data-dttog');
+      var t=list.filter(function(x){ return String(x.taskId)===String(id); })[0];
+      if(!t) return;
+      if(tog && !DT_APPROVAL[String(t.source)] && !t.isCal){ dtToggle(t); return; }
+      if(window.taskShared) window.taskShared.open(id, DT_SRC.tasks, DT_SRC.cal);
+      else go('tasks');
+    };
+  });
 }
+/* Tick-to-complete straight from the dashboard. Optimistic: flip locally, repaint, then sync — the
+   same shape My Tasks uses, and api.js queues the write if the device is offline. */
+function dtToggle(t){
+  var ns=(String(t.status)==='done')?'open':'done';
+  (DASH.tasks||[]).forEach(function(x){ if(String(x.taskId)===String(t.taskId)) x.status=ns; });
+  renderDashTasks();
+  toast(ns==='done'?'Task completed':'Task reopened');
+  API.setTaskStatus(t.taskId,ns).then(function(){ return API.listMyTasks(); })
+    .then(function(r){ if(r&&r.ok){ DASH.tasks=r.tasks||[]; renderDashTasks(); } })
+    .catch(function(){});
+}
+window.renderDashTasks=renderDashTasks;
 
 function loadDashboard(){
   var u=S.user||{};
