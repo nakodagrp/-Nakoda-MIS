@@ -206,29 +206,43 @@
       var m=String(url).match(/[\/|=]([a-zA-Z0-9_-]{25,})/);
       return m ? ('https://drive.google.com/thumbnail?id='+m[1]+'&sz=w600') : url;
     }
+    /* One stat tile. Value may be pre-built HTML (coloured On time / Out of range), so it is NOT
+       escaped here — every caller escapes its own plain-text values before passing them in. */
+    function stat(label,valueHtml){
+      return '<div style="background:#f6f7f9;border-radius:7px;padding:7px 9px;min-width:0">'+
+        '<div style="font-size:10.5px;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+label+'</div>'+
+        '<div style="font-size:14px;margin-top:1px;overflow-wrap:anywhere">'+valueHtml+'</div></div>';
+    }
     function shot(url,label,empty){
-      if(!url) return '<div style="flex:1"><div style="font-size:11px;color:#888;margin-bottom:4px">'+label+'</div>'+
-        '<div style="height:110px;background:#f6f7f9;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11.5px;color:#b6b9be">'+empty+'</div></div>';
+      if(!url) return '<div style="flex:1;min-width:0"><div style="font-size:11px;color:#888;margin-bottom:4px">'+label+'</div>'+
+        '<div style="height:130px;background:#f6f7f9;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11.5px;color:#b6b9be">'+empty+'</div></div>';
       /* onerror keeps a failed image from showing browser chrome/alt text — it becomes a neutral tile
          with a link, so the approver can still open the original in Drive. */
-      return '<div style="flex:1"><div style="font-size:11px;color:#888;margin-bottom:4px">'+label+'</div>'+
+      /* 130px tall — at the old 78px a face was not identifiable on a phone, which defeats the point
+         of showing the selfie to an approver. Still side by side so in and out can be compared. */
+      return '<div style="flex:1;min-width:0"><div style="font-size:11px;color:#888;margin-bottom:4px">'+label+'</div>'+
         '<a href="'+esc(url)+'" target="_blank" rel="noopener" style="display:block;position:relative">'+
         '<img src="'+esc(driveImg(url))+'" alt="'+label+'" loading="lazy" '+
-        'style="width:100%;height:110px;object-fit:cover;border-radius:6px;background:#e8eaed;display:block" '+
-        'onerror="this.style.display=\'none\';this.parentNode.insertAdjacentHTML(\'beforeend\',\'<div style=&quot;height:110px;background:#f6f7f9;border:1px dashed #ccc;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11.5px;color:#9aa0a6&quot;>Open photo &#8599;</div>\')">'+
+        'style="width:100%;height:130px;object-fit:cover;border-radius:6px;background:#e8eaed;display:block" '+
+        'onerror="this.style.display=\'none\';this.parentNode.insertAdjacentHTML(\'beforeend\',\'<div style=&quot;height:130px;background:#f6f7f9;border:1px dashed #ccc;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11.5px;color:#9aa0a6&quot;>Open photo &#8599;</div>\')">'+
         '</a></div>';
     }
     return '<div id="tdAtt" style="border:1px solid var(--line);border-radius:10px;padding:11px;margin-top:10px">'+
       '<div style="font-weight:700;font-size:12.5px;margin-bottom:8px">'+esc(a.empName||a.empId||'')+' · '+esc(a.date||'')+
         (String(a.approvalStatus)==='approved'?' · <span style="color:#1a7f37">approved</span>':'')+'</div>'+
-      '<table style="width:100%;font-size:13px;border-collapse:collapse;table-layout:fixed">'+
-      '<tr><td style="color:#888;padding:3px 0">Check in</td><td style="text-align:right">'+esc(a.checkIn||'—')+'</td>'+
-        '<td style="color:#888;text-align:right;padding-left:10px">Check out</td><td style="text-align:right">'+esc(a.checkOut||'—')+'</td></tr>'+
-      '<tr><td style="color:#888;padding:3px 0">Shift</td><td style="text-align:right">'+esc(shift||'—')+'</td>'+
-        '<td style="color:#888;text-align:right;padding-left:10px">Late by</td><td style="text-align:right">'+lateTxt+'</td></tr>'+
-      '<tr><td style="color:#888;padding:3px 0">Geo</td><td style="text-align:right">'+geoTxt+'</td>'+
-        '<td style="color:#888;text-align:right;padding-left:10px">Status</td><td style="text-align:right">'+esc(a.status||'—')+'</td></tr>'+
-      '</table>'+
+      /* v262 mobile fix: this was a 4-column table with table-layout:fixed. On a phone each cell was
+         far too narrow, so every label and value wrapped onto its own line and right-aligned — the
+         panel became a tall stack of half-empty boxes. A grid of small stat tiles with
+         repeat(auto-fit,minmax(88px,1fr)) works out its own column count from the available width:
+         2 across on a phone, 3 across in the desktop modal. No media query, one code path. */
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:8px">'+
+        stat('Check in', esc(a.checkIn||'—'))+
+        stat('Check out', a.checkOut?esc(a.checkOut):'<span style="color:#9aa0a6">—</span>')+
+        stat('Shift', esc(shift||'—'))+
+        stat('Late by', lateTxt)+
+        stat('Geo', geoTxt)+
+        stat('Status', esc(a.status||'—'))+
+      '</div>'+
       (a.addrIn?('<div style="border-top:1px solid var(--line);margin-top:7px;padding-top:7px;font-size:12.5px;color:#686868">📍 '+esc(a.addrIn)+
         (mapUrl?(' · <a href="'+esc(mapUrl)+'" target="_blank" rel="noopener" style="color:var(--red);font-weight:600">open map ↗</a>'):'')+'</div>')
         :(mapUrl?('<div style="border-top:1px solid var(--line);margin-top:7px;padding-top:7px;font-size:12.5px"><a href="'+esc(mapUrl)+'" target="_blank" rel="noopener" style="color:var(--red);font-weight:600">📍 open punch-in location ↗</a></div>'):''))+
