@@ -135,30 +135,51 @@
   /* Blank means "use the calculated figure". 0 is a real override meaning deduct nothing. */
   function hasOv(v){ return v!==undefined && v!==null && String(v).trim()!==''; }
   function stop(e){ e.stopPropagation(); }
+  /* Constants, kept identical to Code.gs. Track A = PF-deducted staff, track B = gross / no-PF. */
+  var PC_BAS=0.55, PC_PFBAS=0.50, PC_PFHRA=0.40, PC_STD_DAYS=26, PC_PT_FREE=12000, PC_BONUS_DAYS=2;
   /* Exact mirror of payCalc_ in Code.gs, so the number on screen is always the number that gets saved.
-     Basic 55% / HRA 45% of actual salary; PF flat 1,800 and PT 200 at 15,000+, else PF 12% of basic and
-     no PT; ESIC 0.75% of basic rounded up; deductions do NOT shrink when someone takes leave. */
+     PF staff: basic 50% / HRA 40% / conveyance 10%, a fixed 26 pay days, each head scaled and rounded
+     on its own; PF = 12% of earned basic capped 1,800; ESIC = 0.75% of earned basic rounded down;
+     PT = nil up to 12,000 earned, then 200. Gross / no-PF staff: no split, per day = actual x 12/365. */
   function pcCalc(s){
     var inc=numv(s._inc), bon=numv(s._bon), trv=numv(s._trv), pet=numv(s._pet), mis=numv(s._mis);
     var addOther=0; (s._other||[]).forEach(function(o){ addOther+=numv(o.amt); });
-    var additions=inc+bon+trv+pet+mis+addOther;
+    var additions=inc+bon+trv+pet+mis+addOther;   /* attBonus is added below, once perDay is known */
     var actual=Number(s.actualSalary)||Number(s.basic)||0;
     var grossMode=String(s.payMode||'')==='gross';
     var pfOn=!grossMode && s.pfOn!==false;
     var esiOn=!grossMode && s.esiOn!==false;
-    /* v268. PF staff: basic 50% + HRA 40% + conveyance 10% (conveyance is the remainder so the three
-       always total the actual salary). Everyone else keeps 55/45 with no conveyance. */
-    var basic,hra,conv;
-    if(pfOn){ basic=Math.round(actual*0.50); hra=Math.round(actual*0.40); conv=actual-basic-hra; }
-    else    { basic=Math.round(actual*0.55); hra=actual-basic;            conv=0; }
-    var lopAmt=Number(s.lopAmt)||0, earned=actual-lopAmt, gross=earned+additions;
-    /* PF and ESIC shrink with the leave cut; professional tax does not. Same ratio the backend uses. */
-    var ratio=actual>0?(earned/actual):0;
+    var lop=Number(s.lopDays)||0, days=Number(s.totalDays)||30;
+    var basic,hra,conv,perDay,payDays,attDays,eB,eH,eC,earned,lopAmt;
+    var convOn=pfOn && s.convOn===true;
+    if(pfOn){
+      payDays=PC_STD_DAYS; attDays=Math.max(0,Math.min(payDays,payDays-lop));
+      if(convOn){ basic=Math.round(actual*PC_PFBAS); hra=Math.round(actual*PC_PFHRA); }
+      else      { basic=Math.round(actual*PC_BAS);   hra=Math.round(actual*0.45);     }
+      conv=actual-basic-hra;
+      perDay=payDays?actual/payDays:0;
+      eB=Math.round(basic/payDays*attDays); eH=Math.round(hra/payDays*attDays); eC=Math.round(conv/payDays*attDays);
+      earned=eB+eH+eC; lopAmt=actual-earned;
+    } else {
+      payDays=days; attDays=Math.max(0,days-lop);
+      basic=Math.round(actual*PC_BAS); hra=actual-basic; conv=0;
+      perDay=actual*12/365;
+      lopAmt=Math.min(actual,Math.round(perDay*lop)); earned=actual-lopAmt;
+      var br=actual>0?(earned/actual):0;
+      eB=Math.round(basic*br); eH=earned-eB; eC=0;
+    }
+    /* Full attendance bonus — exact mirror of payCalc_. Present every working day AND no leave of any
+       kind (paid or unpaid) earns 2 extra days at the person's own daily rate, on top of full salary.
+       It is an addition, so it never enters the PF / ESIC / PT base. */
+    var paidLeave=Number(s.leaveDays)||0;
+    var attBonus=(actual>0 && lop===0 && paidLeave===0) ? Math.round(perDay*PC_BONUS_DAYS) : 0;
+    additions+=attBonus;
+    var gross=earned+additions;
     var pf=0, esi=0, pt=0, pfAuto=0, esiAuto=0, ptAuto=0;
     if(actual>0 && !grossMode){
-      pfAuto=pfOn?Math.round(((actual>=15000)?1800:Math.round(basic*0.12))*ratio):0;
-      esiAuto=esiOn?Math.ceil(basic*0.0075*ratio):0;
-      ptAuto=(s.ptAmt===undefined||s.ptAmt===''||s.ptAmt===null)?((actual>=15000)?200:0):(Number(s.ptAmt)||0);
+      pfAuto=pfOn?Math.min(1800,Math.round(eB*0.12)):0;
+      esiAuto=esiOn?Math.floor(eB*0.0075):0;
+      ptAuto=(s.ptAmt===undefined||s.ptAmt===''||s.ptAmt===null)?((earned>PC_PT_FREE)?200:0):(Number(s.ptAmt)||0);
       pf=pfAuto; esi=esiAuto; pt=ptAuto;
       if(hasOv(s._pfOv))  pf=numv(s._pfOv);
       if(hasOv(s._esiOv)) esi=numv(s._esiOv);
@@ -171,7 +192,9 @@
     (s._dedOther||[]).forEach(function(o){ dedOther+=numv(o.amt); });
     var statutory=pf+esi+pt+otherDed+lab+adv+dedOther;
     return {inc:inc,bon:bon,trv:trv,pet:pet,mis:mis,addOther:addOther,other:(s._other||[]),additions:additions,
-      actual:actual,basic:basic,hra:hra,conv:conv,earned:earned,gross:gross,lopAmt:lopAmt,
+      actual:actual,basic:basic,hra:hra,conv:conv,convOn:convOn,payDays:payDays,attDays:attDays,perDay:Math.round(perDay),
+      attBonus:attBonus,attBonusDays:(attBonus>0?PC_BONUS_DAYS:0),paidLeave:paidLeave,
+      earnBasic:eB,earnHra:eH,earnConv:eC,earned:earned,gross:gross,lopAmt:lopAmt,
       pf:pf,esi:esi,pt:pt,pfAuto:pfAuto,esiAuto:esiAuto,ptAuto:ptAuto,
       otherDed:otherDed,otherDedLabel:s._otherDedLabel||'',
       lab:lab,adv:adv,dedOther:dedOther,dedOtherList:(s._dedOther||[]),
@@ -277,7 +300,7 @@
       var row=document.createElement('div'); row.className='py-row'; row.setAttribute('data-i',i);
       row.innerHTML=
         '<div class="py2 py-main">'+
-          '<div><b>'+esc(s.name)+'</b><div class="py-sub">'+(c.noSalary?'<span class="py-setsal" data-setsal="'+esc(s.empId)+'">set salary →</span>':(s.paidDays+(s.totalDays?'/'+s.totalDays:'')+' paid'+(Number(s.lopDays)>0?' · '+s.lopDays+' LOP':'')))+(c.grossMode?' · gross':'')+(Number(s.blankDays)>0?' · <span style="color:#A32D2D">'+s.blankDays+'d no record</span>':'')+'</div></div>'+
+          '<div><b>'+esc(s.name)+'</b><div class="py-sub">'+(c.noSalary?'<span class="py-setsal" data-setsal="'+esc(s.empId)+'">set salary →</span>':(c.attDays+'/'+c.payDays+(c.pfOn?' pay days':' paid')+(Number(s.lopDays)>0?' · '+s.lopDays+' LOP':'')))+(c.grossMode?' · gross':'')+(Number(s.blankDays)>0?' · <span style="color:#A32D2D">'+s.blankDays+'d no record</span>':'')+'</div></div>'+
           '<div class="r">'+(c.noSalary?'—':m0(c.actual)+'<div class="py-sub">basic '+m0(c.basic)+'</div>')+'</div>'+
           '<div class="r" data-c="add" style="color:'+G+'">'+(c.additions?'+'+m0(c.additions):'—')+'</div>'+
           '<div class="r" data-c="ded" style="color:'+R+'">−'+m0(c.ded)+'</div>'+
@@ -328,7 +351,7 @@
     /* Landscape A4 only takes so many columns, so petrol + MIS ride in "Other add." and the lab-test /
        advance-loan / ad-hoc recoveries ride in "Other ded." Every rupee is still counted; the itemised
        breakdown is on the Excel register and on each payslip. */
-    var keys=['basic','addIncentive','addBonus','addTravel','addOtherAll','gross','lopAmt','pf','esi','pt','otherDedAll','deductions','net'];
+    var keys=['earnBasic','addIncentive','addBonus','addTravel','addOtherAll','gross','lopAmt','pf','esi','pt','otherDedAll','deductions','net'];
     var tot={}; keys.forEach(function(k){tot[k]=0;});
     function c(v){ return Number(v)>0?money(v):'—'; }
     function n(v){ return money(Number(v)||0); }
@@ -339,7 +362,7 @@
       var zero=!(Number(s.basic)||Number(s.net));
       return '<tr'+(zero?' class="z"':'')+'>'+
         '<td class="l">'+esc(s.name||'')+'<div class="sub">'+esc(s.empId||'')+' · '+(s.paidDays||0)+'/'+(s.totalDays||0)+(Number(s.lopDays)>0?' · '+s.lopDays+' abs':'')+(Number(s.perDay)>0?' · ₹'+money(s.perDay)+'/day':'')+'</div></td>'+
-        '<td>'+n(s.basic)+'</td><td>'+c(s.addIncentive)+'</td><td>'+c(s.addBonus)+'</td><td>'+c(s.addTravel)+'</td><td>'+c(s.addOtherAll)+'</td><td class="b">'+n(s.gross)+'</td>'+
+        '<td>'+n(s.earnBasic||s.basic)+'</td><td>'+c(s.addIncentive)+'</td><td>'+c(s.addBonus)+'</td><td>'+c(s.addTravel)+'</td><td>'+c(s.addOtherAll)+'</td><td class="b">'+n(s.gross)+'</td>'+
         '<td>'+c(s.lopAmt)+'</td><td>'+c(s.pf)+'</td><td>'+c(s.esi)+'</td><td>'+c(s.pt)+'</td><td>'+c(s.otherDedAll)+'</td><td class="b">'+n(s.deductions)+'</td>'+
         '<td class="b">'+n(s.net)+'</td></tr>';
     }).join('');
@@ -361,7 +384,7 @@
         '<tr><th>Basic</th><th>Incent.</th><th>Bonus</th><th>Travel</th><th>Other</th><th>Gross</th><th>LOP</th><th>PF</th><th>ESI</th><th>PT</th><th>Other</th><th>Total</th></tr>'+
       '</thead><tbody>'+body+totRow+'</tbody></table>'+
       '<div class="sign"><div>Prepared by</div><div>Verified by</div><div>Authorised signatory</div></div>'+
-      '<div class="ft">Generated '+today+' · Nakoda MIS · PF staff: basic 50% / HRA 40% / conveyance 10% · gross staff: basic 55% / HRA 45%, no conveyance · PF 12% of basic (flat ₹1,800 at ₹15,000+) · ESI 0.75% of basic · PT ₹200 at ₹15,000+ · LOP = per day × absent (PF staff: salary ÷ days in month; others: salary × 12 ÷ 365) · Other add. includes petrol &amp; MIS expenses · Other ded. includes lab test &amp; advance lab / loan</div>'+
+      '<div class="ft">Generated '+today+' · Nakoda MIS · PF staff: basic 50% / HRA 40% / conveyance 10%, 26 pay days, PF 12% of earned basic (max ₹1,800), ESIC 0.75% of earned basic, PT nil to ₹12,000 then ₹200 · Gross staff: no split, per day = salary × 12 ÷ 365 · Basic column shows EARNED basic · Other add. includes petrol &amp; MIS expenses · Other ded. includes lab test &amp; advance lab / loan</div>'+
       '</body></html>';
     var ifr=document.createElement('iframe'); ifr.style.position='fixed'; ifr.style.right='0'; ifr.style.bottom='0'; ifr.style.width='0'; ifr.style.height='0'; ifr.style.border='0';
     document.body.appendChild(ifr);
@@ -372,26 +395,29 @@
   /* the two-column detail (additions with custom lines + button, deductions with other-deduction + PDF) */
   function buildDetail(s,i){
     var c=pcCalc(s);
-    var pfLbl=c.actual>=15000?'Provident fund (flat)':'Provident fund (12% of basic)';
-    /* Staff with no PF cut are paid a flat gross, so the 55/45 split and the statutory lines mean
-       nothing to whoever is checking the sheet. They are hidden HERE ONLY — the figures are still
-       calculated, saved to Payslips and printed on the payslip and salary register. */
+    /* Staff with no PF cut are paid a flat gross, so a 50/40/10 split would mean nothing to whoever is
+       checking the sheet. They get one line instead. The figures are still calculated and saved. */
     var showSplit=(!c.grossMode && c.pfOn!==false);
     return '<div class="py-box"><div class="py-bt" style="color:'+G+'">EARNINGS (+)</div>'+
-        (showSplit?('<div class="py-li"><span>Basic · 50%</span><span>'+m0(c.basic)+'</span></div>'+
-                    '<div class="py-li"><span>HRA · 40%</span><span>'+m0(c.hra)+'</span></div>'+
-                    '<div class="py-li"><span>Conveyance · 10%</span><span>'+m0(c.conv)+'</span></div>'):
+        (showSplit?(splitHead()+
+                    splitLi('Basic · '+(c.convOn?'50':'55')+'%',c.basic,c.earnBasic)+
+                    splitLi('HRA · '+(c.convOn?'40':'45')+'%',c.hra,c.earnHra)+
+                    (c.convOn?splitLi('Conveyance · 10%',c.conv,c.earnConv):'')+
+                    '<div class="py-li" style="border-top:0.5px solid #e2e5ea;padding-top:5px"><span>Gross earned</span>'+
+                      '<span style="width:150px;text-align:right"><span style="display:inline-block;width:72px;color:#9aa0a6">'+m0(c.actual)+'</span>'+
+                      '<span style="display:inline-block;width:78px;font-weight:600">'+m0(c.earned)+'</span></span></div>'):
                    ('<div class="py-li"><span>Gross salary</span><span>'+m0(c.actual)+'</span></div>'))+
+        bonusLi(c)+
         addLi(i,'Incentive','_inc',s._inc)+addLi(i,'Bonus','_bon',s._bon)+addLi(i,'Travel / arrears','_trv',s._trv)+
         addLi(i,'Petrol cost','_pet',s._pet)+addLi(i,'MIS expenses','_mis',s._mis)+
         otherAddLines(i,s._other)+
         '<button class="py-addbtn" data-oadd="'+i+'">+ Add other addition</button>'+
         '<div class="py-lt"><span>Total additions</span><span data-c="addtot" style="color:'+G+'">'+m0(c.additions)+'</span></div></div>'+
       '<div class="py-box"><div class="py-bt" style="color:'+R+'">DEDUCTIONS (−)</div>'+
-        dedLop(s,c.lopAmt)+
-        (c.grossMode?'':(dedOv(i,pfLbl,'_pfOv',s._pfOv,c.pfAuto)+
-                    dedOv(i,'ESIC (0.75% of basic)','_esiOv',s._esiOv,c.esiAuto)+
-                    dedOv(i,'Professional tax','_ptOv',s._ptOv,c.ptAuto)))+
+        dedLop(s,c.lopAmt)+dedPresent(s)+
+        (c.grossMode?'':(dedOv(i,'Provident fund <span class="py-lopsub">12% of earned basic, max ₹1,800</span>','_pfOv',s._pfOv,c.pfAuto)+
+                    dedOv(i,'ESIC <span class="py-lopsub">0.75% of earned basic</span>','_esiOv',s._esiOv,c.esiAuto)+
+                    dedOv(i,'Professional tax <span class="py-lopsub">nil to ₹12,000 earned, then ₹200</span>','_ptOv',s._ptOv,c.ptAuto)))+
         addLi(i,'Lab test charges','_lab',s._lab)+
         addLi(i,'Advance lab / oblic loan','_adv',s._adv)+
         '<div class="py-li" style="gap:6px"><input data-otherlbl="'+i+'" value="'+esc(s._otherDedLabel||'')+'" placeholder="Other deduction (advance / loan)" style="flex:1;min-width:0"><input type="number" min="0" data-otherded="'+i+'" value="'+(Number(s._otherDed)>0?Number(s._otherDed):'')+'" placeholder="0" style="width:80px"></div>'+
@@ -402,6 +428,24 @@
       '<div class="py-att" data-att="'+i+'"><div class="py-bt" style="color:#185FA5">ATTENDANCE</div><div class="center-load" style="padding:8px 0"><span class="loader dark"></span></div></div>';
   }
   function addLi(i,label,key,val){ return '<div class="py-li"><span>'+label+'</span><input type="number" min="0" data-i="'+i+'" data-key="'+key+'" value="'+(Number(val)>0?Number(val):'')+'" placeholder="0"></div>'; }
+  /* Rate vs Earned, side by side, the same two blocks the accountant's PF workbook uses. Rate is the
+     full month; Earned is after attendance. Every deduction downstream is charged on Earned. */
+  function splitHead(){ return '<div class="py-li" style="padding-bottom:2px"><span></span>'+
+    '<span style="width:150px;text-align:right;font-size:10px;color:#9aa0a6">'+
+      '<span style="display:inline-block;width:72px">RATE</span><span style="display:inline-block;width:78px">EARNED</span></span></div>'; }
+  /* Read-only. Earned automatically by a completely clean month; there is nothing to type. Shown as a
+     dash when it was not earned so the row does not vanish and leave people wondering. */
+  function bonusLi(c){
+    if(!(c.actual>0)) return '';
+    var got=c.attBonus>0;
+    return '<div class="py-li"'+(got?' style="color:#0F6E56"':'')+'><span>Full attendance bonus · '+PC_BONUS_DAYS+'d'+
+      '<div class="py-lopsub">'+(got?('₹'+money(c.perDay)+' × '+PC_BONUS_DAYS+' — no leave taken'):
+        (c.lopDaysShown>0?'not earned':'not earned — leave taken this month'))+'</div></span>'+
+      '<span>'+(got?('+'+m0(c.attBonus)):'—')+'</span></div>';
+  }
+  function splitLi(label,rate,earned){ return '<div class="py-li"><span>'+label+'</span>'+
+    '<span style="width:150px;text-align:right"><span style="display:inline-block;width:72px;color:#9aa0a6">'+m0(rate)+'</span>'+
+    '<span style="display:inline-block;width:78px">'+m0(earned)+'</span></span></div>'; }
   /* An editable deduction: leave it blank and the calculated figure (shown greyed as the placeholder)
      applies; type a number and that wins for this month only. */
   function dedOv(i,label,key,val,auto){
@@ -420,11 +464,23 @@
     if(Number(s.blankDays)>0) parts.push(s.blankDays+' no record');
     if(Number(s.lopFree)>0) parts.push('<span style="color:#0F6E56">'+s.lopFree+' free (Sunday staff)</span>');
     /* Shows the daily rate the cut was priced at, so a query can be settled without opening the code:
-       PF staff are on salary ÷ days in that month, everyone else on salary × 12 ÷ 365. */
-    if(Number(s.perDay)>0) parts.push('₹'+money(s.perDay)+'/day');
+       PF staff are on salary ÷ 26 pay days, everyone else on salary × 12 ÷ 365. */
+    var c=pcCalc(s);
+    /* Spelled out the way the accountant's sheet writes it, so a query can be settled on the spot. */
+    if(c.perDay>0 && d>0) parts.push('<b style="color:#444">'+money(c.actual)+' ÷ '+c.payDays+' × '+(d%1?d.toFixed(1):d)+' = ₹'+money(val)+'</b>');
+    else if(c.perDay>0) parts.push('₹'+money(c.perDay)+'/day ('+money(c.actual)+' ÷ '+c.payDays+')');
     return '<div class="py-li" style="align-items:flex-start"><span>Absent / half-day (LOP '+(d%1?d.toFixed(1):d)+'d)'+
       (parts.length?'<div class="py-lopsub">'+parts.join(' · ')+'</div>':'')+'</span>'+
       '<span>'+(Number(val)>0?'−'+m0(val):'—')+'</span></div>';
+  }
+  /* Days actually paid for. Read straight off the same two numbers the leave cut uses, so the two
+     lines can never tell different stories: present = pay days - LOP days. */
+  function dedPresent(s){
+    var c=pcCalc(s), d=Number(s.lopDays)||0;
+    var pres=c.attDays, lbl=(pres%1?pres.toFixed(1):pres);
+    return '<div class="py-li" style="align-items:flex-start"><span>Present days'+
+      '<div class="py-lopsub">'+c.payDays+(c.pfOn?' pay days':' days')+' − '+(d%1?d.toFixed(1):d)+' LOP</div></span>'+
+      '<span style="color:#0F6E56;font-weight:600">'+lbl+'</span></div>';
   }
   function dedLi(label,val){ return '<div class="py-li"><span>'+label+'</span><span>'+(Number(val)>0?'−'+m0(val):'—')+'</span></div>'; }
   function otherAddLines(i,arr){ return (arr||[]).map(function(o,k){ return '<div class="py-li" style="gap:6px"><input data-oi="'+i+'" data-ok="'+k+'" data-of="label" value="'+esc((o&&o.label)||'')+'" placeholder="Reason (e.g. Overtime)" style="flex:1;min-width:0"><input type="number" min="0" data-oi="'+i+'" data-ok="'+k+'" data-of="amt" value="'+(Number(o&&o.amt)>0?Number(o.amt):'')+'" placeholder="0" style="width:80px"><span class="py-rem" data-orem="'+i+'" data-ok="'+k+'">×</span></div>'; }).join(''); }
@@ -433,8 +489,8 @@
   /* live view of every slip with its typed additions/deductions applied (for KPIs, exports, slips, PDF) */
   function computed(){ return PAY.slips.map(function(s){ var c=pcCalc(s); var oth=(c.other||[]).map(function(o){return {label:String((o&&o.label)||'Other'),amt:numv(o&&o.amt)};}).filter(function(o){return o.amt>0;});
     var dth=(c.dedOtherList||[]).map(function(o){return {label:String((o&&o.label)||'Other deduction'),amt:numv(o&&o.amt)};}).filter(function(o){return o.amt>0;});
-    return Object.assign({},s,{additions:c.additions,addIncentive:c.inc,addBonus:c.bon,addTravel:c.trv,addPetrol:c.pet,addMis:c.mis,addOther:c.addOther,addOtherJson:(oth.length?JSON.stringify(oth):''),otherDed:c.otherDed,otherDedLabel:c.otherDedLabel,
-      labTest:c.lab,advLab:c.adv,dedOther:c.dedOther,dedOtherJson:(dth.length?JSON.stringify(dth):''),gross:c.gross,lopAmt:c.lopAmt,pf:c.pf,esi:c.esi,pt:c.pt,deductions:c.ded,net:c.net,fieldPay:c.additions,actualSalary:c.actual,basic:c.basic,hra:c.hra,conv:c.conv,payMode:(c.grossMode?'gross':'standard'),pfOverride:(hasOv(s._pfOv)?numv(s._pfOv):''),esiOverride:(hasOv(s._esiOv)?numv(s._esiOv):''),ptOverride:(hasOv(s._ptOv)?numv(s._ptOv):'')}); }); }
+    return Object.assign({},s,{additions:c.additions,addIncentive:c.inc,addBonus:c.bon,addTravel:c.trv,addPetrol:c.pet,addMis:c.mis,attBonus:c.attBonus,attBonusDays:c.attBonusDays,addOther:c.addOther,addOtherJson:(oth.length?JSON.stringify(oth):''),otherDed:c.otherDed,otherDedLabel:c.otherDedLabel,
+      labTest:c.lab,advLab:c.adv,dedOther:c.dedOther,dedOtherJson:(dth.length?JSON.stringify(dth):''),gross:c.gross,lopAmt:c.lopAmt,pf:c.pf,esi:c.esi,pt:c.pt,deductions:c.ded,net:c.net,fieldPay:c.additions,actualSalary:c.actual,basic:c.basic,hra:c.hra,conv:c.conv,convOn:c.convOn,payDays:c.payDays,attDays:c.attDays,perDay:c.perDay,earnBasic:c.earnBasic,earnHra:c.earnHra,earnConv:c.earnConv,earned:c.earned,pfOn:c.pfOn,payMode:(c.grossMode?'gross':'standard'),pfOverride:(hasOv(s._pfOv)?numv(s._pfOv):''),esiOverride:(hasOv(s._esiOv)?numv(s._esiOv):''),ptOverride:(hasOv(s._ptOv)?numv(s._ptOv):'')}); }); }
   function paintKpi(){
     var t={g:0,a:0,d:0,n:0,zero:0,neg:0,gap:0,gapd:0}; PAY.slips.forEach(function(s){ var c=pcCalc(s);
       t.g+=c.actual; t.a+=c.additions; t.d+=c.ded; t.n+=c.net;
@@ -551,23 +607,24 @@
     function ln(l,v,neg){ return '<tr><td style="padding:5px 0;color:#444">'+esc(l)+'</td><td style="padding:5px 0;text-align:right;color:'+(neg?'#A32D2D':'#111')+'">'+(neg?'−':'')+'₹'+money(v)+'</td></tr>'; }
     var actualV=Number(s.actualSalary)||Number(s.basic)||0;
     var isPf=(String(s.payMode||'')!=='gross' && s.pfOn!==false);
-    var basicV,hraV,convV;
-    if(isPf){ basicV=Math.round(actualV*0.50); hraV=Math.round(actualV*0.40); convV=actualV-basicV-hraV; }
-    else    { basicV=Math.round(actualV*0.55); hraV=actualV-basicV;           convV=0; }
+    /* Earned figures, not the rate — the payslip has to show what the person was actually paid for. */
+    var cv=Number(s.earnConv)>0;
     var earn = isPf
-      ? ln('Basic (50%)',basicV)+ln('HRA (40%)',hraV)+ln('Conveyance (10%)',convV)
-      : ln('Basic (55%)',basicV)+ln('HRA (45%)',hraV);
+      ? ln('Basic ('+(cv?'50':'55')+'%)',Number(s.earnBasic)||0)+ln('HRA ('+(cv?'40':'45')+'%)',Number(s.earnHra)||0)+
+        (cv?ln('Conveyance (10%)',s.earnConv):'')
+      : ln('Gross salary',Number(s.earned)||actualV);
     if(Number(s.addIncentive)>0) earn+=ln('Incentive',s.addIncentive);
     if(Number(s.addBonus)>0) earn+=ln('Bonus',s.addBonus);
     if(Number(s.addTravel)>0) earn+=ln('Travel / arrears',s.addTravel);
+    if(Number(s.attBonus)>0) earn+=ln('Full attendance bonus ('+(Number(s.attBonusDays)||2)+' days)',s.attBonus);
     if(Number(s.addPetrol)>0) earn+=ln('Petrol cost',s.addPetrol);
     if(Number(s.addMis)>0) earn+=ln('MIS expenses',s.addMis);
     var oth=[]; if(s.addOtherJson){ try{ oth=JSON.parse(s.addOtherJson)||[]; }catch(e){} }
     oth.forEach(function(o){ if(Number(o.amt)>0) earn+=ln(o.label||'Other',o.amt); });
     var grossV=actualV-Number(s.lopAmt||0)+Number(s.additions||0);
     var ded=''; if(Number(s.lopAmt)>0) ded+=ln('Absent / half-day (LOP '+(s.lopDays||0)+'d)',s.lopAmt,true);
-    if(Number(s.pf)>0) ded+=ln(actualV>=15000?'Provident fund (flat)':'Provident fund (12% of basic)',s.pf,true);
-    if(Number(s.esi)>0) ded+=ln('ESIC (0.75% of basic)',s.esi,true);
+    if(Number(s.pf)>0) ded+=ln('Provident fund (12% of earned basic)',s.pf,true);
+    if(Number(s.esi)>0) ded+=ln('ESIC (0.75% of earned basic)',s.esi,true);
     if(Number(s.pt)>0) ded+=ln('Professional tax',s.pt,true);
     if(Number(s.otherDed)>0) ded+=ln(s.otherDedLabel||'Other deduction',s.otherDed,true);
     if(Number(s.labTest)>0) ded+=ln('Lab test charges',s.labTest,true);
@@ -578,7 +635,7 @@
     var html='<!doctype html><html><head><meta charset="utf-8"><title>Payslip '+esc(name)+' '+esc(month)+'</title>'+
       '<style>@page{size:A4;margin:16mm}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0}.hd{border-top:6px solid #DA1017;padding:14px 0;display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #e2e5ea}.h1{color:#DA1017;font-size:22px;font-weight:800}.sub{color:#666;font-size:12px;margin-top:2px}.meta{font-size:13px;color:#444;margin:12px 0}.sect{color:#DA1017;font-weight:700;font-size:13px;margin:14px 0 4px}table{width:100%;border-collapse:collapse;font-size:13px}.tot td{border-top:1px solid #ccc;font-weight:700;padding-top:6px}.net{margin-top:14px;background:#eafaf3;color:#1a7f37;border-radius:8px;padding:12px 14px;display:flex;justify-content:space-between;font-size:18px;font-weight:800}.ft{margin-top:18px;color:#999;font-size:11px;text-align:center}</style></head><body>'+
       '<div class="hd"><div><div class="h1">NAKODA</div><div class="sub">Diagnostics And Research Center</div></div><div style="text-align:right"><div style="font-weight:700">PAYSLIP — '+esc(month)+'</div><div class="sub">'+esc(name)+' · '+esc(s.empId||'')+'</div></div></div>'+
-      '<div class="meta">Paid days '+s.paidDays+' / '+s.totalDays+'  ·  LOP '+s.lopDays+'  ·  Leave '+(s.leaveDays||0)+'</div>'+
+      '<div class="meta">'+(isPf?('Pay days '+(Number(s.attDays)||0)+' / '+(Number(s.payDays)||26)):('Paid days '+s.paidDays+' / '+s.totalDays))+'  ·  LOP '+s.lopDays+'  ·  Leave '+(s.leaveDays||0)+(Number(s.perDay)>0?('  ·  ₹'+money(s.perDay)+'/day'):'')+'</div>'+
       '<div class="sect">EARNINGS</div><table>'+earn+'<tr class="tot"><td>Gross</td><td style="text-align:right">₹'+money(grossV)+'</td></tr></table>'+
       '<div class="sect">DEDUCTIONS</div><table>'+ded+'<tr class="tot"><td>Total deductions</td><td style="text-align:right;color:#A32D2D">−₹'+money(s.deductions||0)+'</td></tr></table>'+
       '<div class="net"><span>NET PAY</span><span>₹'+money(s.net||0)+'</span></div>'+
@@ -593,11 +650,11 @@
     var drow=''; if(Number(s.lopAmt)>0) drow+='<div class="psrow"><span>Absent / half-day (LOP)</span><span style="color:#A32D2D">−₹'+money(s.lopAmt)+'</span></div>'; if(Number(s.pf)>0) drow+='<div class="psrow"><span>Provident fund (12%)</span><span style="color:#A32D2D">−₹'+money(s.pf)+'</span></div>'; if(Number(s.esi)>0) drow+='<div class="psrow"><span>ESI (0.75%)</span><span style="color:#A32D2D">−₹'+money(s.esi)+'</span></div>'; if(Number(s.pt)>0) drow+='<div class="psrow"><span>Professional tax</span><span style="color:#A32D2D">−₹'+money(s.pt)+'</span></div>'; if(Number(s.otherDed)>0) drow+='<div class="psrow"><span>'+esc(s.otherDedLabel||'Other deduction')+'</span><span style="color:#A32D2D">−₹'+money(s.otherDed)+'</span></div>'; if(Number(s.labTest)>0) drow+='<div class="psrow"><span>Lab test charges</span><span style="color:#A32D2D">−₹'+money(s.labTest)+'</span></div>'; if(Number(s.advLab)>0) drow+='<div class="psrow"><span>Advance lab / oblic loan</span><span style="color:#A32D2D">−₹'+money(s.advLab)+'</span></div>'; if(Number(s.dedOther)>0) drow+='<div class="psrow"><span>Other recoveries</span><span style="color:#A32D2D">−₹'+money(s.dedOther)+'</span></div>';
     /* Staff paid a flat gross see the gross figure, not a 55/45 split that means nothing to them. */
     var isPfC=(String(s.payMode||'')!=='gross' && s.pfOn!==false);
-    var aC=myActual(s), bC=Math.round(aC*(isPfC?0.50:0.55)), hC=isPfC?Math.round(aC*0.40):(aC-bC), vC=aC-bC-hC;
-    var splitRows=(String(s.payMode||'')==='gross')
-      ? '<div class="psrow"><span>Gross salary</span><span>₹'+money(aC)+'</span></div>'
-      : '<div class="psrow"><span>Basic ('+(isPfC?'50':'55')+'%)</span><span>₹'+money(bC)+'</span></div><div class="psrow"><span>HRA ('+(isPfC?'40':'45')+'%)</span><span>₹'+money(hC)+'</span></div>'+(isPfC?'<div class="psrow"><span>Conveyance (10%)</span><span>₹'+money(vC)+'</span></div>':'');
-    box.innerHTML='<div class="att-card" style="text-align:left"><div style="font-size:11px;color:#666">Paid '+s.paidDays+'/'+s.totalDays+' · LOP '+s.lopDays+(Number(s.perDay)>0?' · ₹'+money(s.perDay)+'/day':'')+'</div>'+splitRows+(Number(s.additions)>0?'<div class="psrow"><span>Additions</span><span style="color:#0F6E56">+₹'+money(s.additions)+'</span></div>':'')+drow+'<div class="net2">Net ₹'+money(s.net)+'</div><button class="btn" id="myslipDl" style="margin-top:10px">⤓ Download payslip</button></div>';
+    var cvC=Number(s.earnConv)>0;
+    var splitRows = isPfC
+      ? '<div class="psrow"><span>Basic ('+(cvC?'50':'55')+'%)</span><span>₹'+money(Number(s.earnBasic)||0)+'</span></div><div class="psrow"><span>HRA ('+(cvC?'40':'45')+'%)</span><span>₹'+money(Number(s.earnHra)||0)+'</span></div>'+(cvC?'<div class="psrow"><span>Conveyance (10%)</span><span>₹'+money(s.earnConv)+'</span></div>':'')
+      : '<div class="psrow"><span>Gross salary</span><span>₹'+money(Number(s.earned)||myActual(s))+'</span></div>';
+    box.innerHTML='<div class="att-card" style="text-align:left"><div style="font-size:11px;color:#666">'+(isPfC?('Pay days '+(Number(s.attDays)||0)+'/'+(Number(s.payDays)||26)):('Paid '+s.paidDays+'/'+s.totalDays))+' · LOP '+s.lopDays+(Number(s.perDay)>0?' · ₹'+money(s.perDay)+'/day':'')+'</div>'+splitRows+(Number(s.additions)>0?'<div class="psrow"><span>Additions</span><span style="color:#0F6E56">+₹'+money(s.additions)+'</span></div>':'')+drow+'<div class="net2">Net ₹'+money(s.net)+'</div><button class="btn" id="myslipDl" style="margin-top:10px">⤓ Download payslip</button></div>';
     $id('myslipDl').onclick=function(){ payslipPng(s,(S.user&&S.user.FullName)||'',m); }; }); }
   function payslipPng(s,name,month){
     var logo=new Image(); logo.onload=function(){ draw(logo); }; logo.onerror=function(){ draw(null); }; logo.src='icons/login-logo.png';
@@ -611,20 +668,20 @@
       var y=190; function rowL(l,v,neg){ x.fillStyle='#555';x.font='15px Arial';x.fillText(l,M,y); x.fillStyle=neg?'#A32D2D':'#222';x.textAlign='right';x.fillText((neg?'−₹':'₹')+money(v),W-M,y);x.textAlign='left'; y+=34; }
       x.fillStyle='#DA1017';x.font='bold 14px Arial';x.fillText('EARNINGS',M,y);y+=28;
       var isPfP=(String(s.payMode||'')!=='gross' && s.pfOn!==false);
-      var aP=myActual(s), bP=Math.round(aP*(isPfP?0.50:0.55)), hP=isPfP?Math.round(aP*0.40):(aP-bP);
-      rowL('Basic ('+(isPfP?'50':'55')+'%)',bP);
-      rowL('HRA ('+(isPfP?'40':'45')+'%)',hP);
-      if(isPfP && aP-bP-hP>0) rowL('Conveyance (10%)',aP-bP-hP);
+      var cvP=Number(s.earnConv)>0;
+      if(isPfP){ rowL('Basic ('+(cvP?'50':'55')+'%)',Number(s.earnBasic)||0); rowL('HRA ('+(cvP?'40':'45')+'%)',Number(s.earnHra)||0); if(cvP) rowL('Conveyance (10%)',s.earnConv); }
+      else rowL('Gross salary',Number(s.earned)||myActual(s));
       if(Number(s.addIncentive)>0) rowL('Incentive',s.addIncentive);
       if(Number(s.addBonus)>0) rowL('Bonus',s.addBonus);
       if(Number(s.addTravel)>0) rowL('Travel / arrears',s.addTravel);
+      if(Number(s.attBonus)>0) rowL('Full attendance bonus ('+(Number(s.attBonusDays)||2)+'d)',s.attBonus);
       if(Number(s.addPetrol)>0) rowL('Petrol cost',s.addPetrol);
       if(Number(s.addMis)>0) rowL('MIS expenses',s.addMis);
       if(!(Number(s.addIncentive)||Number(s.addBonus)||Number(s.addTravel)||Number(s.addPetrol)||Number(s.addMis)) && Number(s.additions)>0) rowL('Additions',s.additions);
       y+=6; x.fillStyle='#DA1017';x.font='bold 14px Arial';x.fillText('DEDUCTIONS',M,y);y+=28;
       var anyDed=false;
       if(Number(s.lopAmt)>0){ rowL('Absent / half-day (LOP '+s.lopDays+' days)',s.lopAmt,true); anyDed=true; }
-      if(Number(s.pf)>0){ rowL('Provident fund (PF 12%)',s.pf,true); anyDed=true; }
+      if(Number(s.pf)>0){ rowL('Provident fund (12% of earned basic)',s.pf,true); anyDed=true; }
       if(Number(s.esi)>0){ rowL('ESI (0.75%)',s.esi,true); anyDed=true; }
       if(Number(s.pt)>0){ rowL('Professional tax',s.pt,true); anyDed=true; }
       if(Number(s.labTest)>0){ rowL('Lab test charges',s.labTest,true); anyDed=true; }
@@ -649,20 +706,141 @@
     if(!rows){ toast('No payslips with net pay to export.',true); return; }
     xlsDownload('<table>'+head+rows+'</table>','Bank-Salary-'+month+'.xls');
   }
-  /* Salary register — full itemised earnings & deductions sheet for HR / audit. */
+  /* ============================================================ SALARY REGISTER
+     Written as SpreadsheetML (Excel 2003 XML) rather than an HTML table, because that format can
+     carry LIVE FORMULAS. Open the file and change anyone's ATT or their "other" deduction and PF,
+     PTAX, ESIC, the totals and the grand total all recalculate — exactly like the accountant's own
+     PF SHEET workbook, but with nothing hardcoded.
+     Layout is column-for-column the same as that workbook: A SR, B CODE, C NAME, D ATT,
+     E-J RATE, K-P EARNED, Q-V DEDUCTION, W NET, X SIGNATURE, Z PETROL, AA MIS EXP, AB TOTAL.
+     NOTE: formulas in SpreadsheetML must be written in R1C1, not A1. R4C15 is cell O4 (PAY DAYS). */
+  function xesc(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function xNum(v,st,fml){ return '<Cell'+(st?' ss:StyleID="'+st+'"':'')+(fml?' ss:Formula="'+xesc(fml)+'"':'')+'><Data ss:Type="Number">'+(Math.round(Number(v)||0))+'</Data></Cell>'; }
+  function xStr(v,st){ return '<Cell'+(st?' ss:StyleID="'+st+'"':'')+'><Data ss:Type="String">'+xesc(v)+'</Data></Cell>'; }
+  function xAt(i){ return '<Cell ss:Index="'+i+'"'; }
+  function xCellAt(i,v,st){ return xAt(i)+(st?' ss:StyleID="'+st+'"':'')+'><Data ss:Type="'+(typeof v==='number'?'Number':'String')+'">'+xesc(v)+'</Data></Cell>'; }
+  function xRow(cells){ return '<Row>'+cells+'</Row>'; }
+
   function registerXls(slips,month){
     if(!slips||!slips.length){ toast('No payslips to export.',true); return; }
-    var cols=['Employee','Emp ID','Paid days','LOP days','Per day','Basic','HRA','Conveyance','Incentive','Bonus','Travel','Petrol','MIS expenses','Other additions','Additions total','LOP cut','PF','ESI','Prof. tax','Lab test','Advance lab / loan','Other deduction','Other recoveries','Total deductions','Net payable'];
-    var head='<tr>'+cols.map(function(c){return '<th>'+esc(c)+'</th>';}).join('')+'</tr>';
-    var sumKeys=['basic','hra','conv','addIncentive','addBonus','addTravel','addPetrol','addMis','addOther','additions','lopAmt','pf','esi','pt','labTest','advLab','otherDed','dedOther','deductions','net'];
-    var tot={}; sumKeys.forEach(function(k){tot[k]=0;});
-    var rows=slips.map(function(s){
-      sumKeys.forEach(function(k){ tot[k]+=Number(s[k])||0; });
-      var vals=[s.name||'',s.empId||'',s.paidDays,s.lopDays,Math.round(Number(s.perDay||0)),Math.round(Number(s.basic||s.earned||0)),Math.round(Number(s.hra||0)),Math.round(Number(s.conv||0)),Math.round(Number(s.addIncentive||0)),Math.round(Number(s.addBonus||0)),Math.round(Number(s.addTravel||0)),Math.round(Number(s.addPetrol||0)),Math.round(Number(s.addMis||0)),Math.round(Number(s.addOther||0)),Math.round(Number(s.additions||0)),Math.round(Number(s.lopAmt||0)),Math.round(Number(s.pf||0)),Math.round(Number(s.esi||0)),Math.round(Number(s.pt||0)),Math.round(Number(s.labTest||0)),Math.round(Number(s.advLab||0)),Math.round(Number(s.otherDed||0)),Math.round(Number(s.dedOther||0)),Math.round(Number(s.deductions||0)),Math.round(Number(s.net||0))];
-      return '<tr>'+vals.map(function(v){return '<td>'+esc(String(v))+'</td>';}).join('')+'</tr>';
-    }).join('');
-    var totRow='<tr><td colspan="5"><b>Total</b></td>'+sumKeys.map(function(k){return '<td><b>'+Math.round(tot[k])+'</b></td>';}).join('')+'</tr>';
-    xlsDownload('<table>'+head+rows+totRow+'</table>','Salary-Register-'+month+'.xls');
+    var brSel=$id('pyBranch'), brLabel=(brSel&&brSel.value)?(brSel.options[brSel.selectedIndex].text):'All branches';
+    var mlabel=month; try{ var mp=String(month).split('-'); mlabel=new Date(+mp[0],+mp[1]-1,1).toLocaleDateString('en-IN',{month:'short',year:'numeric'}).toUpperCase(); }catch(e){}
+    var pf=slips.filter(function(s){ return String(s.payMode||'')!=='gross' && s.pfOn!==false; });
+    var gr=slips.filter(function(s){ return String(s.payMode||'')==='gross' || s.pfOn===false; });
+    var mdays=Number(slips[0]&&slips[0].totalDays)||30;
+    var payDays=Number((pf[0]||{}).payDays)||26;
+
+    var xml='<?xml version="1.0"?>\n<?mso-application progid="Excel.Sheet"?>\n'+
+      '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" '+
+      'xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">'+
+      '<Styles>'+
+        '<Style ss:ID="t"><Font ss:Bold="1" ss:Size="12"/></Style>'+
+        '<Style ss:ID="h"><Font ss:Bold="1" ss:Size="9"/><Interior ss:Color="#F3F4F6" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1"/><Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1"/></Borders></Style>'+
+        '<Style ss:ID="ge"><Font ss:Bold="1" ss:Size="9" ss:Color="#0F6E56"/><Interior ss:Color="#E1F5EE" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/></Style>'+
+        '<Style ss:ID="gd"><Font ss:Bold="1" ss:Size="9" ss:Color="#A32D2D"/><Interior ss:Color="#FCEBEB" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/></Style>'+
+        '<Style ss:ID="n"><NumberFormat ss:Format="#,##0"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous"/><Border ss:Position="Top" ss:LineStyle="Continuous"/><Border ss:Position="Left" ss:LineStyle="Continuous"/><Border ss:Position="Right" ss:LineStyle="Continuous"/></Borders></Style>'+
+        '<Style ss:ID="f"><NumberFormat ss:Format="#,##0"/><Interior ss:Color="#F2FBF7" ss:Pattern="Solid"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous"/><Border ss:Position="Top" ss:LineStyle="Continuous"/><Border ss:Position="Left" ss:LineStyle="Continuous"/><Border ss:Position="Right" ss:LineStyle="Continuous"/></Borders></Style>'+
+        '<Style ss:ID="s"><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous"/><Border ss:Position="Top" ss:LineStyle="Continuous"/><Border ss:Position="Left" ss:LineStyle="Continuous"/><Border ss:Position="Right" ss:LineStyle="Continuous"/></Borders></Style>'+
+        '<Style ss:ID="tot"><Font ss:Bold="1"/><NumberFormat ss:Format="#,##0"/><Interior ss:Color="#F3F4F6" ss:Pattern="Solid"/><Borders><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="2"/><Border ss:Position="Bottom" ss:LineStyle="Continuous"/><Border ss:Position="Left" ss:LineStyle="Continuous"/><Border ss:Position="Right" ss:LineStyle="Continuous"/></Borders></Style>'+
+      '</Styles>';
+
+    if(pf.length) xml+=pfSheetXml(pf,mlabel,brLabel,mdays,payDays);
+    if(gr.length) xml+=grossSheetXml(gr,mlabel,brLabel);
+    xml+='</Workbook>';
+
+    var blob=new Blob(['﻿'+xml],{type:'application/vnd.ms-excel'});
+    var u=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=u; a.download='Salary-Register-'+month+'.xls'; a.click();
+    setTimeout(function(){URL.revokeObjectURL(u);},2000);
+    toast('Salary register exported — formulas are live');
+  }
+
+  /* PF staff, in the exact shape of the accountant's PF SHEET. */
+  function pfSheetXml(rows,mlabel,brLabel,mdays,payDays){
+    var W=[6,9,30,6, 9,9,9,9,9,10, 9,9,9,9,9,10, 9,8,8,10,8,10, 11,12,3, 11,9,10,11];
+    var x='<Worksheet ss:Name="PF SHEET"><Table>'+
+      W.map(function(w){ return '<Column ss:Width="'+(w*7)+'"/>'; }).join('');
+
+    x+=xRow(xStr('NAKODA DIAGNOSTICS PVT LTD','t')+xAt(11)+' ss:StyleID="t"><Data ss:Type="String">MONTH — '+xesc(mlabel)+'</Data></Cell>');
+    x+=xRow(xStr('ESTABLISHMENT NAME:')+xAt(11)+'><Data ss:Type="String">TOTAL MONTH DAYS</Data></Cell>'+xAt(15)+'><Data ss:Type="Number">'+mdays+'</Data></Cell>');
+    x+=xRow(xStr('NAKODA DIAGNOSTICS PVT LTD')+xAt(11)+'><Data ss:Type="String">WEEKLY OFF</Data></Cell>'+xAt(15)+' ss:Formula="=R[-1]C-R[1]C"><Data ss:Type="Number">'+(mdays-payDays)+'</Data></Cell>');
+    x+=xRow(xStr(brLabel)+xAt(11)+' ss:StyleID="t"><Data ss:Type="String">PAY DAYS</Data></Cell>'+xAt(15)+' ss:StyleID="t"><Data ss:Type="Number">'+payDays+'</Data></Cell>');
+    x+=xRow('');
+    x+=xRow(xAt(5)+' ss:StyleID="ge"><Data ss:Type="String">RATE</Data></Cell>'+
+            xAt(11)+' ss:StyleID="ge"><Data ss:Type="String">EARNED</Data></Cell>'+
+            xAt(17)+' ss:StyleID="gd"><Data ss:Type="String">DEDUCTION</Data></Cell>'+
+            xAt(23)+' ss:StyleID="h"><Data ss:Type="String">NET SALARY</Data></Cell>'+
+            xAt(24)+' ss:StyleID="h"><Data ss:Type="String">SIGNATURE</Data></Cell>'+
+            xAt(26)+' ss:StyleID="ge"><Data ss:Type="String">REIMBURSEMENT</Data></Cell>');
+    var hd=['SR','CODE','NAME OF EMP','ATT','SALARY','HRA','Convey Allow','PER ALL','OTHER','TOTAL',
+            'SALARY','HRA','Convey Allow','PER ALL','OTHER','TOTAL','PF','PTAX','ESIC','other','TDS','TOTAL',
+            'NET SALARY','SIGNATURE','','ATT BONUS','PETROL','MIS EXP','TOTAL'];
+    x+=xRow(hd.map(function(h){ return xStr(h,'h'); }).join(''));
+
+    var first=8, sr=0;
+    rows.forEach(function(r){
+      sr++;
+      var att=Number(r.attDays)||0;
+      x+=xRow(
+        xNum(sr,'s')+xStr(r.empId||'','s')+xStr(r.name||'','s')+
+        '<Cell ss:StyleID="n"><Data ss:Type="Number">'+att+'</Data></Cell>'+
+        xNum(r.basic,'n')+xNum(r.hra,'n')+xNum(r.conv,'n')+xNum(0,'n')+xNum(0,'n')+
+        xNum(r.actualSalary,'f','=SUM(RC[-5]:RC[-1])')+
+        xNum(r.earnBasic,'f','=ROUND((RC[-6]/R4C15)*RC[-7],0)')+
+        xNum(r.earnHra ,'f','=ROUND((RC[-6]/R4C15)*RC[-8],0)')+
+        xNum(r.earnConv,'f','=ROUND((RC[-6]/R4C15)*RC[-9],0)')+
+        xNum(0,'f','=ROUND((RC[-6]/R4C15)*RC[-10],0)')+
+        xNum(0,'f','=ROUND((RC[-6]/R4C15)*RC[-11],0)')+
+        xNum(r.earned,'f','=SUM(RC[-5]:RC[-1])')+
+        xNum(r.pf ,'f','=MIN(1800,ROUND(RC[-6]*0.12,0))')+
+        xNum(r.pt ,'f','=IF(RC[-2]<=12000,0,200)')+
+        xNum(r.esi,'f','=ROUNDDOWN(RC[-8]*0.0075,0)')+
+        xNum((Number(r.otherDed)||0)+(Number(r.labTest)||0)+(Number(r.advLab)||0)+(Number(r.dedOther)||0),'n')+
+        xNum(0,'n')+
+        xNum(r.deductions-(Number(r.lopAmt)||0),'f','=SUM(RC[-5]:RC[-1])')+
+        xNum(r.earned-(r.deductions-(Number(r.lopAmt)||0)),'f','=RC[-7]-RC[-1]')+
+        xStr('','s')+xStr('')+
+        xNum(r.attBonus,'n')+xNum(r.addPetrol,'n')+xNum(r.addMis,'n')+
+        xNum(r.net,'f','=RC[-6]+RC[-3]+RC[-2]+RC[-1]'));
+    });
+    var last=first+rows.length-1;
+    function sm(){ return '=SUM(R'+first+'C:R'+last+'C)'; }
+    x+=xRow(xAt(3)+' ss:StyleID="tot"><Data ss:Type="String">TOTAL ('+rows.length+' staff)</Data></Cell>'+xStr('','tot')+
+      [5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23].map(function(){ return xNum(0,'tot',sm()); }).join('')+
+      xStr('','tot')+xStr('','tot')+xNum(0,'tot',sm())+xNum(0,'tot',sm())+xNum(0,'tot',sm())+xNum(0,'tot',sm()));
+    x+='</Table><WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel"><FreezePanes/><SplitHorizontal>7</SplitHorizontal><TopRowBottomPane>7</TopRowBottomPane><ActivePane>2</ActivePane></WorksheetOptions></Worksheet>';
+    return x;
+  }
+
+  /* Gross / non-PF staff. They are not on the 26-day basis, so they get their own simple tab
+     rather than being forced into a sheet whose formulas would not apply to them. */
+  function grossSheetXml(rows,mlabel,brLabel){
+    var x='<Worksheet ss:Name="GROSS STAFF"><Table>'+
+      [8,10,30,10,10,10,12,12,12,12,12].map(function(w){ return '<Column ss:Width="'+(w*7)+'"/>'; }).join('');
+    x+=xRow(xStr('GROSS-PAY / NON-PF STAFF — '+mlabel+' · '+brLabel,'t'));
+    x+=xRow(xStr('Per day = salary × 12 ÷ 365. No PF. No 26-day basis.'));
+    x+=xRow('');
+    x+=xRow(['SR','CODE','NAME','SALARY','LOP DAYS','PER DAY','LOP CUT','EARNED','ADDITIONS','DEDUCTIONS','NET']
+      .map(function(h){ return xStr(h,'h'); }).join(''));
+    var first=5, sr=0;
+    rows.forEach(function(r){
+      sr++;
+      x+=xRow(xNum(sr,'s')+xStr(r.empId||'','s')+xStr(r.name||'','s')+
+        xNum(r.actualSalary,'n')+
+        '<Cell ss:StyleID="n"><Data ss:Type="Number">'+(Number(r.lopDays)||0)+'</Data></Cell>'+
+        xNum(r.perDay,'f','=ROUND(RC[-2]*12/365,0)')+
+        xNum(r.lopAmt,'f','=ROUND(RC[-3]*12/365*RC[-2],0)')+
+        xNum(r.earned,'f','=RC[-4]-RC[-1]')+
+        xNum(r.additions,'n')+
+        xNum(r.deductions-(Number(r.lopAmt)||0),'n')+
+        xNum(r.net,'f','=RC[-3]+RC[-2]-RC[-1]'));
+    });
+    var last=first+rows.length-1;
+    x+=xRow(xAt(3)+' ss:StyleID="tot"><Data ss:Type="String">TOTAL ('+rows.length+' staff)</Data></Cell>'+
+      xNum(0,'tot','=SUM(R'+first+'C:R'+last+'C)')+xStr('','tot')+xStr('','tot')+
+      [7,8,9,10,11].map(function(){ return xNum(0,'tot','=SUM(R'+first+'C:R'+last+'C)'); }).join(''));
+    x+='</Table></Worksheet>';
+    return x;
   }
 
   window.renderField=renderField;
