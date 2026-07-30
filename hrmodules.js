@@ -193,7 +193,7 @@
     var statutory=pf+esi+pt+otherDed+lab+adv+dedOther;
     return {inc:inc,bon:bon,trv:trv,pet:pet,mis:mis,addOther:addOther,other:(s._other||[]),additions:additions,
       actual:actual,basic:basic,hra:hra,conv:conv,convOn:convOn,payDays:payDays,attDays:attDays,perDay:Math.round(perDay),
-      attBonus:attBonus,attBonusDays:(attBonus>0?PC_BONUS_DAYS:0),paidLeave:paidLeave,
+      attBonus:attBonus,attBonusDays:(attBonus>0?PC_BONUS_DAYS:0),paidLeave:paidLeave,lopDays:lop,
       earnBasic:eB,earnHra:eH,earnConv:eC,earned:earned,gross:gross,lopAmt:lopAmt,
       pf:pf,esi:esi,pt:pt,pfAuto:pfAuto,esiAuto:esiAuto,ptAuto:ptAuto,
       otherDed:otherDed,otherDedLabel:s._otherDedLabel||'',
@@ -440,7 +440,8 @@
     var got=c.attBonus>0;
     return '<div class="py-li"'+(got?' style="color:#0F6E56"':'')+'><span>Full attendance bonus · '+PC_BONUS_DAYS+'d'+
       '<div class="py-lopsub">'+(got?('₹'+money(c.perDay)+' × '+PC_BONUS_DAYS+' — no leave taken'):
-        (c.lopDaysShown>0?'not earned':'not earned — leave taken this month'))+'</div></span>'+
+        ('not earned — '+(c.lopDays>0?((c.lopDays%1?c.lopDays.toFixed(1):c.lopDays)+' LOP day'+(c.lopDays===1?'':'s')+' this month')
+                                     :(c.paidLeave+' day'+(c.paidLeave===1?'':'s')+' leave taken this month'))))+'</div></span>'+
       '<span>'+(got?('+'+m0(c.attBonus)):'—')+'</span></div>';
   }
   function splitLi(label,rate,earned){ return '<div class="py-li"><span>'+label+'</span>'+
@@ -463,12 +464,18 @@
     if(Number(s.lopUnpaid)>0) parts.push(s.lopUnpaid+' unpaid leave');
     if(Number(s.blankDays)>0) parts.push(s.blankDays+' no record');
     if(Number(s.lopFree)>0) parts.push('<span style="color:#0F6E56">'+s.lopFree+' free (Sunday staff)</span>');
-    /* Shows the daily rate the cut was priced at, so a query can be settled without opening the code:
-       PF staff are on salary ÷ 26 pay days, everyone else on salary × 12 ÷ 365. */
     var c=pcCalc(s);
-    /* Spelled out the way the accountant's sheet writes it, so a query can be settled on the spot. */
-    if(c.perDay>0 && d>0) parts.push('<b style="color:#444">'+money(c.actual)+' ÷ '+c.payDays+' × '+(d%1?d.toFixed(1):d)+' = ₹'+money(val)+'</b>');
-    else if(c.perDay>0) parts.push('₹'+money(c.perDay)+'/day ('+money(c.actual)+' ÷ '+c.payDays+')');
+    /* The arithmetic is spelled out on whichever line it actually ties out on.
+       PF staff are on a 26-day basis, so pay days x per day == the salary and the sensible thing to
+       show is what was EARNED - that goes on the Present days row below, not here.
+       Gross / no-PF staff are on the annual rate (salary x 12 / 365). Their present days x per day
+       does NOT come back to the salary, because a 31-day month is longer than the 30.42 the annual
+       rate assumes - so for them the only figure that ties out exactly is the leave cut, and it
+       belongs here. */
+    if(c.perDay>0 && !c.pfOn && d>0)
+      parts.push('<b style="color:#444">'+money(c.actual)+' × 12 ÷ 365 × '+(d%1?d.toFixed(1):d)+' = ₹'+money(val)+'</b>');
+    else if(c.perDay>0)
+      parts.push('₹'+money(c.perDay)+'/day'+(c.pfOn?(' ('+money(c.actual)+' ÷ '+c.payDays+')'):' (× 12 ÷ 365)'));
     return '<div class="py-li" style="align-items:flex-start"><span>Absent / half-day (LOP '+(d%1?d.toFixed(1):d)+'d)'+
       (parts.length?'<div class="py-lopsub">'+parts.join(' · ')+'</div>':'')+'</span>'+
       '<span>'+(Number(val)>0?'−'+m0(val):'—')+'</span></div>';
@@ -478,8 +485,13 @@
   function dedPresent(s){
     var c=pcCalc(s), d=Number(s.lopDays)||0;
     var pres=c.attDays, lbl=(pres%1?pres.toFixed(1):pres);
+    /* For PF staff this is where the earned figure is proved: salary / 26 x present days is exactly
+       the Gross earned shown opposite, so anyone querying their pay can follow it in one line. */
+    var sub=c.payDays+(c.pfOn?' pay days':' days')+' − '+(d%1?d.toFixed(1):d)+' LOP';
+    if(c.pfOn && c.actual>0)
+      sub+='<div><b style="color:#444">'+money(c.actual)+' ÷ '+c.payDays+' × '+lbl+' = ₹'+money(c.earned)+'</b></div>';
     return '<div class="py-li" style="align-items:flex-start"><span>Present days'+
-      '<div class="py-lopsub">'+c.payDays+(c.pfOn?' pay days':' days')+' − '+(d%1?d.toFixed(1):d)+' LOP</div></span>'+
+      '<div class="py-lopsub">'+sub+'</div></span>'+
       '<span style="color:#0F6E56;font-weight:600">'+lbl+'</span></div>';
   }
   function dedLi(label,val){ return '<div class="py-li"><span>'+label+'</span><span>'+(Number(val)>0?'−'+m0(val):'—')+'</span></div>'; }
