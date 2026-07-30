@@ -283,6 +283,8 @@ body.modal-open #mobileBottomNav{display:none!important}
 .tm-chip.attc{background:#e6f1fb;color:#185fa5}
 .tm-chip.ver{background:#fdeaea;color:#a3271f}
 .tm-chip.late{background:#faece7;color:#993c1d}
+.tm-chip.lvc{background:#e1f5ee;color:#0f6e56}
+.tm-chip.trc{background:#eeedfe;color:#534ab7}
 .py-warn{background:#fdf3e0;color:#854f0b;border-radius:8px;padding:10px 12px;font-size:13px;margin:0 0 12px;line-height:1.6}
 .py-lockchip{display:inline-block;background:#e1f5ee;color:#0f6e56;font-size:12px;font-weight:600;padding:5px 11px;border-radius:6px}
 }

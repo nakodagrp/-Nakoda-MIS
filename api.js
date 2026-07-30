@@ -436,7 +436,7 @@
     cachedMyLeaves:function(){ return kvGet('myleaves'); },
     myLeaves:function(){ return call('myLeaves',{token:getToken()}).then(function(r){ if(r.ok) kvSet('myleaves',r); return r; }).catch(function(){ return kvGet('myleaves').then(function(x){ return x||{ok:true,leaves:[],balance:{},offline:true}; }); }); },
     leaveApprovals:function(){ return call('leaveApprovals',{token:getToken()}); },
-    setLeave:function(id,a,reason){ return call('setLeave',{token:getToken(),leaveId:id,action:a,reason:reason||''}); },
+    setLeave:function(id,a,reason){ return call('setLeave',{token:getToken(),leaveId:id,action:a,reason:reason||'',note:reason||''}); },
     cancelLeave:function(id){ return call('cancelLeave',{token:getToken(),leaveId:id}); },
     allLeaves:function(filter){ var k='allleaves_'+(JSON.stringify(filter||{})); return call('allLeaves',{token:getToken(),filter:filter||{}}).then(function(r){ if(r&&r.ok) kvSet(k,r); return r; }).catch(function(){ return kvGet(k).then(function(x){ return x||{ok:true,leaves:[],offline:true}; }); }); },
     leaveReport:function(ym,branch){ return call('leaveReport',{token:getToken(),ym:ym||'',branch:branch||''}); },

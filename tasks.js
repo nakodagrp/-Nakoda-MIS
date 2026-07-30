@@ -351,6 +351,11 @@
        simply keep showing their description, which is why nothing needed backfilling. */
     var SPEC_SRC={purchase:1,deposit:1,leave:1,process:1,asset:1,stock:1};
     var isSpec=(SPEC_SRC[String(t.source)] && t.instanceId);
+    /* v272: a leave task was approve-only — the single Complete button approved, and the only way to
+       refuse was to leave the office and go to Leave → Approvals. So refusing was harder than agreeing,
+       which is the wrong way round for a decision that costs the company money. Reject now sits beside
+       Approve here, with the same reason-required rule the daily cash rejection has. */
+    var isLeave=(String(t.source)==='leave' && t.instanceId);
     var clHtml=cl.length?('<div style="background:#f6f7f9;border-radius:8px;padding:10px;margin-top:10px">'+cl.map(function(it,i){
       return '<label style="display:flex;align-items:flex-start;gap:9px;padding:4px 0;font-size:13px;cursor:pointer"><input type="checkbox" data-ci="'+i+'"'+(it.done?' checked':'')+' style="transform:scale(1.2);margin-top:2px"><span'+(it.done?' style="text-decoration:line-through;color:#999"':'')+'>'+esc(it.text)+'</span></label>';
     }).join('')+'</div>'):'';
@@ -364,13 +369,14 @@
       (isDaily?'<div id="tdDaily" style="font-size:13px;color:#888;margin-top:10px">Loading entry…</div>':'')+
       (isAtt?'<div id="tdAtt" style="font-size:13px;color:#888;margin-top:10px">Loading attendance…</div>':'')+
       (isSpec?'<div id="tdSpec" style="font-size:13px;color:#888;margin-top:10px">Loading details…</div>':'')+
-      ((isDaily||isDep||isAtt)?'<div style="margin-top:10px"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Notes</label>'+
+      ((isDaily||isDep||isAtt||isLeave)?'<div style="margin-top:10px"><label style="font-size:12px;color:#666;display:block;margin-bottom:3px">Notes</label>'+
         '<textarea id="tdNote" rows="2" placeholder="Optional note — required as the reason if you Reject" style="width:100%;border:1px solid #d9d9d9;border-radius:8px;padding:8px;font-size:13px"></textarea></div>':'')+
       '<div style="font-size:11px;color:#aaa;margin-top:10px">'+(t.source==='assigned'?('Assigned by '+esc(t.assignedByName||'manager')):'Created by you · self task')+'</div>';
     var completeLabel=(isDaily||isDep)?(t.status==='done'?'Reopen':'✓ Verify & complete')
       :isAtt?(t.status==='done'?'Reopen':'✓ Approve & complete')
+      :isLeave?(t.status==='done'?'Reopen':'✓ Approve')
       :(t.status==='done'?'Reopen':'✓ Complete');
-    var rejectBtn=((isDaily||isDep||isAtt)&&t.status!=='done')?'<button class="btn ghost" id="tdReject" style="color:#A32D2D;border-color:#e3b1b1">✕ Reject</button>':'';
+    var rejectBtn=((isDaily||isDep||isAtt||isLeave)&&t.status!=='done')?'<button class="btn ghost" id="tdReject" style="color:#A32D2D;border-color:#e3b1b1">✕ Reject</button>':'';
     var foot='<button class="btn ghost" onclick="closeModal()">Close</button><button class="btn ghost" id="tdEdit">Edit</button>'+rejectBtn+'<button class="btn" id="tdComplete">'+completeLabel+'</button>';
     openModal(t.title, body, foot);
     document.querySelectorAll('#modalRoot [data-ci]').forEach(function(cb){ cb.onchange=function(){ cl[parseInt(cb.getAttribute('data-ci'),10)].done=cb.checked; var sp=cb.parentNode.querySelector('span'); if(sp) sp.style.cssText=cb.checked?'text-decoration:line-through;color:#999':''; t.checklist=cl; t._pending=true; API.updateTask(t.taskId,{checklist:cl}); }; });
@@ -382,9 +388,13 @@
       rj.disabled=true;
       /* v262: rejecting an attendance punch marks it absent and leaves the task open with the reason,
          so the employee and the approver both still see it. It is deliberately NOT a silent close. */
+      /* v272: leave rejection goes through setLeave, which marks the row rejected, closes the approval
+         tasks for every other approver, and raises a "Leave REJECTED" task in the applicant's My Tasks
+         carrying this reason. */
       var rp=isAtt?API.setAttendance(t.instanceId,{approvalStatus:'rejected',status:'absent',notes:note})
+        :isLeave?API.setLeave(t.instanceId,'reject',note)
         :isDep?API.rejectDeposit(t.instanceId,note):API.rejectDaily(t.instanceId,note);
-      rp.then(function(r){ if(r&&r.ok){ closeModal(); toast(isAtt?'Attendance rejected':isDep?'Deposit rejected':'Entry rejected — the sender has been notified'); if(window.renderMyTasks) window.renderMyTasks(); else paintList(); } else { toast((r&&r.error)||'Could not reject',true); rj.disabled=false; } });
+      rp.then(function(r){ if(r&&r.ok){ closeModal(); toast(isAtt?'Attendance rejected':isDep?'Deposit rejected':isLeave?'Leave rejected — the applicant has been notified':'Entry rejected — the sender has been notified'); if(window.renderMyTasks) window.renderMyTasks(); else paintList(); } else { toast((r&&r.error)||'Could not reject',true); rj.disabled=false; } });
     };
     if(isDaily){
       API.getDaily(t.instanceId).then(function(r){ var box=document.getElementById('tdDaily'); if(!box) return; if(r&&r.ok&&r.entry){ box.outerHTML=dailyPanelHtml(r.entry); } else { box.textContent=(r&&r.error)||'Could not load entry.'; } });
@@ -535,7 +545,10 @@
       FUP.forEach(function(f){
         if(br && String(f.branchId)!==String(br)) return;
         if(f.kind==='dailycash' && String(tbn(f.branchId)||'').toUpperCase().indexOf('DIGITAL')>=0) return;   // DIGITAL has no daily cash business
-        items.push({kind:(f.kind==='dailycash'?'dc':'att'), fu:f, id:f.fuKey, title:f.title, name:f.name, phone:f.phone, branchId:f.branchId,
+        /* v272: leave + training joined daily cash and attendance as auto follow-ups. The kind map
+           replaces the old two-way ternary so adding a sixth kind is one line, not another nested ?:. */
+        var KMAP={dailycash:'dc', attendance:'att', leave:'lv', training:'tr'};
+        items.push({kind:(KMAP[f.kind]||'att'), fu:f, id:f.fuKey, title:f.title, name:f.name, phone:f.phone, branchId:f.branchId,
           when:f.detail||'', sortKey:'0000'+(f.date||''), date:f.date, state:f.state});
       });
       /* v246: a late punch-in is merged into the row of anyone who ALSO has overdue work, so the PC sees
@@ -561,7 +574,9 @@
        dc/att follow-ups → stored in PC_Followups as before */
     function openCompleteItem(i){
       if(!i) return;
-      var hint = i.kind==='dc' ? 'The entry itself is still verified by Accounts in Accounts → Daily Entry. If an uploaded report stays unverified for 3 hours it comes back here automatically.'
+      var hint = i.kind==='lv' ? 'The decision itself still happens in Leave → Approvals (or by opening the approval task). A request left pending for 24 hours comes back here automatically.'
+        : i.kind==='tr' ? 'The lesson still has to be watched and the quiz passed by '+(i.name||'the employee')+' in Training. The row clears itself the moment they pass.'
+        : i.kind==='dc' ? 'The entry itself is still verified by Accounts in Accounts → Daily Entry. If an uploaded report stays unverified for 4 hours, or a rejected one is not corrected within 24 hours, it comes back here automatically.'
         : i.kind==='att' ? 'Attendance approval still happens on the Attendance → Approve screen. If a punch stays unapproved for 24 hours it comes back here automatically.'
         : i.kind==='task' ? 'This records that you have informed '+(i.name||'the owner')+' and removes the row from this monitor. The task stays open in their My Tasks until they actually complete it.'
         : 'This records that you chased '+(i.name||'the owner')+' and removes the row from this monitor. The item stays on their calendar until they close it.';
@@ -610,6 +625,7 @@
       var all = EMP ? base.filter(function(i){ return i.name===EMP; }) : base;
       var tasks=all.filter(function(i){return i.kind==='task';}), sch=all.filter(function(i){return i.kind==='sch';});
       var dc=all.filter(function(i){return i.kind==='dc';}), att=all.filter(function(i){return i.kind==='att';});
+      var lv=all.filter(function(i){return i.kind==='lv';}), tr=all.filter(function(i){return i.kind==='tr';});
       var staff={}; all.forEach(function(i){ staff[i.name]=1; });
       var lateN=all.filter(function(i){ return i.late || (i.kind==='att' && i.state==='late'); }).length;
       document.getElementById('tmKpis').innerHTML=
@@ -617,24 +633,35 @@
         '<div class="kpi" style="background:#f1effc"><div class="n" style="color:#6f63d6">'+sch.length+'</div><div class="l">Missed schedule</div></div>'+
         '<div class="kpi" style="background:#fdf0e9"><div class="n" style="color:#993C1D">'+lateN+'</div><div class="l">Late in</div></div>'+
         '<div class="kpi" style="background:#fff7e6"><div class="n" style="color:#b08900">'+Object.keys(staff).length+'</div><div class="l">People to chase</div></div>';
-      var fdef=[['all','All ('+all.length+')'],['task','Tasks ('+tasks.length+')'],['sch','Schedule ('+sch.length+')'],['dc','Daily cash ('+dc.length+')'],['att','Attendance ('+att.length+')']];
+      var fdef=[['all','All ('+all.length+')'],['task','Tasks ('+tasks.length+')'],['sch','Schedule ('+sch.length+')'],['dc','Daily cash ('+dc.length+')'],['att','Attendance ('+att.length+')'],['lv','Leave ('+lv.length+')'],['tr','Training ('+tr.length+')']];
       document.getElementById('tmFilt').innerHTML=fdef.map(function(f){ return '<button data-f="'+f[0]+'" class="'+(FILT===f[0]?'on':'')+'">'+f[1]+'</button>'; }).join('');
       document.querySelectorAll('#tmFilt button').forEach(function(b){ b.onclick=function(){ FILT=b.getAttribute('data-f'); paint(); }; });
-      var list = FILT==='task'?tasks : FILT==='sch'?sch : FILT==='dc'?dc : FILT==='att'?att : all;
+      var BUCK={task:tasks, sch:sch, dc:dc, att:att, lv:lv, tr:tr};
+      var list = BUCK[FILT] || all;
       var box=document.getElementById('tmList');
       if(!list.length){ box.innerHTML='<div class="empty">Nothing overdue right now. 🎉</div>'; return; }
       box.innerHTML=list.map(function(i,idx){
         var ph=String(i.phone||'').replace(/\D/g,'');
-        var isFu=(i.kind==='dc'||i.kind==='att');
+        var isFu=(i.kind==='dc'||i.kind==='att'||i.kind==='lv'||i.kind==='tr');   // v272: leave + training are follow-ups too
         var msg=encodeURIComponent('Reminder from Nakoda: '+(i.kind==='task'?'please complete your task “'+i.title+'” — it is overdue.'
           :i.kind==='sch'?'please attend/close your scheduled item “'+i.title+'” — it is overdue.'
-          :i.kind==='dc'?(i.state==='verify'?'the daily cash report is waiting for verification ('+i.title+').':'please enter the daily cash report — '+i.title+'.')
+          :i.kind==='dc'?(i.state==='verify'?'the daily cash report is waiting for verification ('+i.title+').'
+            :i.state==='reject'?'the daily cash report was rejected and is still not corrected ('+i.title+'). Please re-upload it.'
+            :'please enter the daily cash report — '+i.title+'.')
+          :i.kind==='lv'?(i.state==='unmarked'?'an approved leave is not showing on attendance ('+i.title+'). Please correct it.'
+            :'a leave request is still waiting for your decision ('+i.title+'). Please approve or reject it.')
+          :i.kind==='tr'?('your training “'+String(i.title||'').replace(/^Training overdue — /,'')+'” is overdue. Please finish the video and quiz.')
           :i.state==='late'?('you punched in late today ('+String(i.title||'').replace(/^Punched in late - /,'')+'). Please be on time.')
           :'please punch in your attendance — it is past your shift start.'));
         var chip=i.kind==='task'?'<span class="tm-chip task">TASK</span>'
                 :i.kind==='sch'?'<span class="tm-chip sch">SCHEDULE</span>'
-                :i.kind==='dc'?'<span class="tm-chip dc">DAILY CASH</span>':'<span class="tm-chip attc">ATTENDANCE</span>';
+                :i.kind==='dc'?'<span class="tm-chip dc">DAILY CASH</span>'
+                :i.kind==='lv'?'<span class="tm-chip lvc">LEAVE</span>'
+                :i.kind==='tr'?'<span class="tm-chip trc">TRAINING</span>':'<span class="tm-chip attc">ATTENDANCE</span>';
         if(isFu && i.state==='verify') chip+=' <span class="tm-chip ver">VERIFY OVERDUE</span>';
+        if(i.kind==='dc' && i.state==='reject') chip+=' <span class="tm-chip ver">NOT RE-UPLOADED</span>';
+        if(i.kind==='lv' && i.state==='unmarked') chip+=' <span class="tm-chip ver">NOT ON ATTENDANCE</span>';
+        if(i.kind==='tr' && i.state==='escalated') chip+=' <span class="tm-chip ver">ESCALATED</span>';
         if(isFu && i.state==='late') chip+=' <span class="tm-chip late">LATE IN</span>';
         if(i.late) chip+=' <span class="tm-chip late">LATE IN '+esc(i.late.lateAt||'')+' · '+esc(String(i.late.lateMin||''))+'m</span>';
         return '<div class="tm-row">'+
