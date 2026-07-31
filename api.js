@@ -458,6 +458,7 @@
     confirmAbsent:function(rows){ return call('confirmAbsent',{token:getToken(),rows:rows||[]}); },
     listPayslips:function(m,b){ return call('listPayslips',{token:getToken(),month:m,branch:b}); },
     myPayslip:function(m){ return call('myPayslip',{token:getToken(),month:m}); },
+    myPayHistory:function(n){ return call('myPayHistory',{token:getToken(),months:n||6}); },
     saveDaily:function(d){ return call('saveDaily',{token:getToken(),data:d}); },
     listDaily:function(b,ym){ return call('listDaily',{token:getToken(),branch:b,ym:ym}); },
     getDaily:function(id){ return call('getDaily',{token:getToken(),dayId:id}); },
