@@ -57,12 +57,16 @@
     createPayRequest:1,setPayRequest:1,
     saveSection:1,deleteSection:1,saveVideo:1,deleteVideo:1,submitQuiz:1,saveAsset:1,deleteAsset:1,
     login:1,validate:1,logout:1,uploadFile:1,importOldCards:1,attachSelfie:1,waTest:1,waSendCard:1,saveWaTemplate:1,waTestTemplate:1,
-    submitSuggestion:1,replySuggestion:1,saveFixedAsset:1,deleteFixedAsset:1,completeFollowup:1};
+    submitSuggestion:1,replySuggestion:1,saveFixedAsset:1,deleteFixedAsset:1,completeFollowup:1,
+    nfMarkRead:1,nfMarkAllRead:1,nfRegisterPush:1,nfUnregisterPush:1};
   /* Writes that already do their own optimistic queueing inside the method (don't double-queue here). */
   var SELF_QUEUE={createEmployee:1,updateEmployee:1,setStatus:1,issueCard:1,renewCard:1,cancelCard:1,markCardSent:1,markCardActivated:1,
     createTask:1,updateTask:1,setTaskStatus:1,deleteTask:1,createCalEntry:1,updateCalEntry:1,startInstance:1,advanceStage:1,attachSelfie:1};
   /* Writes that MUST stay online (auth, server-computed, exact-time, bulk). */
-  var NOQUEUE={login:1,validate:1,logout:1,changePassword:1,resetPassword:1,checkIn:1,checkOut:1,runPayroll:1,approvePayroll:1,confirmAbsent:1,uploadFile:1,importOldCards:1,submitQuiz:1,waTest:1,waSendCard:1,saveWaTemplate:1,waTestTemplate:1};
+  var NOQUEUE={login:1,validate:1,logout:1,changePassword:1,resetPassword:1,checkIn:1,checkOut:1,runPayroll:1,approvePayroll:1,confirmAbsent:1,uploadFile:1,importOldCards:1,submitQuiz:1,waTest:1,waSendCard:1,saveWaTemplate:1,waTestTemplate:1,
+    /* A push token is only meaningful to the server that is live right now — queueing a stale
+       one to replay hours later would register a subscription the browser may already have rotated. */
+    nfRegisterPush:1,nfUnregisterPush:1};
   /* ---------------- ATTACHMENTS ----------------------------------------------------
      A phone photo of a report is 4-8 MB. Sent as base64 it grows by a third, so ~10 MB was
      going up a branch connection against a hard 60-second abort — the request was killed
@@ -530,6 +534,17 @@
     cachedTasksFor:function(owner){ return kvGet('tasksfor_'+owner); },
     listTasksFor:function(owner){ return call('listTasksFor',{token:getToken(),ownerEmpId:owner}).then(function(r){ if(r.ok) kvSet('tasksfor_'+owner,r.tasks); return r; }).catch(function(){ return kvGet('tasksfor_'+owner).then(function(t){ return {ok:true,tasks:t||[],offline:true}; }); }); },
     branchAssignees:function(branchId,includeRole,allBranches){ var k='brassign_'+(allBranches?'all':(branchId||'me'))+(includeRole?('_'+includeRole):''); return call('branchAssignees',{token:getToken(),branchId:branchId||'',includeRole:includeRole||'',allBranches:allBranches?1:''}).then(function(r){ if(r&&r.ok) kvSet(k,r.employees); return r; }).catch(function(){ return kvGet(k).then(function(v){ return {ok:true,employees:v||[],offline:true}; }); }); },
+
+    /* ---------- notifications (v274) ----------
+       Reads go through call() so they inherit cache-first-when-offline for free:
+       the bell keeps showing the last known list with no connection. */
+    nfList:function(limit){ return call('nfList',{token:getToken(),limit:limit||50}); },
+    nfCount:function(){ return call('nfCount',{token:getToken()}); },
+    nfMarkRead:function(ids){ return call('nfMarkRead',{token:getToken(),notifIds:ids||[]}); },
+    nfMarkAllRead:function(){ return call('nfMarkAllRead',{token:getToken()}); },
+    nfRegisterPush:function(fcmToken,platform,ua){ return call('nfRegisterPush',{token:getToken(),fcmToken:fcmToken,platform:platform||'',ua:ua||''}); },
+    nfUnregisterPush:function(fcmToken){ return call('nfUnregisterPush',{token:getToken(),fcmToken:fcmToken}); },
+    nfPushConfig:function(){ return call('nfPushConfig',{token:getToken()}); },
 
     /* fire-and-forget cache refresh */
     refreshEmployees:function(){ return API.listEmployees().catch(function(){}); },

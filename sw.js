@@ -4,7 +4,7 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v273';
+var CACHE_VERSION = 'nakoda-mis-v274';
 var SHELL = [
   './',
   './index.html',
@@ -40,6 +40,7 @@ var SHELL = [
   './kpiadmin.js',
   './qc.js',
   './extras.js',
+  './notifications.js',
   './icons/login-logo.png',
   './icons/logo-white.png',
   './icons/icon-192.png',
@@ -94,6 +95,47 @@ self.addEventListener('fetch', function(e){
         return cached;
       });
       return cached || net;
+    })
+  );
+});
+
+/* ============================================================
+ *  PUSH  (v274)
+ *  FCM delivers here as a JSON body. We render it, and on tap we focus an
+ *  already-open tab rather than spawning a second one — matching how a native
+ *  app behaves, and avoiding two live copies of the PWA fighting over state.
+ * ============================================================ */
+self.addEventListener('push', function(e){
+  var payload = {};
+  try{ payload = e.data ? e.data.json() : {}; }catch(err){
+    try{ payload = { notification:{ title:'Nakoda MIS', body:e.data.text() } }; }catch(e2){}
+  }
+  var n = payload.notification || {};
+  var d = payload.data || {};
+  var title = n.title || 'Nakoda MIS';
+  var opts = {
+    body: n.body || '',
+    icon: './icons/icon-192.png',
+    badge: './icons/favicon.png',
+    tag: d.notifId || n.tag || 'nakoda',
+    renotify: true,
+    data: { url: d.url || '#tasks', notifId: d.notifId || '' }
+  };
+  e.waitUntil(self.registration.showNotification(title, opts));
+});
+
+self.addEventListener('notificationclick', function(e){
+  e.notification.close();
+  var target = (e.notification.data && e.notification.data.url) || '#tasks';
+  e.waitUntil(
+    self.clients.matchAll({ type:'window', includeUncontrolled:true }).then(function(list){
+      for(var i=0;i<list.length;i++){
+        if(list[i].url.indexOf(self.registration.scope) === 0 && 'focus' in list[i]){
+          list[i].postMessage({ type:'NOTIFICATION_CLICK', url:target });
+          return list[i].focus();
+        }
+      }
+      if(self.clients.openWindow) return self.clients.openWindow('./' + target);
     })
   );
 });
