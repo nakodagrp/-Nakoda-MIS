@@ -4,14 +4,24 @@
  *  window.renderFinDash(host, branch)
  * ============================================================ */
 (function(){
-  function ym(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+  /* v277: follow the dashboard month picker instead of hard-coding "now". This block used to ignore
+     the header entirely, so picking June left the finance sheet showing July. */
+  function ym(){
+    if(window.dashYm) return window.dashYm();
+    var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  }
+  function ymText(s){
+    var M=['January','February','March','April','May','June','July','August','September','October','November','December'];
+    var m=Number(String(s).slice(5,7)); return (M[m-1]||String(s))+' '+String(s).slice(0,4);
+  }
   function r(n){ return '₹'+Math.round(n||0).toLocaleString('en-IN'); }
   window.renderFinDash=function(host,branch){
     if(!host) return;
     var perm=window.S&&S.perms, role=(window.S&&S.user&&S.user.Role)||'';
     var ok=perm&&(perm.canViewAll||perm.level==='BRANCH_MGR'||perm.level==='BRANCH_VIEW'||['Accounts','Operations Manager','Director'].indexOf(role)>=0);
     if(!ok){ host.innerHTML=''; return; }
-    API.financeDashboard(ym(),branch||'').then(function(res){
+    var selYm=ym();
+    API.financeDashboard(selYm,branch||'').then(function(res){
       if(!res||!res.ok){ host.innerHTML=''; return; }
       var rows=res.rows||[], cats=res.categories||[];
       if(!rows.length){ host.innerHTML=''; return; }
@@ -28,7 +38,7 @@
         '<td style="font-weight:700;color:'+(x.net>=0?'#1a7f37':'#DA1017')+'">'+r(x.net)+'</td>'+
         '<td style="color:#1a7f37">'+r(x.revenue)+'</td><td>'+r(x.b2c)+'</td><td>'+r(x.b2d)+'</td><td>'+r(x.b2b)+'</td><td>'+r(x.gross)+'</td>'+
         cats.map(function(c){ return '<td style="color:#A32D2D">'+r((x.cat&&x.cat[c])||0)+'</td>'; }).join('')+'</tr>'; }).join('');
-      host.innerHTML='<div class="section-label">Finance this month · by branch</div>'+rec+
+      host.innerHTML='<div class="section-label">Finance · '+esc(ymText(selYm))+' · by branch</div>'+rec+
         '<div class="card"><div class="table-wrap swipe"><table><thead>'+head+'</thead><tbody>'+body+'</tbody></table></div></div>';
     }).catch(function(){ host.innerHTML=''; });
   };

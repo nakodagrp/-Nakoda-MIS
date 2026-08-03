@@ -4,7 +4,7 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v277';   /* v277 = release v276: six changes across accounts, cards and training */
+var CACHE_VERSION = 'nakoda-mis-v279';   /* v279: one month picker drives the whole dashboard — inline card-table picker removed */
 var SHELL = [
   './',
   './index.html',

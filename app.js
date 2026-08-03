@@ -247,7 +247,11 @@ function bindApp(){
   var efp=$('empFormPdfBtn'); if(efp) efp.addEventListener('click', downloadEmpFormPdf);
   $('dashRefresh').addEventListener('click', loadDashboard);
   $('dashBranch').addEventListener('change', renderDashboard);
-  var dm=$('dashMonth'); if(dm) dm.addEventListener('change', loadDashboard);
+  /* v277: repaint instantly from data already in memory (cards, employees — the card snapshot needs no
+     server call), THEN refetch the month's business figures in the background. Without the first call
+     the page sits on last month's numbers for the length of a round trip, and offline it would never
+     update at all. */
+  var dm=$('dashMonth'); if(dm) dm.addEventListener('change', function(){ renderDashboard(); loadDashboard(); });
   var deb; $('empSearch').addEventListener('input', function(){ clearTimeout(deb); deb=setTimeout(renderEmpTable,200); });
   $('filterBranch').addEventListener('change', renderEmpTable);
   $('filterStatus').addEventListener('change', renderEmpTable);
@@ -461,6 +465,26 @@ function dtToggle(t){
 }
 window.renderDashTasks=renderDashTasks;
 
+/* v277 — ONE month for the whole dashboard.
+   Every month-scoped block on this page reads dashYm(); nothing keeps its own copy. Blocks that are
+   about "right now" (My Tasks chips, department health, recently added staff) deliberately ignore it —
+   "overdue" inside a month that closed weeks ago is a meaningless number. */
+function dashYm(){
+  var dm=$('dashMonth');
+  if(dm && !dm.value) dm.value=todayD().slice(0,7);
+  return (dm&&dm.value)||todayD().slice(0,7);
+}
+function ymLabel(ym){
+  var M=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var s=String(ym||''), y=s.slice(0,4), m=Number(s.slice(5,7));
+  return (M[m-1]||s)+' '+y;
+}
+function ymLastDay(ym){
+  var y=Number(String(ym).slice(0,4)), m=Number(String(ym).slice(5,7));
+  var d=new Date(y, m, 0);
+  return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
+}
+window.dashYm=dashYm; window.ymLastDay=ymLastDay;
 function loadDashboard(){
   var u=S.user||{};
   $('greetHello').textContent=greetWord()+', '+(u.FullName||'');
@@ -507,8 +531,7 @@ function loadDashboard(){
   }
   /* Daily business figures (collection / patients / tests) for the SELECTED month, used by the
      "Business (MTD)" KPI and the By-branch table. Only roles that can see branch business fetch it. */
-  var dm=$('dashMonth'); if(dm && !dm.value) dm.value=todayD().slice(0,7);
-  var ym=(dm&&dm.value)||todayD().slice(0,7);
+  var ym=dashYm();
   if(S.perms && (S.perms.canViewAll || S.perms.level==='BRANCH_MGR' || S.perms.level==='BRANCH_VIEW')){
     API.listDaily('', ym).then(function(r){ if(r&&r.ok){ DASH.daily=r.daily||[]; renderDashboard(); } }).catch(function(){});
     /* Verified bank deposits shift a branch's Cash → Bank/UPI on the by-branch table (total business unchanged). */
@@ -659,7 +682,10 @@ function renderDashboard(){
      "Live at month end" is DERIVED rather than read from status — issued on or before the month end,
      not expired by then, not cancelled. That is what makes an earlier month reproducible; the `status`
      field only ever describes today. */
-  var cardYm=DASH.cardYm||(function(){ var d=new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2); })();
+  /* v277: the card snapshot month is the DASHBOARD month picker in the header — there is no longer a
+     second picker inside this section. Two independent pickers showing the same month by coincidence
+     read as a bug: changing one left the other behind. One control, one month, whole page. */
+  var cardYm=dashYm();
   function monthEndOf(ym){ var y=Number(ym.slice(0,4)), m=Number(ym.slice(5,7)); return new Date(y, m, 0, 23, 59, 59); }
   function cd10(v){ if(!v) return ''; var d=new Date(v); return isNaN(d)?String(v).slice(0,10):(d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)); }
   var cardEnd=monthEndOf(cardYm);
@@ -684,14 +710,12 @@ function renderDashboard(){
     }).join('');
     var totRow='<tr><td><b>Total</b></td><td><b>'+issTot+'</b></td>'+typeList.map(function(t){return '<td><b>'+colTot[t]+'</b></td>';}).join('')+'<td><b>'+grand+'</b></td></tr>';
     html+='<div class="section-label" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">Membership cards \u00b7 by branch &amp; type'+
-      '<input type="month" id="cardYm" value="'+esc(cardYm)+'" style="font-size:12px;padding:3px 7px;border:1px solid #ddd;border-radius:6px">'+
-      '<span style="font-size:11px;color:#888;font-weight:400">Issued = sold that month \u00b7 type columns = live at month end</span></div>'+
+      '<span style="font-size:11px;color:#888;font-weight:400">'+esc(ymLabel(cardYm))+' \u00b7 issued = sold that month \u00b7 type columns = live at month end</span></div>'+
       '<div class="card"><div class="table-wrap swipe"><table><thead><tr><th>Branch</th><th>Issued</th>'+typeList.map(function(t){return '<th>'+esc(t)+'</th>';}).join('')+'<th>Active total</th></tr></thead><tbody>'+bodyRows+totRow+'</tbody></table></div></div>';
   }
   html+='<div id="finDash"></div><div id="mktDash"></div>';
   $('dashExtra').innerHTML=html;
-  /* v276: the month picker re-renders the dashboard against the chosen snapshot month. */
-  (function(){ var cy=document.getElementById('cardYm'); if(cy) cy.onchange=function(){ DASH.cardYm=cy.value; renderDashboard(); }; })();
+  /* v277: the inline cardYm picker is gone — the header month drives this section (see bindApp). */
   if(window.renderStarBlock){ try{ window.renderStarBlock(document.getElementById('starBlock')); }catch(_){} }
   if(window.renderQuickLog){ try{ window.renderQuickLog(document.getElementById('quickLog')); }catch(_){} }
   var dashBr=(S.perms&&S.perms.canViewAll)?(($('dashBranch')||{}).value||''):'';

@@ -5,6 +5,18 @@
 (function(){
   function $id(i){ return document.getElementById(i); }
   function monthFrom(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01'; }
+  /* v277: the dashboard marketing block follows the header month picker. For the current month the
+     window still ends today (month-to-date); for a past month it ends on that month's last day. */
+  function dashRange(){
+    var ym=window.dashYm?window.dashYm():'', t=todayD();
+    if(!ym) return [monthFrom(), t];
+    var end=window.ymLastDay?window.ymLastDay(ym):t;
+    return [ym+'-01', (end>t?t:end)];
+  }
+  function ymText(s){
+    var M=['January','February','March','April','May','June','July','August','September','October','November','December'];
+    var m=Number(String(s).slice(5,7)); return (M[m-1]||String(s))+' '+String(s).slice(0,4);
+  }
   function todayD(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
   function money(n){ return '₹'+(Math.round(n||0)).toLocaleString('en-IN'); }
   function branches(){ return (window.S&&S.meta&&S.meta.branches)||[]; }
@@ -116,7 +128,8 @@
     var perm=window.S&&S.perms, role=(window.S&&S.user&&S.user.Role)||'';
     var ok=perm&&(perm.canViewAll||perm.level==='BRANCH_MGR'||['Operations Manager','Marketing Manager','Director'].indexOf(role)>=0);
     if(!ok){ host.innerHTML=''; return; }
-    API.listCampaigns(monthFrom(),todayD(),branch||'').then(function(r){
+    var rng=dashRange(), selLbl=ymText(rng[0]);
+    API.listCampaigns(rng[0],rng[1],branch||'').then(function(r){
       if(!r||!r.ok){ host.innerHTML=''; return; }
       var rows=r.rows||[]; if(!rows.length){ host.innerHTML=''; return; }
       var VIEW='source';
@@ -124,7 +137,7 @@
         var key=VIEW==='branch'?'branchName':'source', agg={}, T={amt:0,ld:0,cu:0};
         rows.forEach(function(x){ var k=x[key]||'—'; var a=agg[k]||(agg[k]={k:k,amt:0,ld:0,cu:0}); a.amt+=x.amount;a.ld+=x.leads;a.cu+=x.customers; T.amt+=x.amount;T.ld+=x.leads;T.cu+=x.customers; });
         var list=Object.keys(agg).map(function(k){return agg[k];}).sort(function(a,b){return b.amt-a.amt;});
-        host.innerHTML='<div class="section-label" style="display:flex;align-items:center;gap:8px">By branch · marketing this month<div style="flex:1"></div>'+
+        host.innerHTML='<div class="section-label" style="display:flex;align-items:center;gap:8px">By branch · marketing · '+esc(selLbl)+'<div style="flex:1"></div>'+
           '<span class="mkDT" data-v="branch" style="cursor:pointer;font-size:11px;font-weight:600;color:'+(VIEW==='branch'?'#DA1017':'#999')+'">Branch</span><span style="color:#ccc">·</span>'+
           '<span class="mkDT" data-v="source" style="cursor:pointer;font-size:11px;font-weight:600;color:'+(VIEW==='source'?'#DA1017':'#999')+'">Source</span></div>'+
           '<div class="card"><div class="table-wrap swipe"><table><thead><tr><th>'+(VIEW==='branch'?'Branch':'Source')+'</th><th>Spend</th><th>Leads</th><th>CPL</th><th>Customers</th><th>CAC</th><th>Conv %</th></tr></thead><tbody>'+
