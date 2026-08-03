@@ -84,7 +84,12 @@
   }
   var VQ=[];
   function openVideoForm(v,secs){ v=v||{}; VQ=(v.questions&&v.questions.length)?v.questions.map(function(q){return {q:q.q,options:(q.options||['','','','']).slice(),answer:Number(q.answer)||0};}):[];
-    var roles=(S.meta&&S.meta.roles)||[]; var vr=String(v.roles||'').split(',').map(function(x){return x.trim();});
+    /* v276 (task 5): Partner and Consultant are not trained. They are dropped from the picker entirely
+       rather than shown greyed out — a disabled chip invites someone to try. The server strips them
+       again on save and blocks them on read, so an old cached copy of this file cannot get past it. */
+    var TRAIN_NO_ROLES=['Partner','Consultant'];
+    var roles=((S.meta&&S.meta.roles)||[]).filter(function(r){ return TRAIN_NO_ROLES.indexOf(String(r.Role||r))<0; });
+    var vr=String(v.roles||'').split(',').map(function(x){return x.trim();}).filter(function(x){ return TRAIN_NO_ROLES.indexOf(x)<0; });
     var body='<div class="grid2"><div class="field full"><label>Title</label><input id="vTitle" class="in" value="'+esc(v.title||'')+'"></div>'+
       '<div class="field"><label>Section</label><select id="vSec" class="in">'+secs.map(function(s){return '<option value="'+esc(s.sectionId)+'"'+(s.sectionId===v.sectionId?' selected':'')+'>'+esc(s.name)+'</option>';}).join('')+'</select></div>'+
       '<div class="field"><label>Pass mark %</label><input id="vPass" class="in" type="number" value="'+(v.passMark||70)+'"></div>'+

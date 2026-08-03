@@ -13,7 +13,7 @@
   /* v275: the daily cash report is now filed CENTRALLY by the accountant (Mayuri) for every branch,
      with Director/Admin as a fallback. Mirrors isDailyFiler_/accDaily_ in Code.gs — the server is the
      real check, this only decides whether the "+ Daily entry" button is drawn. */
-  function canDaily(){ return lvl()==='SUPER'||lvl()==='HR_ADMIN'||/mayuri/i.test((S.user&&S.user.FullName)||''); }
+  function canDaily(){ return lvl()==='SUPER'||/mayuri/i.test((S.user&&S.user.FullName)||''); }   /* v276: SUPER = Director, Admin, MIS. HR dropped. */
   /* v275: EXPENSES are unchanged and stay with the branch. This used to reuse canDaily(); it is now its
      own function so tightening the daily cash report does not also hide the expense button from every
      branch. Mirrors accExpense_ in Code.gs. */
@@ -24,7 +24,7 @@
   function renderAccounts(){
     var v=$id('page-accounts'), brs=(S.meta&&S.meta.branches)||[];
     if(!ACC.branch && !canViewAll()) ACC.branch=(S.user&&S.user.Branch)||'';
-    var tabs=isInvestor()?[['finance','Finance Sheet']]:[['finance','Finance Sheet'],['daily','Daily Entry'],['invoices','Invoices'],['expenses','Expenses'],['deposit','Bank Deposit'],['bank','Bank &amp; Reconcile'],['payout','Payout file']];
+    var tabs=isInvestor()?[['finance','Finance Sheet']]:[['finance','Finance Sheet'],['daily','Daily Entry'],['invoices','Invoices'],['expenses','Expenses'],['deposit','Bank Deposit'],['bank','Bank &amp; Reconcile'],['capital','Capital'],['payout','Payout file']];
     v.innerHTML='<div class="page-head"><h1>Accounts</h1></div>'+
       '<div class="acc-top">'+
         (canViewAll()?'<select class="in" id="accBranch" style="max-width:170px"><option value="">All branches</option>'+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'"'+(b.BranchID===ACC.branch?' selected':'')+'>'+esc(b.BranchName)+'</option>';}).join('')+'</select>':'<span class="acc-br">'+esc(branchName(ACC.branch))+'</span>')+
@@ -39,7 +39,7 @@
     paintTab();
   }
   function paintTab(){ var b=$id('accBody'); if(!b) return; b.innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>';
-    if(ACC.tab==='finance') loadFinance(); else if(ACC.tab==='daily') loadDaily(); else if(ACC.tab==='invoices') loadInvoices(); else if(ACC.tab==='deposit') loadDeposits(); else if(ACC.tab==='bank') loadBank(); else if(ACC.tab==='payout') loadPayout(); else loadExpenses(); }
+    if(ACC.tab==='finance') loadFinance(); else if(ACC.tab==='daily') loadDaily(); else if(ACC.tab==='invoices') loadInvoices(); else if(ACC.tab==='deposit') loadDeposits(); else if(ACC.tab==='bank') loadBank(); else if(ACC.tab==='capital') loadCapital(); else if(ACC.tab==='payout') loadPayout(); else loadExpenses(); }
 
   /* ---- Finance Sheet ---- */
   function loadFinance(){ API.financeSheet(ACC.branch, ACC.ym).then(function(r){ var box=$id('accBody'); if(!box) return; if(!r||!r.ok){ box.innerHTML='<div class="empty">'+esc((r&&r.error)||'No data')+'</div>'; return; } box.innerHTML=finHtml(r); $id('finPdf').onclick=function(){ finPdf(r); }; }); }
@@ -175,19 +175,19 @@
       '<div class="field"><label>Date</label><input id="dlDate" class="in" type="date" value="'+todayLocal()+'"></div>'+
       '<div class="field"><label>Patients served</label><input id="dlPat" class="in" type="number" inputmode="numeric"></div></div>'+
       incBlock('B2c','B2C income (walk-in / patient)','')+
-      '<div class="dl-blk"><div class="dl-blk-h">Other income (B2B — credit, billed monthly)</div>'+
-        '<div class="field"><label>Amount (₹)</label><input id="dlOther" class="in dl-amt" type="number" inputmode="numeric"></div>'+
-        '<div style="font-size:11px;color:#888;margin-top:4px">At month-end this is replaced by your B2B invoice total.</div>'+
-        '<label class="dl-file"><span id="dlOtherDocSt">📎 Attach Other document (PDF)</span><input id="dlOtherDoc" type="file" accept="application/pdf,image/*" hidden></label></div>'+
-      '<div class="dl-total"><span>Total business (Cash + Bank + Other)</span><b id="dlTotal">₹0</b></div>'+
+      /* v276 (task 3): the B2B block — amount + its PDF attach — is removed. B2B is credit business
+         billed monthly and is already captured by the B2B invoices, so entering it here duplicated it.
+         Historic entries keep whatever `other` they were saved with; only new entries drop it, so no
+         past month's figures move. */
+      '<div class="dl-total"><span>Total business (cash + bank)</span><b id="dlTotal">₹0</b></div>'+
       '<div class="grid2"><div class="field"><label>Tests done (count)</label><input id="dlTests" class="in" type="number" inputmode="numeric"></div>'+
       '<div class="field"><label>Tests Excel (.xlsx)</label><label class="dl-file"><span id="dlXlSt">📎 Attach Excel</span><input id="dlXl" type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden></label></div></div>'+
       '<div id="dlMsg"></div>';
-    openModal('Daily business entry', body, '<button class="btn" id="dlSave">Submit to Accountant</button>');
+    openModal('Daily business entry', body, '<button class="btn" id="dlSave">Submit</button>');   /* v276: there is no accountant to submit TO any more — she files it herself and it saves verified */
 
     var st={b2cDocUrl:'',b2dDocUrl:'',otherDocUrl:'',testXlUrl:''};
-    function recalc(){ var t=0; ['dlB2cCash','dlB2cBank','dlOther'].forEach(function(id){ t+=Number(($id(id)||{}).value)||0; }); $id('dlTotal').textContent='₹'+money(t); }
-    ['dlB2cCash','dlB2cBank','dlOther'].forEach(function(id){ var el=$id(id); if(el) el.addEventListener('input',recalc); });
+    function recalc(){ var t=0; ['dlB2cCash','dlB2cBank'].forEach(function(id){ t+=Number(($id(id)||{}).value)||0; }); $id('dlTotal').textContent='₹'+money(t); }
+    ['dlB2cCash','dlB2cBank'].forEach(function(id){ var el=$id(id); if(el) el.addEventListener('input',recalc); });
     /* API.upload resizes photos on the device, retries a dropped connection once and reports the
        real reason if it still fails — the old code sent the full-size photo and printed a fixed line. */
     function bindUpload(inputId,stEl,stKey,label){ var inp=$id(inputId); if(!inp) return; inp.onchange=function(){
@@ -198,7 +198,6 @@
               function(e){ s.innerHTML='<span style="color:#A32D2D">'+esc(e&&e.message?e.message:'Upload failed')+'</span> — tap to retry'; input.value=''; });
     }; }
     bindUpload('dlB2cDoc','dlB2cDocSt','b2cDocUrl');
-    bindUpload('dlOtherDoc','dlOtherDocSt','otherDocUrl');
     bindUpload('dlXl','dlXlSt','testXlUrl');
 
     $id('dlSave').onclick=function(){
@@ -206,7 +205,7 @@
       if(bsel && !bid){ $id('dlMsg').innerHTML='<div class="msg error">Please select a branch.</div>'; return; }
       this.disabled=true;
       API.saveDaily({branchId:bid,date:$id('dlDate').value,patients:$id('dlPat').value,tests:$id('dlTests').value,
-        b2cCash:$id('dlB2cCash').value,b2cBank:$id('dlB2cBank').value,b2dCash:0,b2dBank:0,other:$id('dlOther').value,expense:($id('dlExpense')||{}).value,
+        b2cCash:$id('dlB2cCash').value,b2cBank:$id('dlB2cBank').value,b2dCash:0,b2dBank:0,other:0,expense:($id('dlExpense')||{}).value,
         b2cDocUrl:st.b2cDocUrl,b2dDocUrl:st.b2dDocUrl,otherDocUrl:st.otherDocUrl,testXlUrl:st.testXlUrl}).then(function(r){ if(r&&r.ok){ closeModal(); toast('Saved'); loadDaily(); } else { $id('dlMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; var b=$id('dlSave'); if(b) b.disabled=false; } });
     };
   }
@@ -319,8 +318,8 @@
        v275: was canDaily(); split apart when the daily cash report narrowed to the accountant.
        CRM keeps the rest of this screen: they can still open it and read the expense list. */
     box.innerHTML=(canExpense()?'<div class="fin-actions"><button class="btn" id="exAdd">+ Expense / vendor bill</button></div>':'')+
-      '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Category</th><th>Party</th><th>Amount</th><th>Mode</th><th>Status</th><th>Reject</th></tr></thead><tbody>'+
-      (rows.length?rows.map(function(l){ var isPending=String(l.status)!=='approved'&&String(l.status)!=='rejected'; var statusCell=String(l.status)==='approved'?'<span style="display:inline-flex;align-items:center;gap:5px;background:#eaf7ef;color:#1a8f4c;font-size:12px;font-weight:600;padding:4px 12px;border-radius:20px">✓ approved</span>':String(l.status)==='rejected'?'<span style="display:inline-flex;align-items:center;gap:5px;background:#fdecec;color:#b23b3b;font-size:12px;font-weight:600;padding:4px 12px;border-radius:20px">✗ rejected</span>':(r.canVerify?'<button class="btn ghost sm" data-ap="'+esc(l.ledId)+'" style="color:#1a8f4c;border-color:#1a8f4c;font-weight:500">Approve</button>':'<span class="chip partial">pending</span>'); var rejectCell=(isPending&&r.canVerify)?'<button class="btn ghost sm" data-rj="'+esc(l.ledId)+'" style="color:#b23b3b;border-color:#b23b3b">Reject</button>':''; return '<tr><td>'+esc(fmtLedDate(l.date))+'</td><td>'+esc(l.category)+(l.billUrl?' <a href="'+esc(l.billUrl)+'" target="_blank" title="Bill">📎</a>':'')+(l.qrUrl?' <a href="'+esc(l.qrUrl)+'" target="_blank" title="QR code">▦</a>':'')+'</td><td>'+esc(l.party||'')+'</td><td>₹'+money(l.amount)+'</td><td>'+esc(l.mode)+'</td><td>'+statusCell+'</td><td>'+rejectCell+'</td></tr>'; }).join(''):'<tr><td class="empty" colspan="7">No entries this month.</td></tr>')+'</tbody></table></div>';
+      '<div class="table-wrap"><table><thead><tr><th>Branch</th><th>Date</th><th>Category</th><th>Party</th><th>Amount</th><th>Mode</th><th>Status</th><th>Reject</th></tr></thead><tbody>'+
+      (rows.length?rows.map(function(l){ var isPending=String(l.status)!=='approved'&&String(l.status)!=='rejected'; var statusCell=String(l.status)==='approved'?'<span style="display:inline-flex;align-items:center;gap:5px;background:#eaf7ef;color:#1a8f4c;font-size:12px;font-weight:600;padding:4px 12px;border-radius:20px">✓ approved</span>':String(l.status)==='rejected'?'<span style="display:inline-flex;align-items:center;gap:5px;background:#fdecec;color:#b23b3b;font-size:12px;font-weight:600;padding:4px 12px;border-radius:20px">✗ rejected</span>':(r.canVerify?'<button class="btn ghost sm" data-ap="'+esc(l.ledId)+'" style="color:#1a8f4c;border-color:#1a8f4c;font-weight:500">Approve</button>':'<span class="chip partial">pending</span>'); var rejectCell=(isPending&&r.canVerify)?'<button class="btn ghost sm" data-rj="'+esc(l.ledId)+'" style="color:#b23b3b;border-color:#b23b3b">Reject</button>':''; return '<tr><td>'+esc(branchName(l.branchId))+'</td><td>'+esc(fmtLedDate(l.date))+'</td><td>'+esc(l.category)+(l.billUrl?' <a href="'+esc(l.billUrl)+'" target="_blank" title="Bill">📎</a>':'')+(l.qrUrl?' <a href="'+esc(l.qrUrl)+'" target="_blank" title="QR code">▦</a>':'')+'</td><td>'+esc(l.party||'')+'</td><td>₹'+money(l.amount)+'</td><td>'+esc(l.mode)+'</td><td>'+statusCell+'</td><td>'+rejectCell+'</td></tr>'; }).join(''):'<tr><td class="empty" colspan="8">No entries this month.</td></tr>')+'</tbody></table></div>';
     var a=$id('exAdd'); if(a) a.onclick=openExpenseForm;
     function ledgerAction(ledId,act){ var url=(window.NAKODA_CONFIG&&window.NAKODA_CONFIG.API_URL)||''; var tok=''; try{tok=localStorage.getItem('nk_tok')||'';}catch(e){} return fetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'setLedger',token:tok,ledId:ledId,act:act}),redirect:'follow'}).then(function(r){return r.json();}); }
     box.querySelectorAll('[data-ap]').forEach(function(b){ b.onclick=function(){ b.textContent='Saving…'; b.disabled=true; ledgerAction(b.getAttribute('data-ap'),'approve').then(function(x){ if(x&&x.ok){ var td=b.parentNode; td.innerHTML='<span style="display:inline-flex;align-items:center;gap:5px;background:#eaf7ef;color:#1a8f4c;font-size:12px;font-weight:600;padding:4px 12px;border-radius:20px">✓ approved</span>'; var row=td.parentNode; var rjTd=row.cells[row.cells.length-1]; if(rjTd) rjTd.innerHTML=''; toast('Approved'); } else { b.textContent='Approve'; b.disabled=false; toast((x&&x.error)||'Failed',true); } }); }; });
@@ -349,7 +348,22 @@
 
   /* ---- Bank import + reconciliation ---- */
   var CLIENT_CODE='NA7776PAY';
-  var BANK_CATS=['B2C income','Other income','Vendor payment','Salary','Material Purchased','Rent','Light bill','Petrol','Professional fees','Miscellaneous','Bank charge','Outsourced Services','Marketing','Other'];
+  /* v276 (task 6) — three new options at the top of the list, where they are easy to reach.
+     CAPITAL: money the company or a partner puts in when a branch is short of cash, transferred back
+     once it is profitable. It is a loan, not turnover, so the server writes it with type 'capital' and
+     it never touches the P&L, the reconcile or the payout file. Direction comes from the statement's
+     own sign — a credit is money in, a debit is the transfer back — so there is one option each rather
+     than four, and nothing to mis-tag.
+     PRIOR-MONTH INCOME: received now, earned earlier. The row keeps its true bank date and carries a
+     separate posting month, so June billing that lands on 28 July is counted in June. */
+  var CAPITAL_CATS=['Company capital','Partner capital'];
+  var PRIOR_CAT='Income of previous month';
+  var BANK_CATS=['B2C income','Other income'].concat(CAPITAL_CATS,[PRIOR_CAT],
+    ['Vendor payment','Salary','Material Purchased','Rent','Light bill','Petrol','Professional fees','Miscellaneous','Bank charge','Outsourced Services','Marketing','Other']);
+  function isCapCat(c){ return CAPITAL_CATS.indexOf(String(c))>=0; }
+  function prevMonthOf(d){ var m=String(d||'').slice(0,7); if(!/^\d{4}-\d{2}$/.test(m)) return '';
+    var y=Number(m.slice(0,4)), mm=Number(m.slice(5,7))-1; if(mm<1){ mm=12; y--; }
+    return y+'-'+('0'+mm).slice(-2); }
   function parseCSV(text){ var lines=String(text).replace(/\r/g,'').split('\n'), out=[]; lines.forEach(function(ln){ if(ln==='') return; var row=[],cur='',q=false; for(var i=0;i<ln.length;i++){ var c=ln[i]; if(c==='"'){ if(q&&ln[i+1]==='"'){cur+='"';i++;} else q=!q; } else if(c===','&&!q){ row.push(cur);cur=''; } else cur+=c; } row.push(cur); out.push(row); }); return out; }
   function num(v){ return Number(String(v==null?'':v).replace(/[, ]/g,''))||0; }
   function normalizeBank(grid){
@@ -411,14 +425,118 @@
   }
   function paintBankTable(brs){
     var wrap=$id('bkTableWrap');
-    wrap.innerHTML='<div style="font-size:12px;color:#666;margin:8px 0">'+BANKROWS.length+' transactions — tag Branch &amp; Category, then save.</div>'+
-      '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Branch</th><th>Category</th></tr></thead><tbody>'+
-      BANKROWS.map(function(r,i){ return '<tr><td>'+esc(r.date)+'</td><td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(r.description)+'</td><td class="'+(r.drcr==='CR'?'cr':'dr')+'">'+(r.drcr==='CR'?'+':'-')+'₹'+money(r.amount)+'</td>'+
-        '<td><select class="mini2" data-br="'+i+'">'+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'"'+(b.BranchID===ACC.branch?' selected':'')+'>'+esc(b.BranchName)+'</option>';}).join('')+'</select></td>'+
-        '<td><select class="mini2" data-cat="'+i+'">'+BANK_CATS.map(function(c){return '<option>'+c+'</option>';}).join('')+'</select></td></tr>'; }).join('')+'</tbody></table></div>'+
+    /* v276: bulk tagging. A statement is 69 rows that are almost always the same branch, and setting
+       each one by hand was the slowest part of the month. Leaving a dropdown on "— leave as is —"
+       means that column is untouched, so branch can be set for everything without disturbing
+       categories anyone has already tagged. Individual rows stay editable afterwards. */
+    var bulk='<div class="bk-bulk" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#e6f1fb;border-radius:8px;padding:10px 12px;margin:8px 0">'+
+      '<span style="font-size:12px;color:#185fa5;font-weight:600">Set all '+BANKROWS.length+' rows</span>'+
+      '<select class="mini2" id="bkAllBr" style="min-width:120px"><option value="">— branch —</option>'+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'">'+esc(b.BranchName)+'</option>';}).join('')+'</select>'+
+      '<select class="mini2" id="bkAllCat" style="min-width:150px"><option value="">— category —</option>'+BANK_CATS.map(function(c){return '<option>'+esc(c)+'</option>';}).join('')+'</select>'+
+      '<button class="btn sm" id="bkApplyAll">Apply to all</button>'+
+      '<span style="font-size:11px;color:#5b7fa5">Blank = leave that column alone</span></div>';
+
+    wrap.innerHTML='<div style="font-size:12px;color:#666;margin:8px 0">'+BANKROWS.length+' transactions — tag Branch &amp; Category, then save.</div>'+bulk+
+      '<div class="table-wrap"><table><thead><tr><th style="min-width:92px">Date</th><th style="min-width:200px">Description</th><th>Amount</th><th style="min-width:120px">Branch</th><th style="min-width:150px">Category</th><th style="min-width:150px">Details</th></tr></thead><tbody>'+
+      BANKROWS.map(function(r,i){ return rowHtml(r,i,brs); }).join('')+'</tbody></table></div>'+
       '<div class="fin-actions" style="margin-top:10px"><button class="btn" id="bkSave">Save '+BANKROWS.length+' to ledger</button></div>';
-    $id('bkSave').onclick=function(){ var t=document.querySelector('#bkTableWrap'); t.querySelectorAll('[data-br]').forEach(function(s){ BANKROWS[s.getAttribute('data-br')].branch=s.value; }); t.querySelectorAll('[data-cat]').forEach(function(s){ BANKROWS[s.getAttribute('data-cat')].category=s.value; });
-      this.disabled=true; this.textContent='Saving…'; API.saveBankRows(BANKROWS).then(function(r){ if(r&&r.ok){ toast(r.saved+' entries saved to ledger'); BANKROWS=[]; $id('bkTableWrap').innerHTML='<div class="empty">Saved ✓</div>'; } else toast((r&&r.error)||'Failed',true); }); };
+    bindBank(brs);
+  }
+  /* v276: description no longer truncates — the bank narration is the only way to tell two rows apart
+     ("NEFT-NAKDOA DIAGNOSTICS P-CMS20…" was cut exactly where it stopped being useful), so it wraps. */
+  function rowHtml(r,i,brs){
+    var cat=r.category||BANK_CATS[0];
+    return '<tr data-row="'+i+'"><td>'+esc(r.date)+'</td>'+
+      '<td style="white-space:normal;word-break:break-word;line-height:1.35;font-size:12px">'+esc(r.description)+'</td>'+
+      '<td class="'+(r.drcr==='CR'?'cr':'dr')+'" style="white-space:nowrap">'+(r.drcr==='CR'?'+':'-')+'₹'+money(r.amount)+'</td>'+
+      '<td><select class="mini2" data-br="'+i+'">'+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'"'+((r.branch||ACC.branch)===b.BranchID?' selected':'')+'>'+esc(b.BranchName)+'</option>';}).join('')+'</select></td>'+
+      '<td><select class="mini2" data-cat="'+i+'">'+BANK_CATS.map(function(c){return '<option'+(c===cat?' selected':'')+'>'+esc(c)+'</option>';}).join('')+'</select>'+extraHtml(r,i)+'</td>'+
+      '<td><input class="mini2" data-det="'+i+'" value="'+esc(r.details||'')+'" placeholder="optional" style="width:100%"></td></tr>';
+  }
+  /* The one extra field a capital or prior-month row needs, shown only when that category is chosen. */
+  function extraHtml(r,i){
+    var c=String(r.category||BANK_CATS[0]);
+    if(c==='Partner capital') return '<input class="mini2" data-party="'+i+'" value="'+esc(r.party||'')+'" placeholder="partner name" style="width:100%;margin-top:4px">';
+    if(c==='Company capital') return '<div style="font-size:11px;color:#888;margin-top:4px">Party: Company</div>';
+    if(c===PRIOR_CAT) return '<input class="mini2" type="month" data-pm="'+i+'" value="'+esc(r.postMonth||prevMonthOf(r.date))+'" style="width:100%;margin-top:4px" title="Which month this income belongs to">';
+    return '';
+  }
+  function readRow(t,i){
+    var g=function(a){ return t.querySelector('['+a+'="'+i+'"]'); };
+    var br=g('data-br'), ct=g('data-cat'), dt=g('data-det'), py=g('data-party'), pm=g('data-pm');
+    var r=BANKROWS[i];
+    if(br) r.branch=br.value;
+    if(ct) r.category=ct.value;
+    if(dt) r.details=dt.value;
+    r.party   = py?py.value:(r.category==='Company capital'?'Company':'');
+    r.postMonth = (r.category===PRIOR_CAT) ? (pm?pm.value:prevMonthOf(r.date)) : '';
+  }
+  function bindBank(brs){
+    var t=$id('bkTableWrap');
+    /* Re-render just the one row when its category changes, so the partner / month field appears
+       without losing what has been typed into any other row. */
+    t.querySelectorAll('[data-cat]').forEach(function(sel){ sel.onchange=function(){
+      var i=Number(sel.getAttribute('data-cat')); readRow(t,i);
+      var tr=t.querySelector('tr[data-row="'+i+'"]'); if(!tr) return;
+      tr.outerHTML=rowHtml(BANKROWS[i],i,brs); bindBank(brs);
+    }; });
+    t.querySelectorAll('[data-br]').forEach(function(sel){ sel.onchange=function(){ readRow(t,Number(sel.getAttribute('data-br'))); }; });
+    t.querySelectorAll('[data-det]').forEach(function(el){ el.onchange=function(){ readRow(t,Number(el.getAttribute('data-det'))); }; });
+    t.querySelectorAll('[data-party]').forEach(function(el){ el.onchange=function(){ readRow(t,Number(el.getAttribute('data-party'))); }; });
+    t.querySelectorAll('[data-pm]').forEach(function(el){ el.onchange=function(){ readRow(t,Number(el.getAttribute('data-pm'))); }; });
+
+    var ap=$id('bkApplyAll');
+    if(ap) ap.onclick=function(){
+      var b=$id('bkAllBr').value, c=$id('bkAllCat').value;
+      if(!b && !c){ toast('Pick a branch or a category first.',true); return; }
+      BANKROWS.forEach(function(r){
+        if(b) r.branch=b;
+        if(c){ r.category=c; if(c===PRIOR_CAT && !r.postMonth) r.postMonth=prevMonthOf(r.date);
+               if(c==='Company capital') r.party='Company'; }
+      });
+      paintBankTable(brs);
+      toast('Applied to '+BANKROWS.length+' rows');
+    };
+
+    var sv=$id('bkSave');
+    if(sv) sv.onclick=function(){
+      for(var i=0;i<BANKROWS.length;i++) readRow(t,i);
+      var bad=BANKROWS.filter(function(r){ return r.category==='Partner capital' && !String(r.party||'').trim(); });
+      if(bad.length){ toast(bad.length+' partner capital row(s) need a partner name.',true); return; }
+      this.disabled=true; this.textContent='Saving…';
+      API.saveBankRows(BANKROWS).then(function(r){
+        if(r&&r.ok){ toast(r.saved+' entries saved to ledger'); BANKROWS=[]; $id('bkTableWrap').innerHTML='<div class="empty">Saved ✓</div>'; }
+        else { toast((r&&r.error)||'Failed',true); var b2=$id('bkSave'); if(b2){ b2.disabled=false; b2.textContent='Save to ledger'; } }
+      });
+    };
+  }
+
+  /* ---- Capital ledger (v276, task 6) ----
+     Company / partner money put in to cover a branch shortfall, and the transfers back out once it is
+     profitable. Deliberately its own screen and NOT part of the P&L: capital in is money owed back, so
+     showing it as income would make a loss-making month read as profit. */
+  function loadCapital(){
+    API.capitalLedger(ACC.branch).then(function(r){
+      var box=$id('accBody'); if(!box) return;
+      if(!r||!r.ok){ box.innerHTML='<div class="empty">'+esc((r&&r.error)||'')+'</div>'; return; }
+      var rows=r.rows||[], tot=r.totals||[];
+      var cards=tot.length
+        ? '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">'+tot.map(function(t){
+            return '<div style="background:#f4f6f8;border-radius:10px;padding:9px 14px">'+
+              '<div style="font-size:11px;color:#888">'+esc(t.party)+' · '+esc(branchName(t.branchId))+'</div>'+
+              '<b style="font-size:15px">₹'+money(t.outstanding)+'</b> <span style="font-size:11px;color:#888">outstanding</span></div>';
+          }).join('')+'</div>'
+        : '';
+      box.innerHTML=cards+
+        '<div style="font-size:12px;color:#666;margin-bottom:8px">Tag a bank row as <b>Company capital</b> or <b>Partner capital</b> on the Bank &amp; Reconcile tab and it appears here. Credits add to what is owed; debits are the transfer back.</div>'+
+        '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Party</th><th>Branch</th><th>In / out</th><th>Outstanding</th><th>Details</th></tr></thead><tbody>'+
+        (rows.length?rows.map(function(x){
+          var neg=Number(x.amount)<0;
+          return '<tr><td>'+esc(x.date)+'</td><td>'+esc(x.party)+'</td><td>'+esc(branchName(x.branchId))+'</td>'+
+            '<td class="'+(neg?'dr':'cr')+'">'+(neg?'−':'+')+'₹'+money(Math.abs(x.amount))+'</td>'+
+            '<td>₹'+money(x.outstanding)+'</td><td style="white-space:normal;font-size:12px">'+esc(x.details||x.notes||'')+'</td></tr>';
+        }).join(''):'<tr><td class="empty" colspan="6">No capital movements yet.</td></tr>')+'</tbody></table></div>';
+    });
   }
 
   /* ---- Payout file (salary + vendor) ---- */

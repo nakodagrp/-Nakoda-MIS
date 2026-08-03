@@ -652,22 +652,46 @@ function renderDashboard(){
     html+='<div class="section-label">By branch · business this month</div><div class="card"><div class="table-wrap swipe"><table><thead><tr><th>Branch</th><th>Business (MTD)</th><th>Cash</th><th>Bank / UPI</th><th>Other</th><th>Patients</th><th>Avg / patient</th><th>Tests</th><th>Rev / test</th><th>No. of cards</th><th>Card business</th><th>Staff</th><th>Rev / staff</th></tr></thead><tbody>'+
       rows.map(function(r){return '<tr><td><b>'+esc(r.name)+'</b></td><td>₹'+fmtMoney(r.biz)+'</td><td>₹'+fmtMoney(r.cash)+'</td><td>₹'+fmtMoney(r.bank)+'</td><td>₹'+fmtMoney(r.other)+'</td><td>'+r.pat+'</td><td>₹'+fmtMoney(r.avg)+'</td><td>'+r.test+'</td><td>₹'+fmtMoney(r.rTest)+'</td><td>'+r.cards+'</td><td>₹'+fmtMoney(r.rev)+'</td><td>'+r.staff+'</td><td>₹'+fmtMoney(r.rStaff)+'</td></tr>';}).join('')+'</tbody></table></div></div>';
   }
-  var types={}, byBT={}, brOrder=[];
-  activeCards.forEach(function(c){ var ty=String(c.typeId||'—'); types[ty]=1; var b=String(c.branchId||''); if(!byBT[b]){ byBT[b]={}; brOrder.push(b); } byBT[b][ty]=(byBT[b][ty]||0)+1; });
+  /* v276 (task 4): the cards board is a MONTH SNAPSHOT now, not "whatever is live right now".
+     Two different questions get asked about cards: how many did we sell that month (Issued), and how
+     many were live at the end of it (the type columns and Active total). Showing only the second made
+     a month's sales invisible, and showing today's count beside a past month would be quietly wrong.
+     "Live at month end" is DERIVED rather than read from status — issued on or before the month end,
+     not expired by then, not cancelled. That is what makes an earlier month reproducible; the `status`
+     field only ever describes today. */
+  var cardYm=DASH.cardYm||(function(){ var d=new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2); })();
+  function monthEndOf(ym){ var y=Number(ym.slice(0,4)), m=Number(ym.slice(5,7)); return new Date(y, m, 0, 23, 59, 59); }
+  function cd10(v){ if(!v) return ''; var d=new Date(v); return isNaN(d)?String(v).slice(0,10):(d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)); }
+  var cardEnd=monthEndOf(cardYm);
+  var liveAtEnd=cards.filter(function(c){
+    if(String(c.status)==='cancelled') return false;
+    var iss=c.issuedDate?new Date(c.issuedDate):null; if(!iss||isNaN(iss)||iss>cardEnd) return false;
+    var exp=c.expiryDate?new Date(c.expiryDate):null; if(exp&&!isNaN(exp)&&exp<cardEnd) return false;
+    return true;
+  });
+  var issuedIn=cards.filter(function(c){ return cd10(c.issuedDate).slice(0,7)===cardYm; });
+  var types={}, byBT={}, byIss={}, brOrder=[];
+  liveAtEnd.forEach(function(c){ var ty=String(c.typeId||'\u2014'); types[ty]=1; var b=String(c.branchId||''); if(!byBT[b]){ byBT[b]={}; brOrder.push(b); } byBT[b][ty]=(byBT[b][ty]||0)+1; });
+  issuedIn.forEach(function(c){ var b=String(c.branchId||''); if(!byBT[b]){ byBT[b]={}; brOrder.push(b); } byIss[b]=(byIss[b]||0)+1; });
   var typeList=Object.keys(types).sort();
-  if(typeList.length){
-    var colTot={}; typeList.forEach(function(t){colTot[t]=0;}); var grand=0;
-    var bodyRows=brOrder.sort(function(a,b){ var ta=0,tb=0; typeList.forEach(function(t){ta+=(byBT[a][t]||0);tb+=(byBT[b][t]||0);}); return tb-ta; }).map(function(b){
-      var row=byBT[b], tot=0;
+  if(typeList.length||issuedIn.length){
+    var colTot={}; typeList.forEach(function(t){colTot[t]=0;}); var grand=0, issTot=0;
+    var bodyRows=brOrder.sort(function(a,b){ var ta=0,tb=0; typeList.forEach(function(t){ta+=((byBT[a]||{})[t]||0);tb+=((byBT[b]||{})[t]||0);}); return tb-ta; }).map(function(b){
+      var row=byBT[b]||{}, tot=0;
       var cells=typeList.map(function(t){ var n=row[t]||0; tot+=n; colTot[t]+=n; return '<td>'+n+'</td>'; }).join('');
-      grand+=tot;
-      return '<tr><td><b>'+esc(branchName(b))+'</b></td>'+cells+'<td><b>'+tot+'</b></td></tr>';
+      grand+=tot; var iss=byIss[b]||0; issTot+=iss;
+      return '<tr><td><b>'+esc(branchName(b))+'</b></td><td><b>'+iss+'</b></td>'+cells+'<td><b>'+tot+'</b></td></tr>';
     }).join('');
-    var totRow='<tr><td><b>Total</b></td>'+typeList.map(function(t){return '<td><b>'+colTot[t]+'</b></td>';}).join('')+'<td><b>'+grand+'</b></td></tr>';
-    html+='<div class="section-label">Active cards · by branch &amp; type</div><div class="card"><div class="table-wrap swipe"><table><thead><tr><th>Branch</th>'+typeList.map(function(t){return '<th>'+esc(t)+'</th>';}).join('')+'<th>Total</th></tr></thead><tbody>'+bodyRows+totRow+'</tbody></table></div></div>';
+    var totRow='<tr><td><b>Total</b></td><td><b>'+issTot+'</b></td>'+typeList.map(function(t){return '<td><b>'+colTot[t]+'</b></td>';}).join('')+'<td><b>'+grand+'</b></td></tr>';
+    html+='<div class="section-label" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">Membership cards \u00b7 by branch &amp; type'+
+      '<input type="month" id="cardYm" value="'+esc(cardYm)+'" style="font-size:12px;padding:3px 7px;border:1px solid #ddd;border-radius:6px">'+
+      '<span style="font-size:11px;color:#888;font-weight:400">Issued = sold that month \u00b7 type columns = live at month end</span></div>'+
+      '<div class="card"><div class="table-wrap swipe"><table><thead><tr><th>Branch</th><th>Issued</th>'+typeList.map(function(t){return '<th>'+esc(t)+'</th>';}).join('')+'<th>Active total</th></tr></thead><tbody>'+bodyRows+totRow+'</tbody></table></div></div>';
   }
   html+='<div id="finDash"></div><div id="mktDash"></div>';
   $('dashExtra').innerHTML=html;
+  /* v276: the month picker re-renders the dashboard against the chosen snapshot month. */
+  (function(){ var cy=document.getElementById('cardYm'); if(cy) cy.onchange=function(){ DASH.cardYm=cy.value; renderDashboard(); }; })();
   if(window.renderStarBlock){ try{ window.renderStarBlock(document.getElementById('starBlock')); }catch(_){} }
   if(window.renderQuickLog){ try{ window.renderQuickLog(document.getElementById('quickLog')); }catch(_){} }
   var dashBr=(S.perms&&S.perms.canViewAll)?(($('dashBranch')||{}).value||''):'';
