@@ -10,10 +10,14 @@
   function isInvestor(){ return lvl()==='BRANCH_VIEW'; }
   /* General Accounts write gate — invoices, expenses, bank deposits. CRM keeps all of these. */
   function canEnter(){ return lvl()==='SUPER'||lvl()==='HR_ADMIN'||lvl()==='BRANCH_MGR'||lvl()==='MANAGER'||['CRM','Accounts','Operations Manager','Process Coordinator','Senior Technician'].indexOf(S.user&&S.user.Role)>=0; }
-  /* v262: the daily cash report specifically moved off CRM onto Senior Technician, so it needs its own
-     gate — canEnter() above covers five separate actions and CRM is only losing this one. Mirrors
-     accDaily_ in Code.gs; the server is the real check, this only hides the button. */
-  function canDaily(){ return lvl()==='SUPER'||lvl()==='HR_ADMIN'||lvl()==='BRANCH_MGR'||lvl()==='MANAGER'||['Accounts','Operations Manager','Process Coordinator','Senior Technician'].indexOf(S.user&&S.user.Role)>=0; }
+  /* v275: the daily cash report is now filed CENTRALLY by the accountant (Mayuri) for every branch,
+     with Director/Admin as a fallback. Mirrors isDailyFiler_/accDaily_ in Code.gs — the server is the
+     real check, this only decides whether the "+ Daily entry" button is drawn. */
+  function canDaily(){ return lvl()==='SUPER'||lvl()==='HR_ADMIN'||/mayuri/i.test((S.user&&S.user.FullName)||''); }
+  /* v275: EXPENSES are unchanged and stay with the branch. This used to reuse canDaily(); it is now its
+     own function so tightening the daily cash report does not also hide the expense button from every
+     branch. Mirrors accExpense_ in Code.gs. */
+  function canExpense(){ return lvl()==='SUPER'||lvl()==='HR_ADMIN'||lvl()==='BRANCH_MGR'||lvl()==='MANAGER'||['Accounts','Operations Manager','Process Coordinator','Senior Technician'].indexOf(S.user&&S.user.Role)>=0; }
   function canVerify(){ return lvl()==='SUPER'||lvl()==='HR_ADMIN'||(S.user&&(S.user.Role==='Accounts'||S.user.Role==='Process Coordinator')); }
   function canViewAll(){ return S.perms&&S.perms.canViewAll; }
 
@@ -99,20 +103,22 @@
     var depBtn=canEnter()?'<button class="btn ghost" id="dlyDep">🏦 Bank deposit</button>':'';
     var actions=(dlyBtn||depBtn)?('<div class="fin-actions">'+dlyBtn+depBtn+'</div>'):'';
     box.innerHTML=actions+
-      '<div class="table-wrap"><table><thead><tr><th>Branch</th><th>Date</th><th>B2C cash</th><th>B2C bank</th><th>Other</th><th>Patients</th><th>Tests</th><th>Collection</th><th>Docs</th><th>Status</th><th>Reject</th></tr></thead><tbody>'+
+      '<div class="table-wrap"><table><thead><tr><th>Branch</th><th>Date</th><th>B2C cash</th><th>B2C bank</th><th>Other</th><th>Patients</th><th>Tests</th><th>Collection</th><th>Docs</th><th>Status</th></tr></thead><tbody>'+
       (rows.length?rows.map(function(d){ var coll=(Number(d.cashIn)||0)+(Number(d.bankIn)||0)+(Number(d.other)||0); var stt=String(d.status);
-        var statusCell = stt==='verified' ? '<span class="chip paid">✓ verified</span>'
-          : stt==='rejected' ? '<span class="chip" style="background:#fdecec;color:#b23b3b">✗ rejected</span>'
-          : (r.canVerify ? '<button class="btn ghost sm" data-vf="'+esc(d.dayId)+'">Verify</button>' : '<span class="chip partial">pending</span>');
-        var rejectCell = (stt!=='verified' && stt!=='rejected' && r.canVerify) ? '<button class="btn ghost sm" data-rj="'+esc(d.dayId)+'" style="color:#b23b3b">Reject</button>' : '';
-        return '<tr><td>'+esc(branchName(d.branchId))+'</td><td>'+esc(d.date)+'</td><td>₹'+money(d.b2cCash)+'</td><td>₹'+money(d.b2cBank)+'</td><td>₹'+money(d.other)+'</td><td>'+(d.patients||0)+'</td><td>'+(d.tests||0)+'</td><td>₹'+money(coll)+'</td><td>'+docLinks(d)+'</td><td>'+statusCell+'</td><td>'+rejectCell+'</td></tr>'; }).join(''):'<tr><td class="empty" colspan="11">No entries this month.</td></tr>')+'</tbody></table></div>'+
+        /* v275: verification is retired — the accountant files the report herself, so there is nobody
+           left to check it. New entries save as 'verified'. The three legacy states are still RENDERED
+           (rows filed before this update can be pending or rejected) but no Verify/Reject buttons are
+           offered any more; re-saving that day's entry replaces the row and clears the old state. */
+        var statusCell = stt==='rejected' ? '<span class="chip" style="background:#fdecec;color:#b23b3b">✗ rejected (old)</span>'
+          : stt==='pending' ? '<span class="chip partial">pending (old)</span>'
+          : '<span class="chip paid">✓ filed</span>';
+        return '<tr><td>'+esc(branchName(d.branchId))+'</td><td>'+esc(d.date)+'</td><td>₹'+money(d.b2cCash)+'</td><td>₹'+money(d.b2cBank)+'</td><td>₹'+money(d.other)+'</td><td>'+(d.patients||0)+'</td><td>'+(d.tests||0)+'</td><td>₹'+money(coll)+'</td><td>'+docLinks(d)+'</td><td>'+statusCell+'</td></tr>'; }).join(''):'<tr><td class="empty" colspan="10">No entries this month.</td></tr>')+'</tbody></table></div>'+
       (total>PAGE?'<div class="acc-pager">'+(ACC.dailyPage>0?'<button class="btn ghost sm" id="dlyPrev">‹ Prev</button>':'<span></span>')+'<span>'+(start+1)+'–'+Math.min(start+PAGE,total)+' of '+total+'</span>'+(ACC.dailyPage<pages-1?'<button class="btn ghost sm" id="dlyNext">Next ›</button>':'<span></span>')+'</div>':'');
     var a=$id('dlyAdd'); if(a) a.onclick=openDailyForm;
     var dp=$id('dlyDep'); if(dp) dp.onclick=function(){ var t=document.querySelector('#accTabs span[data-t="deposit"]'); if(t){ t.click(); } else { ACC.tab='deposit'; paintTab(); } };   // open the Bank Deposit tab (table), not the form directly
     var pv=$id('dlyPrev'); if(pv) pv.onclick=function(){ ACC.dailyPage--; loadDaily(); };
     var nx=$id('dlyNext'); if(nx) nx.onclick=function(){ ACC.dailyPage++; loadDaily(); };
-    box.querySelectorAll('[data-vf]').forEach(function(b){ b.onclick=function(){ API.verifyDaily(b.getAttribute('data-vf')).then(function(x){ if(x&&x.ok){ toast('Verified'); loadDaily(); } }); }; });
-    box.querySelectorAll('[data-rj]').forEach(function(b){ b.onclick=function(){ var reason=prompt('Reason for rejecting this entry? (optional)'); if(reason===null) return; API.rejectDaily(b.getAttribute('data-rj'),reason).then(function(x){ if(x&&x.ok){ toast('Entry rejected'); loadDaily(); } else toast((x&&x.error)||'Failed',true); }); }; });
+    /* v275: the Verify / Reject handlers that lived here are gone with the workflow. */
   }); }
   function openDepositForm(){
     var brs=(S.meta&&S.meta.branches)||[];
@@ -154,9 +160,10 @@
   }
   function openDailyForm(){
     var brs=(S.meta&&S.meta.branches)||[];
-    /* Multi-branch users (head office) pick which branch this entry belongs to; single-branch users
-       (branch manager / branch accounts) are fixed to their own branch by the backend. */
-    var brField=canViewAll()
+    /* v275: the accountant files this for EVERY branch, so she always gets the picker even though her
+       access level is not canViewAll — accDailyBranch_ on the server honours whatever she chooses.
+       Head-office/Director keep it via canViewAll(); anyone else is pinned to their own branch. */
+    var brField=(canViewAll()||canDaily())
       ? '<div class="field full"><label>Branch *</label><select id="dlBranch" class="in"><option value="">Select branch</option>'+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'"'+(b.BranchID===ACC.branch?' selected':'')+'>'+esc(b.BranchName)+'</option>';}).join('')+'</select></div>'
       : '';
     function incBlock(t,lbl,extra){ return '<div class="dl-blk"><div class="dl-blk-h">'+lbl+'</div><div class="row2">'+
@@ -308,9 +315,10 @@
     function fmtLedDate(d){ var s=String(d||''); var m=s.match(/^(\d{4}-\d{2}-\d{2})/); return m?m[1]:s.slice(0,10); }
     var rows=(r.ledger||[]).slice().sort(function(a,b){return fmtLedDate(a.date)<fmtLedDate(b.date)?1:-1;});
     /* v272: filing an expense follows the daily cash report off CRM and onto Senior Technician, so
-       this button is gated by canDaily() — the same test the server now applies in accExpense_.
+       this button is gated by canExpense() — the same test the server applies in accExpense_.
+       v275: was canDaily(); split apart when the daily cash report narrowed to the accountant.
        CRM keeps the rest of this screen: they can still open it and read the expense list. */
-    box.innerHTML=(canDaily()?'<div class="fin-actions"><button class="btn" id="exAdd">+ Expense / vendor bill</button></div>':'')+
+    box.innerHTML=(canExpense()?'<div class="fin-actions"><button class="btn" id="exAdd">+ Expense / vendor bill</button></div>':'')+
       '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Category</th><th>Party</th><th>Amount</th><th>Mode</th><th>Status</th><th>Reject</th></tr></thead><tbody>'+
       (rows.length?rows.map(function(l){ var isPending=String(l.status)!=='approved'&&String(l.status)!=='rejected'; var statusCell=String(l.status)==='approved'?'<span style="display:inline-flex;align-items:center;gap:5px;background:#eaf7ef;color:#1a8f4c;font-size:12px;font-weight:600;padding:4px 12px;border-radius:20px">✓ approved</span>':String(l.status)==='rejected'?'<span style="display:inline-flex;align-items:center;gap:5px;background:#fdecec;color:#b23b3b;font-size:12px;font-weight:600;padding:4px 12px;border-radius:20px">✗ rejected</span>':(r.canVerify?'<button class="btn ghost sm" data-ap="'+esc(l.ledId)+'" style="color:#1a8f4c;border-color:#1a8f4c;font-weight:500">Approve</button>':'<span class="chip partial">pending</span>'); var rejectCell=(isPending&&r.canVerify)?'<button class="btn ghost sm" data-rj="'+esc(l.ledId)+'" style="color:#b23b3b;border-color:#b23b3b">Reject</button>':''; return '<tr><td>'+esc(fmtLedDate(l.date))+'</td><td>'+esc(l.category)+(l.billUrl?' <a href="'+esc(l.billUrl)+'" target="_blank" title="Bill">📎</a>':'')+(l.qrUrl?' <a href="'+esc(l.qrUrl)+'" target="_blank" title="QR code">▦</a>':'')+'</td><td>'+esc(l.party||'')+'</td><td>₹'+money(l.amount)+'</td><td>'+esc(l.mode)+'</td><td>'+statusCell+'</td><td>'+rejectCell+'</td></tr>'; }).join(''):'<tr><td class="empty" colspan="7">No entries this month.</td></tr>')+'</tbody></table></div>';
     var a=$id('exAdd'); if(a) a.onclick=openExpenseForm;
