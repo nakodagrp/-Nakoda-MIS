@@ -109,11 +109,124 @@
       this.disabled=true; API.saveVideo({videoId:v.videoId,title:title,youtubeUrl:url,sectionId:$id('vSec').value,passMark:$id('vPass').value,roles:rolesSel,questions:VQ.filter(function(q){return q.q;})}).then(function(r){ if(r&&r.ok){ closeModal(); toast('Video published'); loadManage(); } else $id('vMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; }); };
   }
 
-  /* ---- Monitor ---- */
+  /* ---- Monitor ----
+     v278: this screen used to be a chase list only — the server dropped everyone who had passed
+     before sending, so it could not say how many were done or what anyone scored. It now shows one
+     card per video: a completion bar and counts on top, and underneath three columns of people —
+     passed, failed, not started.
+
+     Passed and failed are kept apart from "not started" on purpose. Someone who failed twice is
+     trying; someone with no attempt at all is ignoring you. Merging them into one "remaining" number
+     hides the only fact that tells you who to phone first.
+
+     Wording: this reports QUIZ RESULTS. Nothing records video playback, so "passed" is the honest
+     word and "watched" would not be. */
+  var MON=null, MF={br:'',role:'',late:false}, MOPEN={}, MMORE={};
+
+  function monPeople(v){
+    return (v.people||[]).filter(function(p){
+      if(MF.br && String(p.branchId)!==MF.br) return false;
+      if(MF.role && String(p.role)!==MF.role) return false;
+      if(MF.late && !p.overdue) return false;
+      return true;
+    });
+  }
+  function monBar(pass,fail,total){
+    var w=total?Math.round(pass/total*100):0, wf=total?Math.round(fail/total*100):0;
+    return '<div style="flex:1;height:8px;border-radius:4px;background:#eee;overflow:hidden;display:flex">'+
+      '<div style="width:'+w+'%;background:#1a9e75"></div><div style="width:'+wf+'%;background:#EF9F27"></div></div>';
+  }
+  function monChip(color,label,n){
+    return '<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:#666">'+
+      '<span style="width:8px;height:8px;border-radius:2px;background:'+color+'"></span>'+esc(label)+' <b style="color:#222">'+n+'</b></span>';
+  }
+  function monCard(p){
+    var ph=String(p.phone||'').replace(/\D/g,''), sub;
+    if(p.status==='passed') sub=(p.score!==''&&p.score!=null?p.score+'%':'passed')+' · '+(p.attempts===1?'1 try':p.attempts+' tries')+(p.passedAt?' · '+esc(p.passedAt):'');
+    else if(p.status==='failed') sub='<span style="color:#854F0B">'+(p.score!==''&&p.score!=null?p.score+'%':'not passed')+' · '+(p.attempts===1?'1 try':p.attempts+' tries')+'</span>';
+    else sub=p.overdue?'<span style="color:var(--red)">overdue '+p.overdueDays+' day'+(p.overdueDays===1?'':'s')+'</span>':'due '+esc(p.due);
+    return '<div style="background:#fff;border-radius:7px;padding:6px 9px;margin-bottom:5px;display:flex;align-items:center;gap:7px">'+
+      '<div style="flex:1;min-width:0"><div style="font-size:12px;color:#222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(p.empName)+'</div>'+
+      '<div style="font-size:10.5px;color:#999">'+sub+'</div></div>'+
+      (ph&&p.status!=='passed'?'<a href="tel:'+ph+'" style="text-decoration:none;font-size:14px" title="Call">📞</a>':'')+'</div>';
+  }
+  function monCol(title,color,list,vid,key){
+    var lim=MMORE[vid+'|'+key]?list.length:3, shown=list.slice(0,lim);
+    return '<div style="background:#f6f6f4;border-radius:9px;padding:9px">'+
+      '<div style="display:flex;align-items:baseline;gap:6px;margin-bottom:7px">'+
+        '<span style="width:8px;height:8px;border-radius:2px;background:'+color+'"></span>'+
+        '<span style="font-size:11.5px;color:#666">'+esc(title)+'</span>'+
+        '<b style="margin-left:auto;font-size:15px;color:#222">'+list.length+'</b></div>'+
+      (list.length?shown.map(function(p){return monCard(p);}).join(''):'<div style="font-size:11px;color:#aaa;padding:2px">none</div>')+
+      (list.length>lim?'<div class="mnMore" data-k="'+esc(vid+'|'+key)+'" style="font-size:11px;color:#185FA5;cursor:pointer;padding:3px 2px">show '+(list.length-lim)+' more</div>':'')+
+    '</div>';
+  }
+
+  function drawMonitor(){
+    var box=$id('trBody'); if(!box||!MON) return;
+    var vids=MON.videos||[];
+    /* filter option lists come from the data itself, so a branch with nobody assigned never appears */
+    var brs={}, roles={};
+    vids.forEach(function(v){ (v.people||[]).forEach(function(p){ if(p.branchId) brs[p.branchId]=p.branchName||p.branchId; if(p.role) roles[p.role]=1; }); });
+    var brOpts='<option value="">All branches</option>'+Object.keys(brs).sort(function(a,b){return brs[a]<brs[b]?-1:1;}).map(function(b){ return '<option value="'+esc(b)+'"'+(MF.br===b?' selected':'')+'>'+esc(brs[b])+'</option>'; }).join('');
+    var rlOpts='<option value="">All roles</option>'+Object.keys(roles).sort().map(function(r){ return '<option value="'+esc(r)+'"'+(MF.role===r?' selected':'')+'>'+esc(r)+'</option>'; }).join('');
+
+    var gT=0,gP=0, cards=vids.map(function(v){
+      var ppl=monPeople(v);
+      var pass=ppl.filter(function(p){return p.status==='passed';}),
+          fail=ppl.filter(function(p){return p.status==='failed';}),
+          none=ppl.filter(function(p){return p.status==='none';});
+      gT+=ppl.length; gP+=pass.length;
+      if(!ppl.length) return '';
+      var sc=pass.filter(function(p){return p.score!==''&&p.score!=null;});
+      var avg=sc.length?Math.round(sc.reduce(function(a,p){return a+Number(p.score);},0)/sc.length):0;
+      var open=!!MOPEN[v.videoId];
+      return '<div class="card" style="padding:13px 14px;margin-bottom:10px">'+
+        '<div class="mnHead" data-v="'+esc(v.videoId)+'" style="cursor:pointer;display:flex;align-items:baseline;gap:7px;flex-wrap:wrap">'+
+          '<span style="color:#bbb;font-size:12px">'+(open?'▾':'▸')+'</span>'+
+          '<b style="font-size:14px;color:#222">'+esc(v.title)+'</b>'+
+          '<span style="font-size:10.5px;color:#aaa">v'+esc(v.version)+' · pass mark '+v.passMark+'%</span>'+
+          '<span style="margin-left:auto;font-size:11.5px;color:#666">avg '+(avg?avg+'%':'—')+'</span></div>'+
+        '<div style="display:flex;align-items:center;gap:10px;margin:10px 0 7px">'+monBar(pass.length,fail.length,ppl.length)+
+          '<span style="font-size:11.5px;color:#666;white-space:nowrap">'+pass.length+' of '+ppl.length+' passed</span></div>'+
+        '<div style="display:flex;gap:14px;flex-wrap:wrap">'+monChip('#1a9e75','Passed',pass.length)+monChip('#EF9F27','Failed',fail.length)+monChip('#ccc','Not started',none.length)+'</div>'+
+        (open?'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:9px;margin-top:11px">'+
+          monCol('Passed','#1a9e75',pass,v.videoId,'p')+monCol('Failed','#EF9F27',fail,v.videoId,'f')+monCol('Not started','#ccc',none,v.videoId,'n')+'</div>':'')+
+      '</div>';
+    }).join('');
+
+    box.innerHTML='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">'+
+        '<select id="mnBr" class="in" style="width:auto;max-width:170px;font-size:12px">'+brOpts+'</select>'+
+        '<select id="mnRole" class="in" style="width:auto;max-width:170px;font-size:12px">'+rlOpts+'</select>'+
+        '<label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#666"><input type="checkbox" id="mnLate"'+(MF.late?' checked':'')+' style="width:auto"> Only overdue</label>'+
+        '<span style="margin-left:auto;font-size:11.5px;color:#666">'+(MON.staffCount||0)+' staff · '+vids.length+' video'+(vids.length===1?'':'s')+' · <b style="color:#222">'+(gT?Math.round(gP/gT*100):0)+'% complete</b></span></div>'+
+      (cards||'<div class="empty">Nobody matches these filters.</div>');
+
+    $id('mnBr').onchange=function(){ MF.br=this.value; drawMonitor(); };
+    $id('mnRole').onchange=function(){ MF.role=this.value; drawMonitor(); };
+    $id('mnLate').onchange=function(){ MF.late=this.checked; drawMonitor(); };
+    box.querySelectorAll('.mnHead').forEach(function(h){ h.onclick=function(){ var id=h.getAttribute('data-v'); if(MOPEN[id]) delete MOPEN[id]; else MOPEN[id]=1; drawMonitor(); }; });
+    box.querySelectorAll('.mnMore').forEach(function(m){ m.onclick=function(){ MMORE[m.getAttribute('data-k')]=1; drawMonitor(); }; });
+  }
+
   function loadMonitor(){
-    API.trainingMonitor().then(function(r){ var box=$id('trBody'); if(!box) return; if(!r||!r.ok){ box.innerHTML='<div class="empty">'+esc((r&&r.error)||'')+'</div>'; return; }
-      var rows=r.rows||[]; if(!rows.length){ box.innerHTML='<div class="empty">Everyone is up to date. 🎉</div>'; return; }
-      box.innerHTML=rows.map(function(t){ var ph=String(t.phone||'').replace(/\D/g,''); return '<div class="hx-row"><div class="av">'+esc(initials(t.empName))+'</div><div class="hx-mid"><b>'+esc(t.empName)+'</b> <span style="font-size:10px;color:#aaa">'+esc(t.role)+'</span><div class="hx-m">'+esc(t.videoTitle)+' · '+(t.overdue?'<span style="color:var(--red);font-weight:700">overdue (due '+esc(t.due)+')</span>':'due '+esc(t.due))+'</div></div>'+(ph?'<a class="att-ok" href="tel:'+ph+'">📞</a>':'')+'</div>'; }).join('');
+    API.trainingMonitor().then(function(r){
+      var box=$id('trBody'); if(!box) return;
+      if(!r||!r.ok){ box.innerHTML='<div class="empty">'+esc((r&&r.error)||'Could not load.')+'</div>'; return; }
+      /* An Apps Script still on v277 returns `rows` and no `videos`. Fall back to the old chase list
+         rather than showing an empty screen that reads like "everyone is done". */
+      if(!r.videos){
+        var rows=r.rows||[];
+        if(!rows.length){ box.innerHTML='<div class="empty">Everyone is up to date. 🎉</div>'; return; }
+        box.innerHTML='<div class="msg" style="margin-bottom:10px">Update the Apps Script to v278 to see scores and completion.</div>'+
+          rows.map(function(t){ var ph=String(t.phone||'').replace(/\D/g,''); return '<div class="hx-row"><div class="av">'+esc(initials(t.empName))+'</div><div class="hx-mid"><b>'+esc(t.empName)+'</b> <span style="font-size:10px;color:#aaa">'+esc(t.role)+'</span><div class="hx-m">'+esc(t.videoTitle)+' · '+(t.overdue?'<span style="color:var(--red);font-weight:700">overdue (due '+esc(t.due)+')</span>':'due '+esc(t.due))+'</div></div>'+(ph?'<a class="att-ok" href="tel:'+ph+'">📞</a>':'')+'</div>'; }).join('');
+        return;
+      }
+      MON=r;
+      if(!(r.videos||[]).length){ box.innerHTML='<div class="empty">No active training videos.</div>'; return; }
+      /* open the weakest video by default — the server sorts worst completion first */
+      if(!Object.keys(MOPEN).length) MOPEN[r.videos[0].videoId]=1;
+      drawMonitor();
     });
   }
 

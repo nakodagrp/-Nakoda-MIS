@@ -4,7 +4,7 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v279';   /* v279: one month picker drives the whole dashboard — inline card-table picker removed */
+var CACHE_VERSION = 'nakoda-mis-v280';   /* v280: training monitor shows passed / failed / not started with scores */
 var SHELL = [
   './',
   './index.html',
