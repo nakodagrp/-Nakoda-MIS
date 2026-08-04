@@ -289,15 +289,15 @@ var FinanceView = (function () {
         if (typeof v === 'string' && v.indexOf('/exec') > 0) url = v;
       }
     if (!url) return null;
+    /* doPost does JSON.parse(e.postData.contents), so the body MUST be JSON - a form-encoded
+       body parses to {} and comes back "Bad request." Content-Type has to be text/plain:
+       application/json triggers a CORS preflight, which Apps Script web apps do not answer. */
     return function (payload) {
-      var body = Object.keys(payload).map(function (k) {
-        var v = payload[k];
-        if (typeof v === 'object') v = JSON.stringify(v);
-        return encodeURIComponent(k) + '=' + encodeURIComponent(v);
-      }).join('&');
-      return fetch(url, { method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' }, body: body })
-        .then(function (r) { return r.json(); });
+      return fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      }).then(function (r) { return r.json(); });
     };
   }
   function findToken() {

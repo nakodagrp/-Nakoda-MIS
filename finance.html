@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nakoda MIS — Finance</title>
+<!--
+  STANDALONE FINANCE PAGE
+
+  Why this exists: the finance view and the bank import were not appearing inside the main app,
+  and there are four places that can silently swallow them (missing script tag, service-worker
+  cache serving an old index.html, GitHub Pages not rebuilt, API caller named something the
+  auto-detect did not recognise). This page has none of those dependencies.
+
+  HOW TO USE
+    1. Upload this file to the repo root, next to index.html.
+    2. Open  https://nakodagrp.github.io/-Nakoda-MIS/finance.html
+       Add ?nosw=1 to the URL if the service worker interferes: finance.html?nosw=1
+    3. Log in with your normal MIS login. Nothing else to configure - it reads the /exec URL
+       from config.js, exactly like the app does.
+
+  This page also DIAGNOSES the main app: the status line under the header reports whether
+  finance-view.js and bank-import.js were actually found in the repo. If either says "not
+  found", that is why nothing appeared in the app, and the fix is to upload that file.
+
+  It deliberately does not touch the service worker, does not write to the app's own
+  localStorage keys (its session is stored separately under nakoda.fin.token), and reads and
+  writes exactly the same Apps Script endpoints as the app.
+-->
+<style>
+  :root{--ink:#1f1f1d;--mut:#6b6a64;--fade:#918f88;--line:#e6e4de;--bg:#f7f6f2;--card:#fff;
+        --ok:#3b6d11;--okbg:#eaf3de;--warn:#854f0b;--warnbg:#faeeda;--bad:#a32d2d;--badbg:#fcebeb}
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+       color:var(--ink);background:var(--bg);padding:16px}
+  .wrap{max-width:1180px;margin:0 auto}
+  h1{font-size:18px;font-weight:500;margin:0 0 2px}
+  .sub{font-size:12px;color:var(--fade);margin-bottom:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:12px}
+  label{display:block;font-size:12px;color:var(--mut);margin-bottom:4px}
+  input{width:100%;padding:9px 11px;border:1px solid #cfcdc5;border-radius:8px;font-size:14px}
+  button{font-size:13px;padding:8px 15px;border:1px solid #cfcdc5;border-radius:8px;background:#fff;cursor:pointer}
+  button.p{background:var(--ink);color:#fff;border-color:var(--ink)}
+  button[disabled]{opacity:.5;cursor:default}
+  .row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
+  .row>div{flex:1;min-width:150px}
+  .msg{font-size:13px;padding:9px 12px;border-radius:8px;margin-bottom:10px}
+  .msg.e{background:var(--badbg);color:var(--bad)}
+  .msg.w{background:var(--warnbg);color:var(--warn)}
+  .msg.o{background:var(--okbg);color:var(--ok)}
+  .diag{font-size:11.5px;color:var(--fade);margin-bottom:12px;line-height:1.7}
+  .diag b{font-weight:500;color:var(--mut)}
+  .tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+  .tabs button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .hide{display:none}
+  #who{font-size:12px;color:var(--mut)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Nakoda MIS &middot; Finance</h1>
+  <div class="sub">Standalone page &mdash; independent of the app shell and its service worker.</div>
+
+  <div id="diag" class="diag"></div>
+
+  <div id="loginCard" class="card">
+    <div id="loginMsg"></div>
+    <div class="row">
+      <div><label for="lid">Login ID</label><input id="lid" autocomplete="username"></div>
+      <div><label for="lpw">Password</label><input id="lpw" type="password" autocomplete="current-password"></div>
+      <div style="flex:0 0 auto"><button class="p" id="btnLogin">Sign in</button></div>
+    </div>
+    <div id="urlWrap" class="hide" style="margin-top:12px">
+      <label for="execUrl">Apps Script /exec URL &mdash; config.js could not be read, so paste it once</label>
+      <input id="execUrl" placeholder="https://script.google.com/macros/s/.../exec">
+    </div>
+  </div>
+
+  <div id="app" class="hide">
+    <div class="tabs">
+      <button id="tabFin" class="on">Finance table</button>
+      <button id="tabImp">Bank import</button>
+      <span style="flex:1"></span>
+      <span id="who"></span>
+      <button id="btnOut">Sign out</button>
+    </div>
+    <div id="finance-view-host"></div>
+    <div id="bank-import-host" class="hide"></div>
+    <div id="fallback"></div>
+  </div>
+
+</div>
+
+<script src="config.js" onerror="window.__noConfig=1"></script>
+<script src="finance-view.js" onerror="window.__noFV=1"></script>
+<script src="bank-import.js" onerror="window.__noBI=1"></script>
+<script>
+(function () {
+  'use strict';
+  var TOKEN_KEY = 'nakoda.fin.token', URL_KEY = 'nakoda.fin.url';
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* Optional escape hatch: finance.html?nosw=1 unregisters the service worker for this origin,
+     for the case where a stale worker is serving old assets. */
+  if (/[?&]nosw=1/.test(location.search) && navigator.serviceWorker) {
+    navigator.serviceWorker.getRegistrations().then(function (rs) {
+      rs.forEach(function (r) { r.unregister(); });
+    }).catch(function () {});
+  }
+
+  /* Find the /exec URL the same way the app does: whatever config.js exposed. */
+  function execUrl() {
+    var saved = '';
+    try { saved = localStorage.getItem(URL_KEY) || ''; } catch (e) {}
+    if (saved) return saved;
+    var cands = ['EXEC_URL', 'API_URL', 'SCRIPT_URL', 'WEBAPP_URL', 'BASE_URL', 'ENDPOINT', 'API'];
+    var holders = [window, window.CONFIG || {}, window.config || {}, window.Config || {}, window.APP_CONFIG || {}];
+    for (var h = 0; h < holders.length; h++) {
+      for (var c = 0; c < cands.length; c++) {
+        var v = holders[h] && holders[h][cands[c]];
+        if (typeof v === 'string' && v.indexOf('/exec') > 0) return v;
+      }
+    }
+    return '';
+  }
+
+  /* doPost does JSON.parse(e.postData.contents), so the body must be JSON. Content-Type has to
+     be text/plain - application/json triggers a CORS preflight that Apps Script never answers. */
+  function call(payload) {
+    var url = execUrl();
+    if (!url) return Promise.reject(new Error('No /exec URL'));
+    var tok = token();
+    if (tok && !payload.token) payload.token = tok;
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    }).then(function (r) {
+      if (!r.ok) throw new Error('Server returned ' + r.status);
+      return r.json();
+    });
+  }
+
+  function token() { try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; } }
+  function setToken(t) { try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch (e) {} }
+
+  /* Report what actually loaded. This is the part that explains the main app's silence. */
+  function diagnose() {
+    var bits = [];
+    bits.push('<b>config.js</b> ' + (window.__noConfig ? 'not found' : 'loaded'));
+    bits.push('<b>/exec URL</b> ' + (execUrl() ? 'found' : 'MISSING'));
+    bits.push('<b>finance-view.js</b> ' + (window.__noFV ? 'NOT FOUND in the repo' : (typeof FinanceView !== 'undefined' ? 'loaded' : 'loaded but broken')));
+    bits.push('<b>bank-import.js</b> ' + (window.__noBI ? 'NOT FOUND in the repo' : (typeof BankImport !== 'undefined' ? 'loaded' : 'loaded but broken')));
+    $('diag').innerHTML = bits.join(' &nbsp;·&nbsp; ');
+
+    if (window.__noFV || window.__noBI) {
+      var missing = [];
+      if (window.__noFV) missing.push('finance-view.js');
+      if (window.__noBI) missing.push('bank-import.js');
+      note('loginMsg', 'w', missing.join(' and ') + ' ' + (missing.length > 1 ? 'are' : 'is') +
+        ' not in the repo yet. That is why nothing appeared in the app. Upload ' +
+        (missing.length > 1 ? 'them' : 'it') + ' to the repo root, wait a minute for Pages to rebuild, then reload.');
+    }
+    if (!execUrl()) $('urlWrap').classList.remove('hide');
+  }
+
+  function note(id, cls, msg) { $(id).innerHTML = '<div class="msg ' + cls + '">' + msg + '</div>'; }
+
+  function showApp(user) {
+    $('loginCard').classList.add('hide');
+    $('app').classList.remove('hide');
+    $('who').textContent = (user && (user.FullName || user.fullName || user.LoginID)) || '';
+
+    if (typeof FinanceView !== 'undefined') {
+      FinanceView.init({ call: call });
+      FinanceView.mount($('finance-view-host'));
+    } else {
+      $('fallback').innerHTML = '<div class="msg e">finance-view.js did not load, so the table ' +
+        'cannot render. Upload it to the repo root next to this file.</div>';
+    }
+    if (typeof BankImport !== 'undefined') {
+      BankImport.init({ call: call, toast: function (m) { alert(m); } });
+      BankImport.mount($('bank-import-host'));
+    }
+  }
+
+  function tab(which) {
+    var fin = which === 'fin';
+    $('finance-view-host').classList.toggle('hide', !fin);
+    $('bank-import-host').classList.toggle('hide', fin);
+    $('tabFin').classList.toggle('on', fin);
+    $('tabImp').classList.toggle('on', !fin);
+  }
+
+  $('tabFin').addEventListener('click', function () { tab('fin'); });
+  $('tabImp').addEventListener('click', function () { tab('imp'); });
+  $('btnOut').addEventListener('click', function () { setToken(''); location.reload(); });
+
+  $('execUrl') && $('execUrl').addEventListener('change', function (e) {
+    var v = String(e.target.value || '').trim();
+    if (v.indexOf('/exec') > 0) { try { localStorage.setItem(URL_KEY, v); } catch (er) {} diagnose(); }
+  });
+
+  $('btnLogin').addEventListener('click', function () {
+    var id = $('lid').value.trim(), pw = $('lpw').value;
+    if (!id || !pw) { note('loginMsg', 'w', 'Enter your login ID and password.'); return; }
+    if (!execUrl()) { note('loginMsg', 'e', 'No /exec URL yet — paste it in the field below.'); $('urlWrap').classList.remove('hide'); return; }
+    $('btnLogin').disabled = true;
+    note('loginMsg', 'o', 'Signing in…');
+    call({ action: 'login', loginId: id, password: pw })
+      .then(function (res) {
+        $('btnLogin').disabled = false;
+        if (!res || !res.ok) { note('loginMsg', 'e', (res && res.error) || 'Sign in failed.'); return; }
+        setToken(res.token);
+        showApp(res.user || res.me);
+      })
+      .catch(function (e) {
+        $('btnLogin').disabled = false;
+        note('loginMsg', 'e', 'Could not reach the server: ' + e.message +
+          '. Check that the web app is deployed with access set to Anyone.');
+      });
+  });
+
+  diagnose();
+
+  /* Reuse an existing session on this page if there is one. */
+  if (token() && execUrl()) {
+    note('loginMsg', 'o', 'Restoring your session…');
+    call({ action: 'validate', token: token() })
+      .then(function (res) {
+        if (res && res.ok) showApp(res.user || res.me);
+        else { setToken(''); $('loginMsg').innerHTML = ''; }
+      })
+      .catch(function () { $('loginMsg').innerHTML = ''; });
+  }
+})();
+</script>
+</body>
+</html>

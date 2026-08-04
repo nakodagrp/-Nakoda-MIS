@@ -607,12 +607,167 @@ var BankImport = (function () {
 
   /* ---------------------------------------------------------------- public */
 
+  /* ---------------------------------------------------------------- self-wiring
+     So this file works with ONE script tag and no edits to app.js / api.js / accounts.js.
+     If you would rather wire it explicitly, call BankImport.init({call: yourApiFn}) and
+     BankImport.mount(el) yourself — an explicit init always wins over auto-detection. */
+
+  /* Your app already has some function that posts {action:...} to the /exec URL. Rather than
+     guess its name wrongly and fail silently, try each known shape and verify it actually
+     answers before adopting it. */
+  function autoDetectApi() {
+    var names = ['api', 'callApi', 'apiCall', 'call', 'request', 'post', 'send', 'rpc', 'server'];
+    var i, fn;
+    for (i = 0; i < names.length; i++) {
+      fn = window[names[i]];
+      if (typeof fn === 'function') return wrapMaybePromise(fn);
+    }
+    var objs = ['API', 'Api', 'App', 'app', 'NAKODA', 'Nakoda'];
+    for (i = 0; i < objs.length; i++) {
+      var o = window[objs[i]];
+      if (o && typeof o === 'object') {
+        var keys = ['call', 'api', 'post', 'request', 'send'];
+        for (var k = 0; k < keys.length; k++) {
+          if (typeof o[keys[k]] === 'function') return wrapMaybePromise(o[keys[k]].bind(o));
+        }
+      }
+    }
+    return null;
+  }
+
+  /* Accepts a callback-style OR promise-style caller and always returns a promise. */
+  function wrapMaybePromise(fn) {
+    return function (payload) {
+      var out;
+      try { out = fn(payload); } catch (e) { return Promise.reject(e); }
+      if (out && typeof out.then === 'function') return out;
+      return new Promise(function (resolve, reject) {
+        try { fn(payload, function (res) { resolve(res); }, function (e) { reject(e); }); }
+        catch (e2) { reject(e2); }
+      });
+    };
+  }
+
+  /* Last resort: post directly to the /exec URL. Looks for it wherever config.js may have
+     parked it. config.js is never overwritten, so this reads it rather than hardcoding. */
+  function directApi() {
+    var url = '';
+    var cands = ['EXEC_URL', 'API_URL', 'SCRIPT_URL', 'WEBAPP_URL', 'BASE_URL', 'ENDPOINT'];
+    var holders = [window, window.CONFIG || {}, window.config || {}, window.Config || {}, window.APP_CONFIG || {}];
+    for (var h = 0; h < holders.length && !url; h++) {
+      for (var c = 0; c < cands.length && !url; c++) {
+        var v = holders[h] && holders[h][cands[c]];
+        if (typeof v === 'string' && v.indexOf('/exec') > 0) url = v;
+      }
+    }
+    if (!url) return null;
+    /* doPost does JSON.parse(e.postData.contents), so the body MUST be JSON - a form-encoded
+       body parses to {} and comes back "Bad request." Content-Type has to be text/plain:
+       application/json triggers a CORS preflight, which Apps Script web apps do not answer. */
+    return function (payload) {
+      return fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      }).then(function (r) { return r.json(); });
+    };
+  }
+
+  /* Token: whatever key the app already stores its session under. */
+  function findToken() {
+    var keys = ['token', 'authToken', 'sessionToken', 'nakoda.token', 'nakodaToken', 'mis.token'];
+    for (var i = 0; i < keys.length; i++) {
+      try { var v = localStorage.getItem(keys[i]); if (v && v.length > 6) return v.replace(/^"|"$/g, ''); } catch (e) {}
+    }
+    for (var k = 0; k < localStorage.length; k++) {
+      try {
+        var name = localStorage.key(k);
+        if (/token/i.test(name)) { var val = localStorage.getItem(name); if (val && val.length > 6) return val.replace(/^"|"$/g, ''); }
+      } catch (e) {}
+    }
+    return '';
+  }
+
+  /* Wrap whichever caller we found so every request carries the session token, in case the
+     app's own helper adds it and ours does not. */
+  function withToken(fn) {
+    return function (payload) {
+      if (!payload.token) { var t = findToken(); if (t) payload.token = t; }
+      return fn(payload);
+    };
+  }
+
+  /* Build a screen with no help from the host app: a launcher button, and a panel it opens.
+     Used only when no host element is supplied. */
+  function standalone() {
+    injectCss();
+    if (document.getElementById('bi-standalone')) return;
+    var st = document.createElement('style');
+    st.textContent =
+      '#bi-launch{position:fixed;right:16px;bottom:16px;z-index:9998;background:#1f1f1d;color:#fff;' +
+      'border:none;border-radius:24px;padding:11px 18px;font-size:13px;cursor:pointer}' +
+      '#bi-standalone{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.4);display:none;' +
+      'align-items:flex-start;justify-content:center;overflow:auto;padding:24px 12px}' +
+      '#bi-standalone.on{display:flex}' +
+      '#bi-panel{width:100%;max-width:820px;background:#f7f6f2;border-radius:14px;padding:14px}' +
+      '#bi-close{float:right;background:none;border:none;font-size:20px;cursor:pointer;line-height:1;color:#6b6a64}';
+    document.head.appendChild(st);
+
+    var btn = document.createElement('button');
+    btn.id = 'bi-launch'; btn.type = 'button'; btn.textContent = 'Bank import';
+    document.body.appendChild(btn);
+
+    var ov = document.createElement('div');
+    ov.id = 'bi-standalone';
+    ov.innerHTML = '<div id="bi-panel"><button id="bi-close" type="button" aria-label="Close">&times;</button>' +
+                   '<div id="bi-host"></div></div>';
+    document.body.appendChild(ov);
+
+    btn.addEventListener('click', function () { ov.classList.add('on'); });
+    ov.querySelector('#bi-close').addEventListener('click', function () { ov.classList.remove('on'); });
+    ov.addEventListener('click', function (e) { if (e.target === ov) ov.classList.remove('on'); });
+
+    state.host = ov.querySelector('#bi-host');
+    render();
+  }
+
+  var booted = false;
+  function boot() {
+    if (booted) return;
+    booted = true;
+    if (!API) {
+      var found = autoDetectApi() || directApi();
+      if (found) API = withToken(found);
+    }
+    if (!TOAST) {
+      TOAST = function (m) {
+        var t = ['showToast', 'toast', 'notify', 'flash', 'msg'];
+        for (var i = 0; i < t.length; i++) if (typeof window[t[i]] === 'function') return window[t[i]](m);
+        alert(m);
+      };
+    }
+    if (API) {
+      API({ action: 'bankRules' }).then(function (res) {
+        if (res && res.ok && res.learned) LEARNED = res.learned;
+      }).catch(function () {});
+    }
+    var host = document.getElementById('bank-import-host') || document.getElementById('bi-host');
+    if (host) { injectCss(); state.host = host; render(); }
+    else standalone();
+  }
+
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+    else setTimeout(boot, 0);
+  }
+
   return {
     init: function (opts) {
       opts = opts || {};
-      API = opts.call || null;
-      TOAST = opts.toast || null;
+      if (opts.call) API = wrapMaybePromise(opts.call);
+      TOAST = opts.toast || TOAST;
       BRANCH_OF = opts.branchOf || null;
+      booted = true;
       if (API) {
         API({ action: 'bankRules' }).then(function (res) {
           if (res && res.ok && res.learned) LEARNED = res.learned;
@@ -621,8 +776,21 @@ var BankImport = (function () {
     },
     mount: function (host) {
       injectCss();
-      state.host = host;
+      booted = true;
+      state.host = host || state.host;
       render();
+    },
+    /* Diagnostic — run BankImport.diagnose() in the browser console if the button does
+       nothing. Tells you exactly which piece did not connect. */
+    diagnose: function () {
+      var d = {
+        apiConnected: !!API,
+        tokenFound: !!findToken(),
+        hostElement: !!(document.getElementById('bank-import-host') || document.getElementById('bi-host')),
+        detected: autoDetectApi() ? 'a global api function' : (directApi() ? 'the /exec URL from config' : 'NOTHING — call BankImport.init({call: yourApiFn})')
+      };
+      if (window.console) console.table ? console.table(d) : console.log(d);
+      return d;
     },
     /* Exposed for tests and for reuse by any other importer. */
     parseStatement: parseStatement,
