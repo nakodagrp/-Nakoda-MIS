@@ -13,7 +13,13 @@
   function fmtDutyTime(t){ if(!t) return ''; var s=String(t); var m=s.match(/T(\d{2}):(\d{2})/); if(m) return m[1]+':'+m[2]; return s; }
   function dayBadge(st){ var m={present:['Full day','#eaf7ef','#1a8f4c'],half:['Half day','#faeeda','#854F0B'],leave:['Leave','#e9f1fb','#185FA5'],absent:['Absent','#fdecec','#b23b3b']}; var b=m[String(st||'present')]||m.present; return ' <span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:'+b[1]+';color:'+b[2]+'">'+b[0]+'</span>'; }
   function canApprove(){ if(S.user&&String(S.user.AttApproveDenied)==='yes') return false; var p=S.perms||{}; return p.level==='SUPER'||p.level==='HR_ADMIN'||p.level==='BRANCH_MGR'||(S.user&&S.user.Role==='Operations Manager'); }
-  function todayRec(){ var t=todayS(); return (ATT.recs||[]).filter(function(r){return String(r.date)===t;})[0]; }
+  // v282 (bug D): every other date compare in this file defensively slices to 10 chars. This one used a
+  // strict compare, so the moment the server returns a full ISO date (or a cached record from an older
+  // build) it matched nothing — and paintMe then showed "Check in" to somebody who had already checked in.
+  function todayRec(){ var t=todayS(); return (ATT.recs||[]).filter(function(r){return String(r.date).slice(0,10)===t;})[0]; }
+  // v282: one id per TAP, reused across every retry and every queue replay, so the server can recognise
+  // the same physical punch arriving twice and answer with the original result instead of writing it again.
+  function punchUuid(){ return 'p'+Date.now().toString(36)+'-'+'xxxxxxxx'.replace(/x/g,function(){ return (Math.random()*16|0).toString(16); }); }
 
   /* ---------- offline punch queue (v201) ----------
      No internet at punch time? The punch (selfie + GPS + ORIGINAL tap time) is saved on the phone and
@@ -24,12 +30,40 @@
   function pqToday(kind){ var t=todayS(); return pq().filter(function(p){ return p.date===t && p.kind===kind; })[0]; }
   function pqDrop(item){ pqSave(pq().filter(function(p){ return p.ts!==item.ts; })); }
   var _pqBusy=false;
+  /* v282 (bug C): pqSync used to process q[0] and ONLY q[0]. A check-in that could not land — a lapsed
+     token, a Drive hiccup — sat at the head being retried up to 12 times, and the check-out queued behind
+     it could never be attempted. The trapped check-out was then rejected with "Please check in first",
+     which is not on the permanent-failure list, so it burned its own 12 tries and was dropped too. Both
+     punches for the day vanished and the day rendered as Absent.
+     Now we pick the first item that is actually ELIGIBLE, and a failure puts that one item into a short
+     backoff so the next cycle moves on to a different punch instead of hammering the same one.
+     The one ordering rule that genuinely matters is kept: a check-out may not be sent while its OWN day's
+     check-in is still waiting in the queue. A different day never blocks anything. */
+  function pqPick(q){
+    var now=Date.now();
+    for(var i=0;i<q.length;i++){
+      var it=q[i];
+      if(it.kind==='out'){
+        var blocked=false;
+        for(var j=0;j<q.length;j++){ if(q[j].kind==='in' && q[j].date===it.date){ blocked=true; break; } }
+        if(blocked) continue;   // its own check-in has not landed yet — this one genuinely has to wait
+      }
+      if(it.cool && now<it.cool) continue;   // failed very recently — let another punch have a turn
+      return it;
+    }
+    return null;
+  }
+  /* Park a failing item for a while (growing with each attempt, capped) so it stops starving the others. */
+  function pqCool(item, tries){
+    var q=pq(), it=q.filter(function(p){ return p.ts===item.ts; })[0];
+    if(it){ it.cool=Date.now()+Math.min(15*60000, 60000*Math.max(1,tries||1)); pqSave(q); }
+  }
   function pqSync(){
     if(_pqBusy || !navigator.onLine) return;
     var q=pq(); if(!q.length) return;
+    var item=pqPick(q); if(!item) return;   // everything is either blocked or cooling down
     _pqBusy=true;
-    var item=q[0];
-    var payload={selfie:item.selfie, lat:item.lat, lng:item.lng, wfh:!!item.wfh, altShift:!!item.altShift, remark:item.remark||'', clientDate:item.date, clientTime:item.time, offline:1};
+    var payload={punchId:item.punchId||'', selfie:item.selfie, lat:item.lat, lng:item.lng, noGeo:!!item.noGeo, wfh:!!item.wfh, altShift:!!item.altShift, remark:item.remark||'', clientDate:item.date, clientTime:item.time, offline:1};
     var call=(item.kind==='in')?API.checkIn(payload):API.checkOut(payload);
     call.then(function(r){
       _pqBusy=false;
@@ -53,9 +87,11 @@
         if(it3){ it3.tries=(it3.tries||0)+1; pqSave(q3); }
         if(it3 && it3.tries>=12){ pqDrop(item); toast('A saved punch kept failing and was removed: '+em, true); refreshAfterSync(); pqSync(); return; }
         if(/session expired|not signed in|please log ?in/i.test(em)){ toast('Your saved punch will send after you log in again.', true); }
-        return;   // keep it — the online/60s retry will try again
+        pqCool(item, it3?it3.tries:1);   // v282: back this one off so a different punch gets attempted next cycle
+        pqSync();                        // …and try that different punch right now
+        return;
       }
-    }).catch(function(){ _pqBusy=false; });   // still no (or flaky) internet — keep it, try again later
+    }).catch(function(){ _pqBusy=false; pqCool(item,1); });   // still no (or flaky) internet — keep it, try again later
   }
   function refreshAfterSync(){ API.myAttendance(ymNow()).then(function(x){ if(x&&x.ok){ ATT.recs=x.records||[]; if(document.getElementById('attMe')) paintMe(); } }); }
   try{ window.addEventListener('online', function(){ setTimeout(pqSync, 1500); }); }catch(e){}
@@ -196,7 +232,10 @@
     // Recovery path: if a punch went through but its selfie never made it to Drive (closed the app too
     // fast, storage cleared, repeated upload failures), don't leave it stuck blank forever — let the
     // employee attach one themselves straight from this screen.
-    var missingKind = (rec && rec.checkIn && !rec.selfieInUrl && rec.attId) ? 'in' : ((rec && rec.checkOut && !rec.selfieOutUrl && rec.attId) ? 'out' : '');
+    // v283: `!rec._local` matters. A record we have just painted optimistically from the punch response has
+    // no selfie URL yet — not because the upload failed, but because we have not asked the server again.
+    // Without this guard every successful punch would flash "your selfie didn't save" for a second or two.
+    var missingKind = (rec && !rec._local && rec.checkIn && !rec.selfieInUrl && rec.attId) ? 'in' : ((rec && !rec._local && rec.checkOut && !rec.selfieOutUrl && rec.attId) ? 'out' : '');
     var missingNote = missingKind ? '<div class="att-note" style="color:#b23b3b;font-weight:600">⚠ Your '+(missingKind==='in'?'check-in':'check-out')+' selfie didn\'t save — <span id="attFixSelfie" style="text-decoration:underline;cursor:pointer">tap to add it</span></div>' : '';
     box.innerHTML='<div class="att-card"><div class="att-day">'+['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][now.getDay()]+', '+now.getDate()+' '+MON[now.getMonth()]+'</div>'+
       '<div class="att-sub">'+esc(dutyTxt)+'</div>'+btn+
@@ -338,20 +377,45 @@
       toast(msg,true);
     });
     selfieP.then(function(b64){
-      // Wait for location too (usually already done by the time the selfie is captured) before submitting.
+      if(!b64){ return; }   // the user cancelled the camera — nothing was captured, nothing to preserve
+      /* v282 (bug A) — THE BIG ONE.
+         This block used to `return` on a location failure. The selfie had already been taken, the camera
+         had already closed, and the punch was then silently thrown away: nothing sent, nothing queued,
+         no error at that moment. On an INSTALLED PWA this is the common case, not the edge case — Android
+         gives the installed app its own location permission, separate from Chrome's, so staff who had
+         "already allowed location" were denied here every single time. That is the "after photo capture,
+         punch not done" report.
+         A missing location must never destroy a punch. Attendance drives payroll. We now always submit —
+         flagged noGeo so the approver can see the coordinates are absent and judge it — and the server
+         records it rather than losing the day. Geo-fenced staff are still checked by the server; it simply
+         cannot confirm the fence without coordinates, so the punch goes for approval instead of vanishing. */
       geoP.then(function(){ submitMark(kind,b64); }, function(err){
-        if(err&&err.code===1) return;   // permission blocked — guidance already toasted above
-        // Location failed but the selfie is already taken — retry location automatically instead of
-        // making her tap punch (and retake the selfie) all over again.
+        var denied = (!err || err.code===1);
+        if(denied){
+          // Retrying a denied permission cannot succeed — submit immediately rather than stalling the user.
+          ATT.coords=null; ATT.noGeo=true;
+          toast('Sending your punch without location — it will go to your manager for approval.');
+          submitMark(kind,b64);
+          return;
+        }
+        // Timed out / unavailable: one automatic retry (the selfie is already taken, so never make her
+        // retake it), and if that also fails we still submit rather than discard the punch.
         toast('Retrying location — keep the app open…');
-        getLocation_().then(function(loc){ ATT.coords=loc; submitMark(kind,b64); },
-          function(){ toast('Location still not available — move near a window/open area and tap once more.',true); });
+        getLocation_().then(function(loc){ ATT.coords=loc; ATT.noGeo=false; submitMark(kind,b64); },
+          function(){
+            ATT.coords=null; ATT.noGeo=true;
+            toast('Could not get location — punch sent without it, for manager approval.');
+            submitMark(kind,b64);
+          });
       });
     });
   }
   function doMark(kind){
     if(pqToday(kind)){ toast('Already saved on phone — will send automatically when internet returns. ✓'); return; }
     ATT.kind=kind; ATT.outRemark=''; ATT.tapTs=Date.now();   // remember the REAL tap time for offline punches; under 4 hours auto-marks half day on the server — no reason prompt
+    // v282: one id per TAP. Every retry, every WFH re-submit and every queue replay reuses it, so the
+    // server can tell "the same punch arriving twice" apart from "the user punched twice".
+    ATT.punchId=punchUuid(); ATT.noGeo=false;
     // v242: two-shift staff are no longer asked which shift they're on. The server infers it from the
     // punch time (see pickShift_ in Code.gs), so a 11:56 arrival on the 12:00 shift is simply on time.
     if(kind==='in') ATT.altShift=false;
@@ -386,29 +450,79 @@
     var _tt=new Date(ATT.tapTs||Date.now());
     var _tapDate=_tt.getFullYear()+'-'+String(_tt.getMonth()+1).padStart(2,'0')+'-'+String(_tt.getDate()).padStart(2,'0');
     var _tapTime=String(_tt.getHours()).padStart(2,'0')+':'+String(_tt.getMinutes()).padStart(2,'0');
-    var c=ATT.coords||{}, payload={selfie:selfie, lat:c.lat, lng:c.lng, wfh:!!ATT.wfh, altShift:!!ATT.altShift, remark:(kind==='out'?(ATT.outRemark||''):''), tapDate:_tapDate, tapTime:_tapTime};
+    var _pid=ATT.punchId||(ATT.punchId=punchUuid());
+    var c=ATT.coords||{}, payload={punchId:_pid, selfie:selfie, lat:c.lat, lng:c.lng, noGeo:!!ATT.noGeo, wfh:!!ATT.wfh, altShift:!!ATT.altShift, remark:(kind==='out'?(ATT.outRemark||''):''), tapDate:_tapDate, tapTime:_tapTime};
     function tdy(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
-    function success(msg){ ATT.wfh=false; toast(msg); API.myAttendance(ymNow()).then(function(x){ if(x&&x.ok){ ATT.recs=x.records||[]; paintMe(); } }); }
+    /* v283 — WHY THE BUTTON TOOK SO LONG TO CHANGE.
+       The punch itself finishes, and then this used to wait for a FULL myAttendance round trip before
+       repainting — and that call was guaranteed to be the slowest possible one, because apiCheckIn had
+       just called invalidateMyAttCache_ on this very employee+month. So the server could not answer from
+       cache and had to re-read the entire Attendance sheet. The staff member stood there watching a button
+       that still said "Check in" long after their punch had actually been recorded — so they tapped it
+       again, which is how the same punch ended up being sent two and three times.
+       The punch response already tells us everything the button needs (checkIn/checkOut/late/half), so we
+       now paint from it IMMEDIATELY and let the authoritative refresh land quietly afterwards. */
+    function applyLocalPunch(r){
+      var t=todayS(), recs=(ATT.recs||[]), rec=null;
+      for(var i=0;i<recs.length;i++){ if(String(recs[i].date).slice(0,10)===t){ rec=recs[i]; break; } }
+      if(!rec){ rec={date:t}; recs.push(rec); ATT.recs=recs; }
+      rec._local=true;   // marks this as not-yet-confirmed: paintMe must not read a missing selfie URL as "selfie failed to save"
+      if(kind==='in'){
+        rec.checkIn=(r&&r.checkIn)||rec.checkIn||'✓';
+        rec.status=(r&&r.status)||rec.status||'present';
+        if(r&&r.late) rec.late='yes';
+      } else {
+        rec.checkOut=(r&&r.checkOut)||rec.checkOut||'✓';
+        if(r&&r.workHours) rec.workHours=r.workHours;
+        if(r&&r.half) rec.status='half';
+      }
+      if(r&&r.attId) rec.attId=r.attId;
+    }
+    function success(msg, r){
+      ATT.wfh=false; toast(msg);
+      applyLocalPunch(r); paintMe();                       // instant — the button flips now, not in five seconds
+      API.myAttendance(ymNow()).then(function(x){ if(x&&x.ok){ ATT.recs=x.records||[]; paintMe(); } });   // reconcile quietly
+    }
     /* v201: no internet (or network died) → save the punch on the phone with the ORIGINAL tap time. */
     function queuePunch(){
       var d=new Date(ATT.tapTs||Date.now());
-      var q=pq(); q.push({ts:Date.now(), kind:kind, date:tdy(), time:String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'),
-        selfie:selfie, lat:c.lat, lng:c.lng, wfh:!!ATT.wfh, altShift:!!ATT.altShift, remark:(kind==='out'?(ATT.outRemark||''):'')});
+      if(pq().filter(function(p){ return p.punchId===_pid; })[0]){ paintMe(); return; }   // v282: this exact tap is already queued — never queue it twice
+      var q=pq(); q.push({ts:Date.now(), punchId:_pid, kind:kind, date:tdy(), time:String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'),
+        selfie:selfie, lat:c.lat, lng:c.lng, noGeo:!!ATT.noGeo, wfh:!!ATT.wfh, altShift:!!ATT.altShift, remark:(kind==='out'?(ATT.outRemark||''):'')});
       pqSave(q); ATT.wfh=false;
       toast('No internet — punch saved on phone ✓ It will send automatically.');
       paintMe();
     }
     if(!navigator.onLine){ queuePunch(); return; }
     toast(selfie?'Marking… uploading photo':'Marking…');
-    var tries=0;
+    var tries=0, _forceFull=false, _resent=false;
     function attempt(){
       tries++;
-      var p = kind==='in' ? API.checkIn(payload) : API.checkOut(payload);
+      /* v282: the retry used to re-send the ENTIRE payload — including the base64 selfie — so a weak
+         connection that had just failed to carry ~90 KB was immediately asked to carry it again.
+         We cannot tell client-side whether the first attempt died BEFORE reaching the server (photo never
+         uploaded) or AFTER (photo safely on Drive, only the reply lost). So the retry goes out lean, with
+         selfieSent:1 meaning "I already sent this photo once". The server then either recognises the
+         punchId and replies with the original result, or — if it has no record of this punch — replies
+         needSelfie:true and we send the full payload once more. The common case (reply lost after landing)
+         costs one small request; the rare case costs what it always did. */
+      var lean = (tries>1 && !_forceFull && payload.selfie) ? Object.assign({}, payload, {selfie:'', selfieSent:1}) : payload;
+      _forceFull=false;
+      var p = kind==='in' ? API.checkIn(lean) : API.checkOut(lean);
       p.then(function(r){
-        if(r&&r.ok){ success(kind==='in'?('Checked in '+r.checkIn+(r.late?' (late)':'')):('Checked out '+r.checkOut+(r.half?' · half day':''))); return; }
+        // Server has never seen this punch and the lean retry carried no photo — resend it in full, once.
+        if(r && r.needSelfie && payload.selfie && !_resent){ _resent=true; _forceFull=true; attempt(); return; }
+        if(r&&r.ok){ success(kind==='in'?('Checked in '+r.checkIn+(r.late?' (late)':'')):('Checked out '+r.checkOut+(r.half?' · half day':'')), r); return; }
         if(r&&r.wfhPrompt){ promptWfh(r, function(yes){ if(yes){ ATT.wfh=true; submitMark(kind, selfie); } else { ATT.wfh=false; toast('You are not at the centre — '+(kind==='in'?'check-in':'check-out')+' not allowed.',true); } }); return; }
         var em=String((r&&r.error)||'');
-        if(/already checked/i.test(em)){ success(kind==='in'?'Checked in ✓ (your earlier tap worked)':'Checked out ✓ (your earlier tap worked)'); return; }
+        // v283: the guard message carries the real time ("Already checked out today at 18:42.") — lift it so
+        // the button shows the correct time straight away instead of a placeholder until the refresh lands.
+        if(/already checked/i.test(em)){
+          var _t=(em.match(/(\d{1,2}:\d{2})/)||[])[1]||'';
+          success(kind==='in'?'Checked in ✓ (your earlier tap worked)':'Checked out ✓ (your earlier tap worked)',
+                  _t?(kind==='in'?{checkIn:_t}:{checkOut:_t}):null);
+          return;
+        }
         if(/server busy/i.test(em)){ queuePunch(); return; }   // v202: server momentarily locked — save with the real tap time and auto-sync in under a minute
         toast(em||'Could not mark — needs internet & location.',true);
       }).catch(function(){
@@ -416,7 +530,7 @@
         // Reply lost twice — the punch may still have landed. Ask the server before claiming failure.
         API.myAttendance(ymNow()).then(function(x){
           var rec=((x&&x.records)||[]).filter(function(r){ return String(r.date).slice(0,10)===tdy(); })[0];
-          if(rec && ((kind==='in'&&rec.checkIn)||(kind==='out'&&rec.checkOut))){ ATT.recs=x.records||[]; success(kind==='in'?('Checked in '+rec.checkIn+' ✓'):('Checked out '+rec.checkOut+' ✓')); return; }
+          if(rec && ((kind==='in'&&rec.checkIn)||(kind==='out'&&rec.checkOut))){ ATT.recs=x.records||[]; success(kind==='in'?('Checked in '+rec.checkIn+' ✓'):('Checked out '+rec.checkOut+' ✓'), rec); return; }
           queuePunch();   // v201: network too weak — save on phone, sync automatically later
         },function(){ queuePunch(); });
       });

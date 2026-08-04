@@ -4,7 +4,7 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v280';   /* v280: training monitor shows passed / failed / not started with scores */
+var CACHE_VERSION = 'nakoda-mis-v283';   /* v283: punch never lost when GPS fails; check-out duplicate guard; punchId idempotency; queue unblocked; button flips instantly */
 var SHELL = [
   './',
   './index.html',
