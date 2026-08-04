@@ -112,7 +112,38 @@ function initInstall(){
 }
 
 /* status chip / offline banner */
+/* ============================================================ v288 — WHAT BUILD IS ACTUALLY RUNNING
+   Every deploy so far has ended with "I uploaded it and it still shows the old screen", and there has
+   been no way to tell from the app whether the new files arrived, the service worker served a stale
+   copy, or the upload never landed. APP_BUILD is stamped into the page title tooltip and shown in the
+   ⋯ More sheet, and the service worker is asked separately which version IT is serving. When those two
+   disagree, the cache is stale; when both are old, the upload did not reach the server. */
+var APP_BUILD='v288';
+window.APP_BUILD=APP_BUILD;
+window.SW_BUILD='?';
+try{
+  if(navigator.serviceWorker){
+    navigator.serviceWorker.addEventListener('message', function(ev){
+      if(ev.data && ev.data.type==='BUILD'){ window.SW_BUILD=String(ev.data.version||'?'); paintBuildStamp(); }
+    });
+    navigator.serviceWorker.ready.then(function(reg){
+      if(reg.active) reg.active.postMessage('WHICH_BUILD');
+    }).catch(function(){});
+  }
+}catch(e){}
+function paintBuildStamp(){
+  var el=document.getElementById('buildStamp'); if(!el) return;
+  var sw=String(window.SW_BUILD||'?'), app='nakoda-mis-'+APP_BUILD;
+  var agree=(sw===app);
+  el.innerHTML='App <b>'+esc(APP_BUILD)+'</b> · cache <b>'+esc(sw.replace('nakoda-mis-',''))+'</b>'+
+    (agree?' <span style="color:#1a7f37">✓ up to date</span>'
+          :' <span style="color:#b23b3b">⚠ mismatch — tap Check update</span>');
+}
+window.paintBuildStamp=paintBuildStamp;
+
 function bindStatus(){
+  var chipEl=document.getElementById('syncChip');
+  if(chipEl) chipEl.title='Build '+APP_BUILD;
   API.onStatus(function(st){
     var chip=$('syncChip'), txt=$('syncText');
     $('offlineBar').classList.toggle('hidden', st.online);
@@ -315,6 +346,15 @@ function openMobileMore(){
   g.querySelectorAll('button[data-page]').forEach(function(b){ b.onclick=function(){ closeMobileMore(); go(b.getAttribute('data-page')); }; });
   var ub=g.querySelector('[data-act="update"]'); if(ub) ub.onclick=function(){ closeMobileMore(); forceUpdate(); };
   var lb=g.querySelector('[data-act="logout"]'); if(lb) lb.onclick=function(){ API.logout(); API.clearLocal(); location.reload(); };
+  /* v288: the build stamp lives here, next to Check update — the one place someone looks when a
+     deploy seems not to have taken. */
+  var sheet=g.parentNode;
+  var st=document.getElementById('buildStamp');
+  if(!st && sheet){ st=document.createElement('div'); st.id='buildStamp';
+    st.style.cssText='margin-top:14px;padding-top:11px;border-top:1px solid #eee;font-size:11.5px;color:#888;text-align:center';
+    sheet.appendChild(st); }
+  try{ if(navigator.serviceWorker && navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage('WHICH_BUILD'); }catch(e){}
+  paintBuildStamp();
   $('mobileMoreDrawer').classList.add('show');
 }
 function closeMobileMore(){ var d=$('mobileMoreDrawer'); if(d) d.classList.remove('show'); }
@@ -713,13 +753,15 @@ function renderDashboard(){
       '<span style="font-size:11px;color:#888;font-weight:400">'+esc(ymLabel(cardYm))+' \u00b7 issued = sold that month \u00b7 type columns = live at month end</span></div>'+
       '<div class="card"><div class="table-wrap swipe"><table><thead><tr><th>Branch</th><th>Issued</th>'+typeList.map(function(t){return '<th>'+esc(t)+'</th>';}).join('')+'<th>Active total</th></tr></thead><tbody>'+bodyRows+totRow+'</tbody></table></div></div>';
   }
-  html+='<div id="finDash"></div><div id="mktDash"></div>';
+  /* v286: partner review sits directly under the finance table — same month, same branch scope. */
+  html+='<div id="finDash"></div><div id="partnerReview"></div><div id="mktDash"></div>';
   $('dashExtra').innerHTML=html;
   /* v277: the inline cardYm picker is gone — the header month drives this section (see bindApp). */
   if(window.renderStarBlock){ try{ window.renderStarBlock(document.getElementById('starBlock')); }catch(_){} }
   if(window.renderQuickLog){ try{ window.renderQuickLog(document.getElementById('quickLog')); }catch(_){} }
   var dashBr=(S.perms&&S.perms.canViewAll)?(($('dashBranch')||{}).value||''):'';
   if(window.renderFinDash){ try{ window.renderFinDash(document.getElementById('finDash'), dashBr); }catch(_){} }
+  if(window.renderPartnerReview){ try{ window.renderPartnerReview(document.getElementById('partnerReview'), dashBr); }catch(_){} }
   if(!isCons && window.renderMktDash){ try{ window.renderMktDash(document.getElementById('mktDash'), dashBr); }catch(_){} }
   /* consultant: hide the business month picker and the "Recently added staff" block */
   var _rt=$('recentTable'), _rc=_rt&&_rt.closest?_rt.closest('.card'):null, _rl=_rc?_rc.previousElementSibling:null;

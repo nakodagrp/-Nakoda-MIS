@@ -4,7 +4,7 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v284';   /* v284: per-user cache (it was leaking between users), chunked server cache, correct shift times, plus the v283 GPS/check-out fixes */
+var CACHE_VERSION = 'nakoda-mis-v288';   /* v288: service worker no longer caches STALE files on install (this is why deploys appeared not to take) + build stamp */
 var SHELL = [
   './',
   './index.html',
@@ -36,6 +36,8 @@ var SHELL = [
   './staffperf.js',
   './marketing.js',
   './finance.js',
+  './partnerreview.js',
+  './bankpreview.js',
   './quicklog.js',
   './kpiadmin.js',
   './qc.js',
@@ -52,14 +54,33 @@ var SHELL = [
 var CRITICAL = ['./','./index.html','./styles.css','./manifest.webmanifest','./config.js','./api.js','./app.js'];
 var OPTIONAL = SHELL.filter(function(u){ return CRITICAL.indexOf(u)<0; });
 
+/* ============================================================ v288 — WHY BUMPING THE VERSION DIDN'T WORK
+   THE BUG. c.addAll() and c.add() fetch through the browser's ordinary HTTP cache. GitHub Pages serves
+   these files with Cache-Control: max-age=600, so for ten minutes after an upload the browser will hand
+   the service worker its OLD copy of a file — and the service worker will faithfully store that old copy
+   in its brand-new cache. Bumping CACHE_VERSION does nothing about this: you get a fresh cache carefully
+   filled with stale files, and the app keeps showing the previous build. Uploading again does not help,
+   because the browser is still inside the same ten-minute window.
+
+   That is why the finance table kept coming back with B2C/B2D/B2B and ₹0 cells after every deploy.
+
+   THE FIX. Fetch each shell file with {cache:'reload'}, which bypasses the HTTP cache and goes to the
+   network. What lands in the service worker cache is then genuinely what is on the server. */
+function freshRequest_(u){ return new Request(u, {cache:'reload'}); }
+function addFresh_(c,u){
+  return fetch(freshRequest_(u)).then(function(res){
+    if(!res || res.status!==200) throw new Error('bad status '+(res&&res.status)+' for '+u);
+    return c.put(u, res);
+  });
+}
 self.addEventListener('install', function(e){
   e.waitUntil(
     caches.open(CACHE_VERSION).then(function(c){
       // Critical files are all-or-nothing: if any can't be fetched, install REJECTS and the browser
       // retries later — so we never activate a half-cached (unstyled) shell.
-      return c.addAll(CRITICAL).then(function(){
+      return Promise.all(CRITICAL.map(function(u){ return addFresh_(c,u); })).then(function(){
         // Everything else is best-effort; a single missing module/icon must not block install.
-        return Promise.all(OPTIONAL.map(function(u){ return c.add(u).catch(function(){}); }));
+        return Promise.all(OPTIONAL.map(function(u){ return addFresh_(c,u).catch(function(){}); }));
       });
     })
   );
@@ -75,6 +96,11 @@ self.addEventListener('activate', function(e){
 
 self.addEventListener('message', function(e){
   if (e.data === 'SKIP_WAITING') self.skipWaiting();
+  /* v288: lets the app ask "which build are you actually serving?" — the question that has been
+     impossible to answer from the outside every time a deploy appeared not to take. */
+  if (e.data === 'WHICH_BUILD' && e.source && e.source.postMessage){
+    e.source.postMessage({ type:'BUILD', version:CACHE_VERSION });
+  }
 });
 
 self.addEventListener('fetch', function(e){
