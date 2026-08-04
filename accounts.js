@@ -358,8 +358,59 @@
      separate posting month, so June billing that lands on 28 July is counted in June. */
   var CAPITAL_CATS=['Company capital','Partner capital'];
   var PRIOR_CAT='Income of previous month';
-  var BANK_CATS=['B2C income','Other income'].concat(CAPITAL_CATS,[PRIOR_CAT],
-    ['Vendor payment','Salary','Material Purchased','Rent','Light bill','Petrol','Professional fees','Miscellaneous','Bank charge','Outsourced Services','Marketing','Other']);
+  /* v287 — 'Uncategorised' FIRST, AND IT IS THE DEFAULT.
+     rowHtml falls back to BANK_CATS[0] whenever a row has no category, and nothing was categorising
+     rows at all — so every one of a 69-row statement arrived pre-set to 'B2C income'. One click of
+     Save and the whole month of DEBITS would have imported as revenue. The safe default is the one
+     that says "we do not know yet"; the server holds those as pending and counts them nowhere.
+     Cash deposit / Card settlement / Inter-branch transfer are the categories the server's own rules
+     emit — they have to be selectable here or a corrected row could not be saved back. */
+  var BANK_CATS=['Uncategorised','B2C income','Other income'].concat(CAPITAL_CATS,[PRIOR_CAT],
+    ['Cash deposit','Card settlement','Inter-branch transfer',
+     'Vendor payment','Salary','Material Purchased','Rent','Light bill','Petrol','Professional fees','Miscellaneous','Bank charge','Outsourced Services','Marketing','Other']);
+  /* Filled from the server on first import (apiBankRules): the built-in narration rules plus anything
+     learned. Applied client-side so the operator SEES the categories before saving, not after. */
+  var BANK_RULES=null, BANK_SKIP=['Salary','Petrol'];
+  function applyBankRules(rows){
+    if(!BANK_RULES) return rows;
+    rows.forEach(function(r){
+      if(String(r.category||'').trim() && r.category!=='Uncategorised') return;   // a human already decided
+      var d=String(r.description||'');
+      for(var i=0;i<BANK_RULES.length;i++){
+        var R=BANK_RULES[i], hit=false;
+        try{ hit = R.matchType==='regex' ? new RegExp(R.pattern,'i').test(d)
+                                         : d.toLowerCase().indexOf(String(R.pattern).toLowerCase())>=0; }
+        catch(e){ hit=false; }
+        if(hit){ r.category=R.cat; r.autoCat=true; return; }
+      }
+      r.category='Uncategorised';
+    });
+    return rows;
+  }
+  function loadBankRules(){
+    if(BANK_RULES || !window.API || !API.bankRules) return Promise.resolve();
+    return API.bankRules().then(function(r){
+      if(!r||!r.ok) return;
+      BANK_RULES=(r.learned||[]).concat(r.builtin||[]);   // a learned rule always beats a built-in one
+      if(r.skipCats) BANK_SKIP=r.skipCats;
+    }).catch(function(){});
+  }
+  /* The statement header carries the account number; the server matches it to a branch so nobody has
+     to pick one by hand (and cannot pick the wrong one). */
+  function accountNoFrom(grid){
+    for(var i=0;i<grid.length && i<40;i++){
+      var row=grid[i]||[];
+      for(var j=0;j<row.length;j++){
+        if(/account\s*(no|number)/i.test(String(row[j]||''))){
+          for(var k=j+1;k<row.length;k++){
+            var v=String(row[k]||'').replace(/[^0-9]/g,'');
+            if(v.length>=6) return v;
+          }
+        }
+      }
+    }
+    return '';
+  }
   function isCapCat(c){ return CAPITAL_CATS.indexOf(String(c))>=0; }
   function prevMonthOf(d){ var m=String(d||'').slice(0,7); if(!/^\d{4}-\d{2}$/.test(m)) return '';
     var y=Number(m.slice(0,4)), mm=Number(m.slice(5,7))-1; if(mm<1){ mm=12; y--; }
@@ -387,7 +438,7 @@
     return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
   function isoDate(s){ s=String(s).trim(); var m=s.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/); if(m){ var y=m[3].length===2?('20'+m[3]):m[3]; return y+'-'+('0'+m[2]).slice(-2)+'-'+('0'+m[1]).slice(-2); } var d=new Date(s); if(isNaN(d)) return s.slice(0,10);
     return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
-  var BANKROWS=[];
+  var BANKROWS=[], BANKACCT='';
   function loadBank(){
     var box=$id('accBody'), brs=(S.meta&&S.meta.branches)||[];
     box.innerHTML='<div class="fin-card" style="padding:14px;margin-bottom:14px"><div class="fin-h" style="margin:-14px -14px 12px">Reconcile — collection vs bank</div>'+
@@ -406,7 +457,8 @@
           catch(e){ wrap.innerHTML='<div class="empty">Could not read file.</div>'; return; }
           BANKROWS=normalizeBank(grid);
           if(!BANKROWS.length){ wrap.innerHTML='<div class="empty">No transactions detected. Make sure it\'s the bank\'s statement export.</div>'; return; }
-          paintBankTable(brs);
+          BANKACCT=accountNoFrom(grid);   /* v287: resolves the branch server-side — see saveBankRows meta */
+          loadBankRules().then(function(){ applyBankRules(BANKROWS); paintBankTable(brs); });
         }
         /* v188: the 900KB Excel library is no longer loaded at app startup — fetch it here, only
            when someone actually imports an .xlsx (same on-demand pattern as the attendance PDF). */
@@ -427,19 +479,27 @@
     var wrap=$id('bkTableWrap');
     /* v276: bulk tagging. A statement is 69 rows that are almost always the same branch, and setting
        each one by hand was the slowest part of the month. Leaving a dropdown on "— leave as is —"
-       means that column is untouched, so branch can be set for everything without disturbing
-       categories anyone has already tagged. Individual rows stay editable afterwards. */
+       v277: BRANCH ONLY. The category half was removed — a statement is nearly always one branch but
+       a mix of categories, so setting every row to one category was work to undo rather than work
+       saved, and it silently overwrote rows already tagged. Individual rows stay editable. */
     var bulk='<div class="bk-bulk" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#e6f1fb;border-radius:8px;padding:10px 12px;margin:8px 0">'+
       '<span style="font-size:12px;color:#185fa5;font-weight:600">Set all '+BANKROWS.length+' rows</span>'+
-      '<select class="mini2" id="bkAllBr" style="min-width:120px"><option value="">— branch —</option>'+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'">'+esc(b.BranchName)+'</option>';}).join('')+'</select>'+
-      '<select class="mini2" id="bkAllCat" style="min-width:150px"><option value="">— category —</option>'+BANK_CATS.map(function(c){return '<option>'+esc(c)+'</option>';}).join('')+'</select>'+
+      '<select class="mini2" id="bkAllBr" style="min-width:140px"><option value="">— branch —</option>'+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'">'+esc(b.BranchName)+'</option>';}).join('')+'</select>'+
       '<button class="btn sm" id="bkApplyAll">Apply to all</button>'+
-      '<span style="font-size:11px;color:#5b7fa5">Blank = leave that column alone</span></div>';
+      '<span style="font-size:11px;color:#5b7fa5">Categories stay as they are</span></div>';
 
     wrap.innerHTML='<div style="font-size:12px;color:#666;margin:8px 0">'+BANKROWS.length+' transactions — tag Branch &amp; Category, then save.</div>'+bulk+
       '<div class="table-wrap"><table><thead><tr><th style="min-width:92px">Date</th><th style="min-width:200px">Description</th><th>Amount</th><th style="min-width:120px">Branch</th><th style="min-width:150px">Category</th><th style="min-width:150px">Details</th></tr></thead><tbody>'+
       BANKROWS.map(function(r,i){ return rowHtml(r,i,brs); }).join('')+'</tbody></table></div>'+
+      '<div id="bkPreview"></div>'+
       '<div class="fin-actions" style="margin-top:10px"><button class="btn" id="bkSave">Save '+BANKROWS.length+' to ledger</button></div>';
+    /* v287: show what this import would DO before it is committed. Importing a statement moves the
+       P&L; doing it blind is how a month gets quietly wrong. */
+    if(window.renderBankPreview){
+      var _pb=BANKROWS[0]&&BANKROWS[0].branch||ACC.branch||'';
+      var _pn=(brs.filter(function(b){return String(b.BranchID)===String(_pb);})[0]||{}).BranchName||'';
+      try{ window.renderBankPreview(document.getElementById('bkPreview'), BANKROWS, _pb, _pn); }catch(_){}
+    }
     bindBank(brs);
   }
   /* v276: description no longer truncates — the bank narration is the only way to tell two rows apart
@@ -451,24 +511,30 @@
       '<td class="'+(r.drcr==='CR'?'cr':'dr')+'" style="white-space:nowrap">'+(r.drcr==='CR'?'+':'-')+'₹'+money(r.amount)+'</td>'+
       '<td><select class="mini2" data-br="'+i+'">'+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'"'+((r.branch||ACC.branch)===b.BranchID?' selected':'')+'>'+esc(b.BranchName)+'</option>';}).join('')+'</select></td>'+
       '<td><select class="mini2" data-cat="'+i+'">'+BANK_CATS.map(function(c){return '<option'+(c===cat?' selected':'')+'>'+esc(c)+'</option>';}).join('')+'</select>'+extraHtml(r,i)+'</td>'+
-      '<td><input class="mini2" data-det="'+i+'" value="'+esc(r.details||'')+'" placeholder="optional" style="width:100%"></td></tr>';
+      '<td><input class="mini2" data-det="'+i+'" value="'+esc(r.details||'')+'" placeholder="'+(cat==='Partner capital'?'partner name':'optional')+'" style="width:100%"></td></tr>';
   }
-  /* The one extra field a capital or prior-month row needs, shown only when that category is chosen. */
+  /* The one extra field a capital or prior-month row needs, shown only when that category is chosen.
+     v277: the separate "partner name" box is gone. It sat directly beside Details asking for the same
+     kind of text, which read as two boxes for one answer. The partner's name now comes from Details —
+     see readRow — and the Details placeholder changes to say so when Partner capital is picked. */
   function extraHtml(r,i){
     var c=String(r.category||BANK_CATS[0]);
-    if(c==='Partner capital') return '<input class="mini2" data-party="'+i+'" value="'+esc(r.party||'')+'" placeholder="partner name" style="width:100%;margin-top:4px">';
     if(c==='Company capital') return '<div style="font-size:11px;color:#888;margin-top:4px">Party: Company</div>';
     if(c===PRIOR_CAT) return '<input class="mini2" type="month" data-pm="'+i+'" value="'+esc(r.postMonth||prevMonthOf(r.date))+'" style="width:100%;margin-top:4px" title="Which month this income belongs to">';
     return '';
   }
   function readRow(t,i){
     var g=function(a){ return t.querySelector('['+a+'="'+i+'"]'); };
-    var br=g('data-br'), ct=g('data-cat'), dt=g('data-det'), py=g('data-party'), pm=g('data-pm');
+    var br=g('data-br'), ct=g('data-cat'), dt=g('data-det'), pm=g('data-pm');
     var r=BANKROWS[i];
     if(br) r.branch=br.value;
     if(ct) r.category=ct.value;
     if(dt) r.details=dt.value;
-    r.party   = py?py.value:(r.category==='Company capital'?'Company':'');
+    /* v277: Partner capital takes its party from Details, so the ledger still gets a name to group the
+       running balance by without a second box asking for it. Company capital is always 'Company'. */
+    r.party   = r.category==='Company capital' ? 'Company'
+              : r.category==='Partner capital' ? String(r.details||'').trim()
+              : '';
     r.postMonth = (r.category===PRIOR_CAT) ? (pm?pm.value:prevMonthOf(r.date)) : '';
   }
   function bindBank(brs){
@@ -482,20 +548,15 @@
     }; });
     t.querySelectorAll('[data-br]').forEach(function(sel){ sel.onchange=function(){ readRow(t,Number(sel.getAttribute('data-br'))); }; });
     t.querySelectorAll('[data-det]').forEach(function(el){ el.onchange=function(){ readRow(t,Number(el.getAttribute('data-det'))); }; });
-    t.querySelectorAll('[data-party]').forEach(function(el){ el.onchange=function(){ readRow(t,Number(el.getAttribute('data-party'))); }; });
     t.querySelectorAll('[data-pm]').forEach(function(el){ el.onchange=function(){ readRow(t,Number(el.getAttribute('data-pm'))); }; });
 
     var ap=$id('bkApplyAll');
     if(ap) ap.onclick=function(){
-      var b=$id('bkAllBr').value, c=$id('bkAllCat').value;
-      if(!b && !c){ toast('Pick a branch or a category first.',true); return; }
-      BANKROWS.forEach(function(r){
-        if(b) r.branch=b;
-        if(c){ r.category=c; if(c===PRIOR_CAT && !r.postMonth) r.postMonth=prevMonthOf(r.date);
-               if(c==='Company capital') r.party='Company'; }
-      });
+      var b=$id('bkAllBr').value;
+      if(!b){ toast('Pick a branch first.',true); return; }
+      BANKROWS.forEach(function(r){ r.branch=b; });
       paintBankTable(brs);
-      toast('Applied to '+BANKROWS.length+' rows');
+      toast('All '+BANKROWS.length+' rows set to this branch');
     };
 
     var sv=$id('bkSave');
@@ -504,8 +565,18 @@
       var bad=BANKROWS.filter(function(r){ return r.category==='Partner capital' && !String(r.party||'').trim(); });
       if(bad.length){ toast(bad.length+' partner capital row(s) need a partner name.',true); return; }
       this.disabled=true; this.textContent='Saving…';
-      API.saveBankRows(BANKROWS).then(function(r){
-        if(r&&r.ok){ toast(r.saved+' entries saved to ledger'); BANKROWS=[]; $id('bkTableWrap').innerHTML='<div class="empty">Saved ✓</div>'; }
+      /* v287: meta is REQUIRED. Without it apiSaveBankRows cannot resolve the branch and returns
+         'Could not work out which branch this statement belongs to.' — which is what every import
+         attempt has been doing. */
+      API.saveBankRows(BANKROWS, {accountNo:BANKACCT, branchId:(BANKROWS[0]&&BANKROWS[0].branch)||ACC.branch||''}).then(function(r){
+        if(r&&r.ok){
+          var held=Number(r.skipped)||0, dup=Number(r.duplicates)||0;
+          toast(r.saved+' entries saved'+(held?(' · '+held+' held for review'):'')+(dup?(' · '+dup+' duplicates skipped'):''));
+          BANKROWS=[];
+          $id('bkTableWrap').innerHTML='<div class="empty" style="text-align:left;padding:14px">Saved ✓ '+r.saved+' rows written'+
+            (held?('<br><span style="color:#854F0B">'+held+' row(s) had no rule and are held as Uncategorised — open <b>Partner review</b> on the dashboard to assign them.</span>'):'')+
+            (dup?('<br><span style="color:#888">'+dup+' row(s) were already imported and were skipped.</span>'):'')+'</div>';
+        }
         else { toast((r&&r.error)||'Failed',true); var b2=$id('bkSave'); if(b2){ b2.disabled=false; b2.textContent='Save to ledger'; } }
       });
     };
