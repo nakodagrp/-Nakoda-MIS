@@ -148,7 +148,38 @@
     });
   }
 
-  function rk(action,payload){ var p=Object.assign({},payload||{}); delete p.token; return 'rc:'+action+':'+JSON.stringify(p); }
+  /* ============================================================ v284 — CACHE WAS SHARED BETWEEN USERS
+     THE BUG, seen directly in a screenshot: Hethvee Tandel's attendance card was showing Anurag Shukla's
+     record — his check-in, his check-out, his whole month strip.
+
+     Cause: rk() deliberately strips the token before building the cache key, so every cached read landed
+     under a key like  rc:myAttendance:{"ym":"2026-08"}  with nothing in it identifying WHOSE data it was.
+     One shared key per device. And clearLocal() (logout) cleared eight named keys but never touched the
+     rc: read cache or 'myatt' — so whoever logged in next was served the previous person's data until the
+     network answered, and on a weak connection (where the fetch throws and we fall back to cache) they
+     kept being served it.
+
+     That is a privacy leak, and it is also why the Approve list showed a punch-out as missing that had
+     actually been recorded — the list was a saved copy from another session, not live data.
+
+     Fix: every cached read is namespaced to the signed-in employee, and switching user wipes the store. */
+  function curUid(){ try{ return localStorage.getItem('nk_uid')||'anon'; }catch(e){ return 'anon'; } }
+  function setUid(id){ try{ id?localStorage.setItem('nk_uid',String(id)):localStorage.removeItem('nk_uid'); }catch(e){} }
+  /* Wipe every cached read. Called when the signed-in person changes, so one user's data can never be
+     shown to another — belt as well as braces, since the keys are namespaced too. */
+  function wipeCache(){
+    return tx('kv','readwrite').then(function(s){ return new Promise(function(res){ var r=s.clear(); r.onsuccess=function(){res();}; r.onerror=function(){res();}; }); }).catch(function(){});
+  }
+  /* Call on every successful login/validate. If the person changed, clear first. */
+  function adoptUser(u){
+    var id=String((u&&(u.EmpID||u.empId))||'');
+    if(!id) return Promise.resolve();
+    if(curUid()===id) return Promise.resolve();
+    var had=curUid();
+    setUid(id);
+    return (had && had!=='anon') ? wipeCache() : Promise.resolve();
+  }
+  function rk(action,payload){ var p=Object.assign({},payload||{}); delete p.token; return 'rc:'+curUid()+':'+action+':'+JSON.stringify(p); }
   function noTok(payload){ var p=Object.assign({},payload||{}); delete p.token; return p; }
   function enqueue(action,payload){ return obAdd({action:action,payload:noTok(payload),ts:Date.now()}).then(function(){ emit(); return {ok:true,offline:true}; }); }
   function readGet(action,payload){ return kvGet(rk(action,payload)).then(function(c){ if(c){ try{c=JSON.parse(JSON.stringify(c));}catch(e){} c.offline=true; return c; } return {ok:false,offline:true,error:'Not available offline yet — open this once while online.'}; }); }
@@ -218,13 +249,24 @@
     login:function(loginId,password){
       return call('login',{loginId:loginId,password:password}).then(function(r){
         /* v187: server now sends metadata with the login reply — cache it so the app can enter instantly */
-        if(r.ok){ setToken(r.token); if(r.perms){ kvSet('meta',{roles:r.roles||[],branches:r.branches||[]}); kvSet('me',r.me||r.user); kvSet('perms',r.perms); } }
+        /* v284: adopt the user FIRST. If a different person was signed in on this device, that wipes the
+           cached reads before anything of theirs can be painted under the new login. */
+        if(r.ok){
+          setToken(r.token);
+          return adoptUser(r.me||r.user).then(function(){
+            if(r.perms){ kvSet('meta',{roles:r.roles||[],branches:r.branches||[]}); kvSet('me',r.me||r.user); kvSet('perms',r.perms); }
+            return r;
+          });
+        }
         return r;
       });
     },
     validate:function(){
       var t=getToken(); if(!t) return Promise.resolve({ok:false,error:'No session'});
-      return call('validate',{token:t});
+      return call('validate',{token:t}).then(function(r){
+        if(r&&r.ok&&r.user) return adoptUser(r.user).then(function(){ return r; });   // v284: catches a token that belongs to someone else
+        return r;
+      });
     },
     /* v187: fire-and-forget ping that wakes the Apps Script container while the user is still
        typing their password — first real call (login) then lands on a warm server. */
@@ -431,8 +473,10 @@
     // so the photo survives even if the app is backgrounded/closed right after check-in, and retries
     // automatically once back online either way.
     attachSelfie:function(d){ return queueSelfie(d.attId,d.kind,d.base64); },
-    cachedAttendance:function(){ return kvGet('myatt'); },
-    myAttendance:function(ym){ return call('myAttendance',{token:getToken(),ym:ym}).then(function(r){ if(r.ok) kvSet('myatt',r); return r; }).catch(function(){ return kvGet('myatt').then(function(x){ return x||{ok:true,records:[],offline:true}; }); }); },
+    /* v284: 'myatt' was a single global key — the direct cause of one employee's attendance card being
+       painted with another employee's punches. Namespaced per user, like every other cached read. */
+    cachedAttendance:function(){ return kvGet('myatt:'+curUid()); },
+    myAttendance:function(ym){ return call('myAttendance',{token:getToken(),ym:ym}).then(function(r){ if(r.ok) kvSet('myatt:'+curUid(),r); return r; }).catch(function(){ return kvGet('myatt:'+curUid()).then(function(x){ return x||{ok:true,records:[],offline:true}; }); }); },
     listAttendance:function(branch,date,dateTo){ return call('listAttendance',{token:getToken(),branch:branch,date:date,dateTo:dateTo||''}); },
     staffMonthAttendance:function(empId,ym){ return call('staffMonthAttendance',{token:getToken(),empId:empId,ym:ym}); },
     monthlyAttendance:function(branch,ym){ return call('monthlyAttendance',{token:getToken(),branch:branch,ym:ym}); },
@@ -553,7 +597,10 @@
 
     syncOutbox:syncOutbox,
     pending:function(){ return obAll().then(function(i){return i.length;}); },
-    clearLocal:function(){ setToken(''); return Promise.all([kvSet('employees',null),kvSet('meta',null),kvSet('me',null),kvSet('perms',null),kvSet('tasks',null),kvSet('cards',null),kvSet('cardtypes',null),kvSet('cardprices',null)]); }
+    /* v284: this used to clear eight named keys and leave the whole rc: read cache and 'myatt' behind,
+       so the next person to sign in on this device was shown the previous person's data. Clearing the
+       store outright is the only version of this that cannot rot as new cached reads get added later. */
+    clearLocal:function(){ setToken(''); setUid(''); return wipeCache(); }
   };
 
   function queueCreate(data,tempPw){

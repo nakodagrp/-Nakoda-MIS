@@ -4,7 +4,7 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v283';   /* v283: punch never lost when GPS fails; check-out duplicate guard; punchId idempotency; queue unblocked; button flips instantly */
+var CACHE_VERSION = 'nakoda-mis-v284';   /* v284: per-user cache (it was leaking between users), chunked server cache, correct shift times, plus the v283 GPS/check-out fixes */
 var SHELL = [
   './',
   './index.html',

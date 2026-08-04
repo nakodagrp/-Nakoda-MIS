@@ -9,8 +9,28 @@
   function needSelfie(){ return true; }  // selfie required for all modes
   function isFenced(){ var m=attMode().toLowerCase(); return m.indexOf('geo')>=0 || m.indexOf('office')>=0; }   // v242: ANY "geo" mode (Geo only, Geo + Selfie, Geo) is fenced to the branch (150 m) — must match Code.gs
   function hm2min(t){ var p=String(t||'').split(':'); return p.length>=2?(+p[0])*60+(+p[1]):null; }
-  // Sheets time cells arrive as ISO strings like "1899-12-30T06:38:50.000Z" — extract HH:MM only
-  function fmtDutyTime(t){ if(!t) return ''; var s=String(t); var m=s.match(/T(\d{2}):(\d{2})/); if(m) return m[1]+':'+m[2]; return s; }
+  /* v284 — WHY YOUR SHIFT LINE SAID "04:38–13:38".
+     A time-only cell is stored by Sheets against 1899-12-30 in the SHEET's timezone, and serialises to
+     JSON in UTC. For India that epoch date carries the old Madras offset of +5:21:10, not +5:30 — which
+     is why a 10:00 shift arrives as "1899-12-30T04:38:50.000Z". Reading the HH:MM straight out of the
+     string, as this did, therefore printed 04:38 for a 10:00 shift: every staff member has been shown
+     the wrong shift on their attendance card. (The server was never confused — it formats with the sheet
+     timezone via taskTimeStr_, which is why the Approve list correctly says "Duty 15:00–22:00" while the
+     employee's own card disagreed. Late/half-day was always judged on the server's value, so pay was not
+     affected — only what people were told their shift was.)
+     The real fix is server-side: publicUser_ now formats these with taskTimeStr_ (the sheet's timezone,
+     authoritative, independent of whatever timezone the phone is set to) and sends a plain "HH:MM". This
+     function keeps a fallback for phones still talking to an older backend, using the Date object's local
+     getters rather than scraping digits — the engine applies the same historical offset Sheets did. */
+  function fmtDutyTime(t){
+    if(!t) return '';
+    var s=String(t);
+    if(/^\d{1,2}:\d{2}$/.test(s)) return s;                       // already formatted by the server — the normal path now
+    if(!/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0,5);
+    var d=new Date(s);
+    if(isNaN(d.getTime())) return s.slice(11,16);
+    return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+  }
   function dayBadge(st){ var m={present:['Full day','#eaf7ef','#1a8f4c'],half:['Half day','#faeeda','#854F0B'],leave:['Leave','#e9f1fb','#185FA5'],absent:['Absent','#fdecec','#b23b3b']}; var b=m[String(st||'present')]||m.present; return ' <span style="font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:'+b[1]+';color:'+b[2]+'">'+b[0]+'</span>'; }
   function canApprove(){ if(S.user&&String(S.user.AttApproveDenied)==='yes') return false; var p=S.perms||{}; return p.level==='SUPER'||p.level==='HR_ADMIN'||p.level==='BRANCH_MGR'||(S.user&&S.user.Role==='Operations Manager'); }
   // v282 (bug D): every other date compare in this file defensively slices to 10 chars. This one used a
