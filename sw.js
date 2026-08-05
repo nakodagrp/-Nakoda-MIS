@@ -4,7 +4,7 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v292';   /* v292: account number field no longer autofillable with a name (this was blocking every bank import) */
+var CACHE_VERSION = 'nakoda-mis-v294';   /* v294: bank statement table — only money that moved through the bank, nothing from daily entry */
 var SHELL = [
   './',
   './index.html',
@@ -36,6 +36,7 @@ var SHELL = [
   './staffperf.js',
   './marketing.js',
   './finance.js',
+  './statementtable.js',
   './partnerreview.js',
   './bankpreview.js',
   './quicklog.js',

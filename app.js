@@ -118,7 +118,7 @@ function initInstall(){
    copy, or the upload never landed. APP_BUILD is stamped into the page title tooltip and shown in the
    ⋯ More sheet, and the service worker is asked separately which version IT is serving. When those two
    disagree, the cache is stale; when both are old, the upload did not reach the server. */
-var APP_BUILD='v291';
+var APP_BUILD='v294';
 window.APP_BUILD=APP_BUILD;
 window.SW_BUILD='?';
 try{
@@ -754,13 +754,14 @@ function renderDashboard(){
       '<div class="card"><div class="table-wrap swipe"><table><thead><tr><th>Branch</th><th>Issued</th>'+typeList.map(function(t){return '<th>'+esc(t)+'</th>';}).join('')+'<th>Active total</th></tr></thead><tbody>'+bodyRows+totRow+'</tbody></table></div></div>';
   }
   /* v286: partner review sits directly under the finance table — same month, same branch scope. */
-  html+='<div id="finDash"></div><div id="partnerReview"></div><div id="mktDash"></div>';
+  html+='<div id="finDash"></div><div id="stmtTable"></div><div id="partnerReview"></div><div id="mktDash"></div>';
   $('dashExtra').innerHTML=html;
   /* v277: the inline cardYm picker is gone — the header month drives this section (see bindApp). */
   if(window.renderStarBlock){ try{ window.renderStarBlock(document.getElementById('starBlock')); }catch(_){} }
   if(window.renderQuickLog){ try{ window.renderQuickLog(document.getElementById('quickLog')); }catch(_){} }
   var dashBr=(S.perms&&S.perms.canViewAll)?(($('dashBranch')||{}).value||''):'';
   if(window.renderFinDash){ try{ window.renderFinDash(document.getElementById('finDash'), dashBr); }catch(_){} }
+  if(window.renderStatementTable){ try{ window.renderStatementTable(document.getElementById('stmtTable'), dashBr); }catch(_){} }
   if(window.renderPartnerReview){ try{ window.renderPartnerReview(document.getElementById('partnerReview'), dashBr); }catch(_){} }
   if(!isCons && window.renderMktDash){ try{ window.renderMktDash(document.getElementById('mktDash'), dashBr); }catch(_){} }
   /* consultant: hide the business month picker and the "Recently added staff" block */
