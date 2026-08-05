@@ -420,6 +420,12 @@ table.pm-grid{border-collapse:collapse;font-size:11px;min-width:560px}
 .att-sub{font-size:12px;color:#8a9099;margin:2px 0 12px}
 .att-big{border:0;border-radius:14px;padding:16px 20px;font-size:18px;font-weight:700;color:#fff;width:100%}
 .att-big.in{background:#1ba94c}.att-big.out{background:var(--red)}
+/* v295: the punch is in flight. A disabled button with a live spinner replaces the toast that used to
+   fade away after two seconds and leave the screen looking untouched — which is what made staff tap
+   two and three times for one punch. */
+.att-big.sending{background:#6b7280;cursor:default;display:flex;align-items:center;justify-content:center;gap:10px}
+.att-spin{width:16px;height:16px;border:2.5px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;display:inline-block;animation:attspin .7s linear infinite}
+@keyframes attspin{to{transform:rotate(360deg)}}
 .att-done{background:#eafaf3;color:#1a7f37;border-radius:12px;padding:14px;font-weight:700}
 .att-stat{font-size:12.5px;color:#555;margin-top:11px}
 .att-note{font-size:11px;color:#9aa0a6;margin-top:8px}

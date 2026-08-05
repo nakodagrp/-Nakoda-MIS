@@ -4,7 +4,7 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v294';   /* v294: bank statement table — only money that moved through the bank, nothing from daily entry */
+var CACHE_VERSION = 'nakoda-mis-v295';   /* v295: punch is staged locally and painted instantly; service worker no longer double-fetches every cached file */
 var SHELL = [
   './',
   './index.html',
@@ -104,6 +104,44 @@ self.addEventListener('message', function(e){
   }
 });
 
+/* ============================================================ v295 — THE DOUBLE-FETCH BUG
+   THE BUG. The old handler read:
+
+       var net = fetch(req).then(...);
+       return cached || net;
+
+   `fetch(req)` is a function CALL, evaluated the moment that line runs — long before
+   `cached || net` decides which one to return. So a cache hit still fired a full network
+   request; the response was simply thrown away. index.html pulls in 35 scripts, styles.css
+   and five icons, so EVERY page load quietly put ~40 needless requests on the wire even
+   though all 40 files were already sitting in the cache.
+
+   WHY THAT BROKE PUNCHING. On a branch's mobile connection those 40 requests compete with
+   the one request that actually matters — the check-in POST carrying a photo. The punch
+   waits behind them for its share of a narrow pipe, and on a bad morning it loses the race
+   and aborts. "Photo taken, then nothing happened."
+
+   THE FIX. Serve the cached copy IMMEDIATELY and revalidate in the background at most once
+   per file per service-worker lifetime, so a file is refreshed but never re-fetched forty
+   times a day. Nothing is fetched at all when the device is offline. Updates still arrive
+   the normal way — a CACHE_VERSION bump re-installs the whole shell.
+   ============================================================ */
+var REVALIDATED_ = {};   /* url -> 1, reset whenever the service worker restarts */
+
+function revalidate_(req){
+  var key = req.url;
+  if (REVALIDATED_[key]) return;        // already refreshed this file since the SW woke up
+  if (!self.navigator || self.navigator.onLine !== false) {
+    REVALIDATED_[key] = 1;
+    fetch(req).then(function(res){
+      if (res && res.status === 200){
+        var copy = res.clone();
+        caches.open(CACHE_VERSION).then(function(c){ c.put(req, copy); });
+      }
+    }).catch(function(){ delete REVALIDATED_[key]; });   // failed — allow another try later
+  }
+}
+
 self.addEventListener('fetch', function(e){
   var req = e.request;
   if (req.method !== 'GET') return;
@@ -111,7 +149,13 @@ self.addEventListener('fetch', function(e){
   if (url.origin !== self.location.origin) return;
   e.respondWith(
     caches.match(req).then(function(cached){
-      var net = fetch(req).then(function(res){
+      if (cached){
+        /* Answer from cache NOW. Refresh quietly afterwards, once, and never block on it. */
+        e.waitUntil(Promise.resolve().then(function(){ revalidate_(req); }));
+        return cached;
+      }
+      /* Genuine miss — only now do we touch the network. */
+      return fetch(req).then(function(res){
         if (res && res.status === 200){
           var copy = res.clone();
           caches.open(CACHE_VERSION).then(function(c){ c.put(req, copy); });
@@ -121,7 +165,6 @@ self.addEventListener('fetch', function(e){
         if (req.mode === 'navigate') return caches.match('./index.html');   // offline page loads → cached shell
         return cached;
       });
-      return cached || net;
     })
   );
 });

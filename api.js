@@ -466,8 +466,14 @@
     reorderFields:function(order){ return call('reorderFields',{token:getToken(),order:order}); },
     saveStageEdges:function(pid,fromStageId,toStageIds){ return call('saveStageEdges',{token:getToken(),processId:pid,fromStageId:fromStageId,toStageIds:toStageIds}); },
     capitalLedger:function(b){ return call('capitalLedger',{token:getToken(),branch:b||''}); },   /* v276 */
-    checkIn:function(d){ return call('checkIn',{token:getToken(),data:d}); },
-    checkOut:function(d){ return call('checkOut',{token:getToken(),data:d}); },
+    /* v295: a punch now carries its OWN deadline instead of inheriting NET's 60-second default.
+       Sixty seconds was chosen for bulk uploads, not for a person standing at a door holding a phone.
+       With one automatic retry it meant a staff member could wait THREE MINUTES watching a screen that
+       said nothing before the app finally admitted the punch hadn't gone. attendance.js now stages the
+       punch locally first and passes a short deadline here, so a slow server costs seconds, not minutes,
+       and the punch is already saved either way. */
+    checkIn:function(d,timeoutMs){ return call('checkIn',{token:getToken(),data:d}, timeoutMs||30000); },
+    checkOut:function(d,timeoutMs){ return call('checkOut',{token:getToken(),data:d}, timeoutMs||30000); },
     // Uploads the selfie after check-in/out already succeeded, so the punch itself doesn't wait on
     // Drive. Queued to IndexedDB first (durable) before attempting the live call — see queueSelfie —
     // so the photo survives even if the app is backgrounded/closed right after check-in, and retries
@@ -476,7 +482,11 @@
     /* v284: 'myatt' was a single global key — the direct cause of one employee's attendance card being
        painted with another employee's punches. Namespaced per user, like every other cached read. */
     cachedAttendance:function(){ return kvGet('myatt:'+curUid()); },
-    myAttendance:function(ym){ return call('myAttendance',{token:getToken(),ym:ym}).then(function(r){ if(r.ok) kvSet('myatt:'+curUid(),r); return r; }).catch(function(){ return kvGet('myatt:'+curUid()).then(function(x){ return x||{ok:true,records:[],offline:true}; }); }); },
+    /* v295: this is the call fired straight after a punch, and it is guaranteed to be the SLOWEST one
+       the server ever answers — the punch has just invalidated this employee's month cache, so it must
+       re-read the Attendance sheet from scratch. At the old 60s default the attendance screen could sit
+       there for a full minute before falling back to the copy already in IndexedDB. 20s, then fall back. */
+    myAttendance:function(ym,timeoutMs){ return call('myAttendance',{token:getToken(),ym:ym}, timeoutMs||20000).then(function(r){ if(r.ok) kvSet('myatt:'+curUid(),r); return r; }).catch(function(){ return kvGet('myatt:'+curUid()).then(function(x){ return x||{ok:true,records:[],offline:true}; }); }); },
     listAttendance:function(branch,date,dateTo){ return call('listAttendance',{token:getToken(),branch:branch,date:date,dateTo:dateTo||''}); },
     staffMonthAttendance:function(empId,ym){ return call('staffMonthAttendance',{token:getToken(),empId:empId,ym:ym}); },
     monthlyAttendance:function(branch,ym){ return call('monthlyAttendance',{token:getToken(),branch:branch,ym:ym}); },
