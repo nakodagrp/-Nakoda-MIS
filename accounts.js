@@ -365,9 +365,26 @@
      that says "we do not know yet"; the server holds those as pending and counts them nowhere.
      Cash deposit / Card settlement / Inter-branch transfer are the categories the server's own rules
      emit — they have to be selectable here or a corrected row could not be saved back. */
-  var BANK_CATS=['Uncategorised','B2C income','Other income'].concat(CAPITAL_CATS,[PRIOR_CAT],
+  /* v290: OPD cash (income), plus TDS / Mobile bill / Monthly software expense (costs).
+     NEW_CAT is the sentinel that opens the "type your own" box — see rowHtml/bindBank. */
+  var NEW_CAT='＋ New category…';
+  var BANK_CATS=['Uncategorised','B2C income','OPD cash','Other income'].concat(CAPITAL_CATS,[PRIOR_CAT],
     ['Cash deposit','Card settlement','Inter-branch transfer',
-     'Vendor payment','Salary','Material Purchased','Rent','Light bill','Petrol','Professional fees','Miscellaneous','Bank charge','Outsourced Services','Marketing','Other']);
+     'Vendor payment','Salary','Material Purchased','Rent','Light bill','Petrol','Professional fees',
+     'TDS','Mobile bill','Monthly software expense',
+     'Miscellaneous','Bank charge','Outsourced Services','Marketing','Other']);
+  /* Categories somebody typed in earlier. Pulled from the server on load so every user sees the same
+     list — otherwise two people invent "Mobile Bill" and "mobile bills" and the finance table grows two
+     columns for one thing. */
+  var CUSTOM_CATS=[];
+  function allCats(){ return BANK_CATS.concat(CUSTOM_CATS.filter(function(c){ return BANK_CATS.indexOf(c)<0; })).concat([NEW_CAT]); }
+  function addCustomCat(c){
+    c=String(c||'').trim(); if(!c) return '';
+    var exists=allCats().filter(function(x){ return x.toLowerCase()===c.toLowerCase(); })[0];
+    if(exists && exists!==NEW_CAT) return exists;                 // reuse the existing spelling, never duplicate it
+    if(CUSTOM_CATS.indexOf(c)<0) CUSTOM_CATS.push(c);
+    return c;
+  }
   /* Filled from the server on first import (apiBankRules): the built-in narration rules plus anything
      learned. Applied client-side so the operator SEES the categories before saving, not after. */
   var BANK_RULES=null, BANK_SKIP=['Salary','Petrol'];
@@ -393,6 +410,7 @@
       if(!r||!r.ok) return;
       BANK_RULES=(r.learned||[]).concat(r.builtin||[]);   // a learned rule always beats a built-in one
       if(r.skipCats) BANK_SKIP=r.skipCats;
+      (r.customCats||[]).forEach(addCustomCat);          // v290: categories other people have already created
     }).catch(function(){});
   }
   /* The statement header carries the account number; the server matches it to a branch so nobody has
@@ -510,7 +528,7 @@
       '<td style="white-space:normal;word-break:break-word;line-height:1.35;font-size:12px">'+esc(r.description)+'</td>'+
       '<td class="'+(r.drcr==='CR'?'cr':'dr')+'" style="white-space:nowrap">'+(r.drcr==='CR'?'+':'-')+'₹'+money(r.amount)+'</td>'+
       '<td><select class="mini2" data-br="'+i+'">'+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'"'+((r.branch||ACC.branch)===b.BranchID?' selected':'')+'>'+esc(b.BranchName)+'</option>';}).join('')+'</select></td>'+
-      '<td><select class="mini2" data-cat="'+i+'">'+BANK_CATS.map(function(c){return '<option'+(c===cat?' selected':'')+'>'+esc(c)+'</option>';}).join('')+'</select>'+extraHtml(r,i)+'</td>'+
+      '<td><select class="mini2" data-cat="'+i+'">'+allCats().map(function(c){return '<option'+(c===cat?' selected':'')+(c===NEW_CAT?' style="color:#DA1017;font-weight:600"':'')+'>'+esc(c)+'</option>';}).join('')+'</select>'+extraHtml(r,i)+'</td>'+
       '<td><input class="mini2" data-det="'+i+'" value="'+esc(r.details||'')+'" placeholder="'+(cat==='Partner capital'?'partner name':'optional')+'" style="width:100%"></td></tr>';
   }
   /* The one extra field a capital or prior-month row needs, shown only when that category is chosen.
@@ -519,6 +537,16 @@
      see readRow — and the Details placeholder changes to say so when Partner capital is picked. */
   function extraHtml(r,i){
     var c=String(r.category||BANK_CATS[0]);
+    /* v290: picking "New category…" opens this inline. Kept in the row rather than a popup so the
+       narration and the amount stay on screen while you decide what the payment actually was. */
+    if(c===NEW_CAT) return '<div style="margin-top:6px;border:1px solid #DA1017;border-radius:8px;padding:8px;background:#fff">'+
+      '<input class="mini2" data-newcat="'+i+'" placeholder="Type the category name" style="width:100%;margin-bottom:6px" autofocus>'+
+      '<label style="display:flex;gap:6px;align-items:flex-start;font-size:11px;color:#666;margin-bottom:7px;cursor:pointer">'+
+        '<input type="checkbox" data-newrule="'+i+'" checked style="margin-top:2px">'+
+        '<span>Remember it — put payments like this here automatically next time</span></label>'+
+      '<div style="display:flex;gap:6px">'+
+        '<button class="btn sm" data-newok="'+i+'">Use it</button>'+
+        '<button class="btn sm ghost" data-newno="'+i+'">Cancel</button></div></div>';
     if(c==='Company capital') return '<div style="font-size:11px;color:#888;margin-top:4px">Party: Company</div>';
     if(c===PRIOR_CAT) return '<input class="mini2" type="month" data-pm="'+i+'" value="'+esc(r.postMonth||prevMonthOf(r.date))+'" style="width:100%;margin-top:4px" title="Which month this income belongs to">';
     return '';
@@ -528,7 +556,7 @@
     var br=g('data-br'), ct=g('data-cat'), dt=g('data-det'), pm=g('data-pm');
     var r=BANKROWS[i];
     if(br) r.branch=br.value;
-    if(ct) r.category=ct.value;
+    if(ct && ct.value!==NEW_CAT) r.category=ct.value;   // v290: the sentinel is a prompt, never a real category
     if(dt) r.details=dt.value;
     /* v277: Partner capital takes its party from Details, so the ledger still gets a name to group the
        running balance by without a second box asking for it. Company capital is always 'Company'. */
@@ -542,10 +570,55 @@
     /* Re-render just the one row when its category changes, so the partner / month field appears
        without losing what has been typed into any other row. */
     t.querySelectorAll('[data-cat]').forEach(function(sel){ sel.onchange=function(){
-      var i=Number(sel.getAttribute('data-cat')); readRow(t,i);
+      var i=Number(sel.getAttribute('data-cat'));
+      if(sel.value===NEW_CAT){ BANKROWS[i].category=NEW_CAT; }   /* v290: open the type-your-own panel */
+      else readRow(t,i);
       var tr=t.querySelector('tr[data-row="'+i+'"]'); if(!tr) return;
       tr.outerHTML=rowHtml(BANKROWS[i],i,brs); bindBank(brs);
+      var nb=t.querySelector('[data-newcat="'+i+'"]'); if(nb) nb.focus();
     }; });
+    /* v290 — the type-your-own category. */
+    t.querySelectorAll('[data-newok]').forEach(function(btn){ btn.onclick=function(){
+      var i=Number(btn.getAttribute('data-newok'));
+      var box=t.querySelector('[data-newcat="'+i+'"]');
+      var name=String((box&&box.value)||'').trim();
+      if(!name){ toast('Type a category name first.',true); if(box) box.focus(); return; }
+      var cat=addCustomCat(name);
+      BANKROWS[i].category=cat;
+      /* Save it as a rule so the next statement categorises this payee on its own. Anchored to the
+         stable part of the narration: bank references change every transaction, the payee name does not. */
+      var remember=t.querySelector('[data-newrule="'+i+'"]');
+      if(remember && remember.checked && window.API && API.saveBankRule){
+        var stem=String(BANKROWS[i].description||'')
+          .replace(/[-–]?\s*(CMS|FCM|FOS|BRB)[0-9A-Za-z\-]*/g,' ')
+          .replace(/^\s*(NEFT|IFT|UPI|RTGS)\s*[-:]?\s*/i,'')
+          .replace(/\s{2,}/g,' ').trim().slice(0,40);
+        if(stem){
+          API.saveBankRule({pattern:stem, matchType:'contains', category:cat})
+            .then(function(rr){ if(rr&&rr.ok) toast('Saved — "'+stem+'" will go to '+cat+' next time'); });
+          BANK_RULES=[{pattern:stem,matchType:'contains',cat:cat}].concat(BANK_RULES||[]);
+        }
+      }
+      /* Apply it to every other row that matches the same payee and is still uncategorised. */
+      var alsoN=0;
+      BANKROWS.forEach(function(rr,j){
+        if(j===i) return;
+        var c=String(rr.category||'');
+        if(c && c!=='Uncategorised') return;
+        if(String(rr.description||'').toUpperCase().indexOf(name.toUpperCase())>=0){ rr.category=cat; alsoN++; }
+      });
+      paintBankTable(brs);
+      toast('Category "'+cat+'" added'+(alsoN?(' · applied to '+alsoN+' more row'+(alsoN===1?'':'s')):''));
+    }; });
+    t.querySelectorAll('[data-newno]').forEach(function(btn){ btn.onclick=function(){
+      var i=Number(btn.getAttribute('data-newno'));
+      BANKROWS[i].category='Uncategorised';
+      paintBankTable(brs);
+    }; });
+    t.querySelectorAll('[data-newcat]').forEach(function(el){ el.onkeydown=function(ev){
+      if(ev.key==='Enter'){ ev.preventDefault(); var b=t.querySelector('[data-newok="'+el.getAttribute('data-newcat')+'"]'); if(b) b.click(); }
+    }; });
+
     t.querySelectorAll('[data-br]').forEach(function(sel){ sel.onchange=function(){ readRow(t,Number(sel.getAttribute('data-br'))); }; });
     t.querySelectorAll('[data-det]').forEach(function(el){ el.onchange=function(){ readRow(t,Number(el.getAttribute('data-det'))); }; });
     t.querySelectorAll('[data-pm]').forEach(function(el){ el.onchange=function(){ readRow(t,Number(el.getAttribute('data-pm'))); }; });
@@ -562,6 +635,8 @@
     var sv=$id('bkSave');
     if(sv) sv.onclick=function(){
       for(var i=0;i<BANKROWS.length;i++) readRow(t,i);
+      var unnamed=BANKROWS.filter(function(x){ return String(x.category||'')===NEW_CAT; });
+      if(unnamed.length){ toast(unnamed.length+' row(s) are waiting for a category name — type it and press Use it.',true); return; }
       var bad=BANKROWS.filter(function(r){ return r.category==='Partner capital' && !String(r.party||'').trim(); });
       if(bad.length){ toast(bad.length+' partner capital row(s) need a partner name.',true); return; }
       this.disabled=true; this.textContent='Saving…';
