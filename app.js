@@ -118,7 +118,7 @@ function initInstall(){
    copy, or the upload never landed. APP_BUILD is stamped into the page title tooltip and shown in the
    ⋯ More sheet, and the service worker is asked separately which version IT is serving. When those two
    disagree, the cache is stale; when both are old, the upload did not reach the server. */
-var APP_BUILD='v288';
+var APP_BUILD='v291';
 window.APP_BUILD=APP_BUILD;
 window.SW_BUILD='?';
 try{

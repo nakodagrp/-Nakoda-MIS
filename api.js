@@ -51,7 +51,7 @@
     createTask:1,updateTask:1,setTaskStatus:1,deleteTask:1,createCalEntry:1,updateCalEntry:1,saveRecurring:1,setRecurringActive:1,
     startInstance:1,advanceStage:1,saveProcess:1,saveStage:1,deleteStage:1,reorderStages:1,saveField:1,deleteField:1,
     checkIn:1,checkOut:1,setAttendance:1,applyLeave:1,setLeave:1,cancelLeave:1,saveHoliday:1,savePolicy:1,ackPolicy:1,submitClaim:1,setClaim:1,runPayroll:1,approvePayroll:1,confirmAbsent:1,
-    saveDaily:1,verifyDaily:1,rejectDaily:1,addLedger:1,setLedger:1,saveInvoice:1,recordPayment:1,saveBankRows:1,
+    saveDaily:1,verifyDaily:1,rejectDaily:1,addLedger:1,setLedger:1,saveInvoice:1,recordPayment:1,saveBankRows:1,saveBankRule:1,
     saveDeposit:1,verifyDeposit:1,rejectDeposit:1,
     saveItem:1,deleteItem:1,saveVendor:1,deleteVendor:1,saveConsumption:1,saveManualConsumption:1,raiseIndent:1,advanceIndent:1,saveAudit:1,approveAudit:1,
     createPayRequest:1,setPayRequest:1,
@@ -526,7 +526,20 @@
     listInvoices:function(b,s){ return call('listInvoices',{token:getToken(),branch:b,status:s}); },
     recordPayment:function(id,a){ return call('recordPayment',{token:getToken(),invId:id,amount:a}); },
     financeSheet:function(b,ym){ return call('financeSheet',{token:getToken(),branch:b,ym:ym}).then(function(r){ if(r.ok) kvSet('fin_'+(b||'')+'_'+(ym||''),r); return r; }).catch(function(){ return kvGet('fin_'+(b||'')+'_'+(ym||'')).then(function(x){ return x||{ok:false,offline:true}; }); }); },
-    saveBankRows:function(rows){ return call('saveBankRows',{token:getToken(),rows:rows}); },
+    /* v287 — THE IMPORT COULD NEVER HAVE WORKED.
+       apiSaveBankRows(token, rows, meta) resolves the branch from meta.accountNo (matched against
+       Branches.AccountNumber) or meta.branchId, and refuses the import outright if it gets neither:
+           if(!branchId) return err_('Could not work out which branch this statement belongs to.');
+       This function sent {token, rows} and nothing else, so meta was always undefined and every single
+       import attempt failed on that line. That is why no statement has ever made it into the MIS. */
+    saveBankRows:function(rows, meta){ return call('saveBankRows',{token:getToken(),rows:rows,meta:meta||{}}); },
+    /* v287: the auto-categorisation rules existed on the server from v274 and nothing ever asked for
+       them, so every row arrived at the import screen with no category at all. */
+    bankRules:function(){ return call('bankRules',{token:getToken()}); },
+    /* v290: saves a typed category as a learned rule, so the same payee categorises itself next month. */
+    saveBankRule:function(data){ return call('saveBankRule',{token:getToken(),data:data}); },
+    bankResolveAccount:function(accountNo){ return call('bankResolveAccount',{token:getToken(),accountNo:accountNo}); },
+    bankImports:function(branch){ return call('bankImports',{token:getToken(),branch:branch||''}); },
     reconcile:function(b,d){ return call('reconcile',{token:getToken(),branch:b,date:d}); },
     payoutList:function(b,m,k){ return call('payoutList',{token:getToken(),branch:b,month:m,kind:k}); },
     trainSections:function(){ return call('trainSections',{token:getToken()}); },

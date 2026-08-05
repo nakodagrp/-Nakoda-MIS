@@ -4,7 +4,7 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v288';   /* v288: service worker no longer caches STALE files on install (this is why deploys appeared not to take) + build stamp */
+var CACHE_VERSION = 'nakoda-mis-v292';   /* v292: account number field no longer autofillable with a name (this was blocking every bank import) */
 var SHELL = [
   './',
   './index.html',

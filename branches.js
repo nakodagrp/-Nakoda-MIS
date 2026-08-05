@@ -54,7 +54,17 @@
       '<div class="section-title full">Banking (used later for payroll / payouts)</div>'+
       '<div class="field"><label>Bank name</label><input id="b_bank" value="'+esc(b.BankName||'')+'"></div>'+
       '<div class="field"><label>IFSC</label><input id="b_ifsc" value="'+esc(b.IFSC||'')+'"></div>'+
-      '<div class="field full"><label>Account number</label><input id="b_acct" value="'+esc(b.AccountNumber||'')+'"></div>'+
+      /* v292 — autofill was writing a PERSON'S NAME into this box.
+         A field labelled "Account number" with no autocomplete hint is exactly what Chrome offers to
+         fill from a saved profile, and PAL's account number was sitting as "hethveet". The bank import
+         resolves a branch by matching this against the statement header, strips non-digits, gets an
+         empty string, and refuses the whole file — so one autofill silently blocked every import.
+         autocomplete off + inputmode numeric + a digits-only filter as you type. */
+      '<div class="field full"><label>Account number</label>'+
+        '<input id="b_acct" value="'+esc(b.AccountNumber||'')+'" autocomplete="off" autocorrect="off" spellcheck="false" inputmode="numeric" placeholder="digits only, e.g. 9408894464" '+
+        'oninput="this.value=this.value.replace(/[^0-9]/g,\'\')">'+
+        '<div style="font-size:11px;color:#888;margin-top:3px">Must match the account number on the bank statement — the import uses it to work out which branch the statement belongs to.</div>'+
+      '</div>'+
       '<div class="section-title full">WhatsApp Official API (whatsbizapi.com) — this branch\'s number</div>'+
       '<div class="field full"><label>API key / token '+(b.WaTokenSet?'<span style="color:#1a7f37">— saved ✓</span>':'')+'</label>'+
         '<div style="display:flex;align-items:stretch">'+
@@ -128,7 +138,7 @@
       var partnerSel=document.getElementById('b_partner');
       var data={ BranchName:val('b_name'), City:val('b_city'), Phone:val('b_phone'), Mobile:val('b_mobile'),
         Address:val('b_address'), PartnerEmpID:partnerSel.value, PartnerName:partnerSel.value?(partnerSel.options[partnerSel.selectedIndex].text.replace(/\s*\(.*\)$/,'')):'',
-        BankName:val('b_bank'), IFSC:val('b_ifsc'), AccountNumber:val('b_acct'), LetterheadUrl:lhUrl, LetterheadFileId:lhFileId,
+        BankName:val('b_bank'), IFSC:val('b_ifsc'), AccountNumber:String(val('b_acct')||'').replace(/[^0-9]/g,''), LetterheadUrl:lhUrl, LetterheadFileId:lhFileId,
         Latitude:val('b_lat'), Longitude:val('b_lng'), GeoRadius:val('b_radius'),
         WaApiToken:(document.getElementById('b_watoken').value||'').trim(), WaTemplateName:val('b_watpl'), WaTemplateLang:val('b_walang') };
       if(editing) data.Status=val('b_status');

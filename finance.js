@@ -214,14 +214,37 @@
         : '';
 
       var notes=[];
-      if(_zeroMode) notes.push('All figures shown as ₹0 — no bank statement has been imported for '+ymText(selYm)+'. Real figures appear automatically once one is imported.');
+      /* v291 — SAY WHERE THE DATA ACTUALLY IS.
+         The first version of this banner named the month with no statement and stopped there. Somebody
+         imports a July statement, the dashboard is sitting on August, every figure reads ₹0, and the
+         message technically explains it while answering the wrong question. A statement was imported —
+         just not for the month being looked at. Now we name the months that DO have one, so the next
+         step is obvious instead of looking like a failed import. */
+      if(_zeroMode){
+        notes.push('All figures shown as ₹0 — no bank statement has been imported for '+ymText(selYm)+'.');
+        if(typeof API!=='undefined' && API.bankImports){
+          API.bankImports('').then(function(bi){
+            if(!bi||!bi.ok) return;
+            var months={}; (bi.imports||[]).forEach(function(im){
+              var p=String(im.period||''), m=(p.match(/(\d{4})-(\d{2})/)||[])[0];
+              if(!m){ var d=(p.match(/(\d{2})\/(\d{2})\/(\d{4})/)||[]); if(d.length) m=d[3]+'-'+d[2]; }
+              if(m && m!==selYm) months[m]=1;
+            });
+            var list=Object.keys(months).sort();
+            if(!list.length) return;
+            var el=document.getElementById('finZeroHint'); if(!el) return;
+            el.innerHTML=' A statement <b>has</b> been imported for '+list.map(ymText).map(esc).join(', ')+
+              ' — change the month at the top of the dashboard to see those figures.';
+          }).catch(function(){});
+        }
+      }
       if(!_zeroMode && hiddenNames.length)   notes.push(hiddenNames.length+' branch'+(hiddenNames.length===1?'':'es')+' with nothing filed hidden ('+hiddenNames.join(', ')+')');
       /* Doubles as the chase-list: these are the bills nobody anywhere has filed for this month yet. */
       if(!_zeroMode && unfiledCats.length)   notes.push('still to be filed by everyone: '+unfiledCats.map(catLabel).join(', '));
       if(mixed)              notes.push(mixed+' branch'+(mixed===1?' has':'es have')+' a full month of imported costs against part-month revenue — that P/L is a timing mismatch, not a real loss');
       var note=notes.length
         ? (_zeroMode
-            ? '<div style="font-size:11.5px;color:#854F0B;background:#FAEEDA;border-radius:8px;padding:8px 12px;margin-top:9px">'+esc(notes.join(' · '))+'</div>'
+            ? '<div style="font-size:11.5px;color:#854F0B;background:#FAEEDA;border-radius:8px;padding:8px 12px;margin-top:9px">'+esc(notes.join(' · '))+'<span id="finZeroHint"></span></div>'
             : '<div style="font-size:11px;color:#aaa;padding:7px 3px 0">'+esc(notes.join(' · '))+'</div>')
         : '';
 
