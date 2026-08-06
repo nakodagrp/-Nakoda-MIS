@@ -171,9 +171,13 @@ function bindAuth(){
     /* v191: Apps Script allows only 30 simultaneous requests — during the morning punch-in rush a
        login can get dropped and used to show "Could not reach the server" immediately. Now it quietly
        retries twice (1.5s / 3s apart) and only shows the error if all three attempts fail. */
+    /* v295: say WHICH attempt is running. A spinner that reads "Signing in…" for three minutes is
+       indistinguishable from a frozen app, so people force-quit and start over — which puts a fourth
+       request on a server that was already refusing the first three. */
     var _lTries=0;
     function tryLogin(){
       _lTries++;
+      if(_lTries>1) b.innerHTML='<span class="loader"></span> Server is busy — retrying ('+_lTries+' of 3)…';
       API.login($('loginId').value, $('loginPw').value).then(function(r){
         if(!r.ok){ setMsg('loginMsg', r.error||'Login failed.'); b.disabled=false; b.textContent='Sign in'; return; }
         /* v187: metadata rides along with the login reply — no second server round-trip needed */
@@ -202,8 +206,74 @@ function bindAuth(){
 }
 function forcePw(){ $('oldPwField').classList.add('hidden'); show('view-changepw'); }
 function afterAuth(mustChange){ if(mustChange){ forcePw(); } else { enterApp(); } }
-function enterApp(){ show('view-app'); if(S.meta&&S.perms){ renderIdentity(); populateSelectors(); applyPerms(); go('dashboard'); } else refreshMeta(true); }   // v187: enter instantly when login already delivered metadata
-function enterAppInstant(){ renderIdentity(); show('view-app'); populateSelectors(); applyPerms(); go('dashboard'); }
+/* ============================================================================================
+   v296 — WHY THE DASHBOARD COMES UP EMPTY AND JUST SITS THERE.
+
+   These two functions ran five steps in a row, unguarded:
+
+       renderIdentity(); show('view-app'); populateSelectors(); applyPerms(); go('dashboard');
+
+   If ANY one of them throws, every step after it is skipped — including go('dashboard'), which is
+   what actually loads the dashboard. The user is left looking at the app shell with the static
+   placeholder text still in it: "Welcome" with no name, role "—", avatar "N", empty Overview, empty
+   staff table, and the full unfiltered menu (because applyPerms never ran to hide anything).
+
+   Nothing is shown, nothing is logged, no error appears. It looks EXACTLY like the app being slow —
+   so you wait, and refresh, and wait again, and nothing will ever happen, because nothing is still
+   loading. It already failed.
+
+   populateSelectors() is the likeliest thrower: it does S.meta.branches.map(...) after only checking
+   that S.meta exists. api.js line ~288 caches meta as {roles:r.roles, branches:r.branches} with no
+   fallback (the login path at line ~262 correctly uses ||[]), so a reply that omits branches leaves
+   {branches: undefined} in IndexedDB — and every boot from then on throws on that .map(), forever,
+   until the cache happens to be replaced.
+
+   Each step is now isolated. One failing step can no longer stop the dashboard from loading, and
+   whatever went wrong is reported instead of swallowed.
+   ============================================================================================ */
+function bootStep_(name, fn){
+  try{ fn(); return true; }
+  catch(e){
+    try{ console.error('boot step "'+name+'" failed:', e); }catch(_){}
+    bootWarn_(name, e && e.message);
+    return false;
+  }
+}
+var _bootWarned_={};
+function bootWarn_(where, msg){
+  if(_bootWarned_[where]) return; _bootWarned_[where]=1;
+  try{
+    var bar=document.getElementById('bootWarn');
+    if(!bar){
+      bar=document.createElement('div'); bar.id='bootWarn';
+      bar.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:9999;background:#8a1c17;color:#fff;'+
+        'font:12px/1.45 system-ui,sans-serif;padding:9px 14px;display:flex;gap:10px;align-items:center';
+      document.body.appendChild(bar);
+    }
+    bar.innerHTML='<span style="flex:1">Something failed while loading (<b>'+esc(where)+'</b>'+
+      (msg?(': '+esc(String(msg).slice(0,120))):'')+'). Some parts of the screen may be blank.</span>'+
+      '<button style="background:#fff;color:#8a1c17;border:0;border-radius:6px;padding:5px 11px;font-weight:700;cursor:pointer" '+
+      'onclick="try{API.clearLocal&&API.clearLocal()}catch(e){};location.reload()">Reset &amp; reload</button>'+
+      '<button style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,.5);border-radius:6px;padding:5px 11px;cursor:pointer" '+
+      'onclick="this.parentNode.remove()">Dismiss</button>';
+  }catch(_){}
+}
+/* Anything that throws outside a handler we control still gets surfaced rather than swallowed. */
+try{ window.addEventListener('error', function(ev){ if(ev && ev.message) bootWarn_('script', ev.message); }); }catch(e){}
+
+function enterApp(){
+  show('view-app');
+  if(S.meta&&S.perms){ enterAppInstant(); }
+  else refreshMeta(true);
+}   // v187: enter instantly when login already delivered metadata
+function enterAppInstant(){
+  bootStep_('identity',  renderIdentity);
+  bootStep_('show',      function(){ show('view-app'); });
+  bootStep_('selectors', populateSelectors);
+  bootStep_('perms',     applyPerms);
+  /* Always reached now, whatever happened above — this is the one that loads the dashboard. */
+  bootStep_('dashboard', function(){ go('dashboard'); });
+}
 function refreshMeta(goDash){
   API.getMetadata().then(function(r){
     if(r.ok){ S.meta={roles:r.roles,branches:r.branches}; S.perms=r.perms; S.user=r.me||S.user; renderIdentity(); populateSelectors(); applyPerms(); if(goDash) go('dashboard'); }
@@ -213,7 +283,11 @@ function refreshMeta(goDash){
 function renderIdentity(){ var u=S.user||{}; $('meName').textContent=u.FullName||'—'; $('meRole').textContent=u.Role||''; $('meAvatar').textContent=initials(u.FullName); }
 function populateSelectors(){
   if(!S.meta) return;
-  var opts='<option value="">All branches</option>'+S.meta.branches.map(function(b){ return '<option value="'+esc(b.BranchID)+'">'+esc(b.BranchName)+'</option>'; }).join('');
+  /* v296: was S.meta.branches.map(...) after checking only that S.meta exists. A cached meta with
+     branches undefined (see api.js getMetadata) made this throw on EVERY boot, which silently killed
+     applyPerms() and go('dashboard') and left the dashboard permanently blank. */
+  var _brs=(S.meta && S.meta.branches) || [];
+  var opts='<option value="">All branches</option>'+_brs.map(function(b){ return '<option value="'+esc(b.BranchID)+'">'+esc(b.BranchName)+'</option>'; }).join('');
   $('filterBranch').innerHTML=opts;
   var ds=$('dashBranch'), canPick=S.perms&&S.perms.canViewAll;
   /* combo.js replaces every <select> with a visible input inside a .cmb-wrap and hides

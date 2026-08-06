@@ -176,8 +176,28 @@
       fr.readAsDataURL(f); this.value='';
     };
     paintMe();
-    API.cachedAttendance().then(function(r){ if(r&&r.records){ ATT.recs=r.records; paintMe(); } });
-    API.myAttendance(ymNow()).then(function(r){ if(r&&r.ok){ ATT.recs=r.records||[]; paintMe(); } });
+    /* v295 — TWO RACES ON ONE LINE EACH.
+
+       (a) These two calls both assigned ATT.recs, and nothing decided who won. IndexedDB is usually
+           quicker than the network, so usually the fresh answer landed second and everything looked
+           fine — but "usually" is not a guarantee. When the server answered quickly and IndexedDB
+           was slow (a cold DB, a busy phone), the CACHED copy landed last and overwrote the live
+           one. The screen then showed attendance from the previous session.
+       (b) Neither used mergeServerRecs, so both could erase a punch that had just landed — the same
+           button-flips-back bug as the post-punch refresh, on the page-open path this time.
+
+       Fixed with a sequence number: a stale reply is simply ignored if a fresher one already applied.
+       The cached read is the low-priority one; it only paints if nothing better has arrived yet. */
+    var _seq=(ATT._loadSeq=(ATT._loadSeq||0)+1);
+    API.cachedAttendance().then(function(r){
+      if(_seq!==ATT._loadSeq) return;              // a newer page-open superseded this one
+      if(ATT._liveIn===_seq) return;               // the live answer already landed — don't go backwards
+      if(r&&r.records){ ATT.recs=mergeServerRecs(r.records); paintMe(); }
+    });
+    API.myAttendance(ymNow()).then(function(r){
+      if(_seq!==ATT._loadSeq) return;
+      if(r&&r.ok){ ATT._liveIn=_seq; ATT.recs=mergeServerRecs(r.records); paintMe(); }
+    });
     if(canApprove()){
       loadApprove(todayS());
       var apGo=$id('attApGo'); if(apGo) apGo.onclick=function(){ loadApprove($id('attApDate').value||todayS(), ($id('attApDateTo')||{}).value||''); };

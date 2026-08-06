@@ -246,8 +246,13 @@
     saveFixedAsset:function(data){ return call('saveFixedAsset',{token:getToken(),data:data}); },
     deleteFixedAsset:function(assetId){ return call('deleteFixedAsset',{token:getToken(),assetId:assetId}); },
 
-    login:function(loginId,password){
-      return call('login',{loginId:loginId,password:password}).then(function(r){
+    /* v295: login had NO explicit timeout, so it inherited NET's 60-second default — and bindAuth
+       retries it three times. Worst case was 60 + 1.5 + 60 + 3 + 60 = about THREE MINUTES of
+       "Signing in…" before the user was told anything at all. The retries themselves are correct and
+       stay (Apps Script drops requests past 30 simultaneous, which is exactly the morning rush), but
+       each attempt now gives up after 25s so all three finish inside ~55s instead of ~180s. */
+    login:function(loginId,password,timeoutMs){
+      return call('login',{loginId:loginId,password:password}, timeoutMs||25000).then(function(r){
         /* v187: server now sends metadata with the login reply — cache it so the app can enter instantly */
         /* v284: adopt the user FIRST. If a different person was signed in on this device, that wipes the
            cached reads before anything of theirs can be painted under the new login. */
@@ -280,7 +285,16 @@
     getMetadata:function(){
       var t=getToken();
       return call('metadata',{token:t}).then(function(r){
-        if(r.ok){ kvSet('meta',{roles:r.roles,branches:r.branches}); kvSet('me',r.me); kvSet('perms',r.perms); }
+        /* v296: the login path (above) already writes these with ||[] fallbacks; this one did not.
+           A metadata reply that omitted branches therefore stored {branches:undefined} in IndexedDB,
+           and app.js populateSelectors() then threw on .map() on EVERY subsequent boot — which killed
+           applyPerms() and go('dashboard') and left the dashboard permanently blank. Same guards here.
+           Also: don't overwrite a good cached user with an empty one. */
+        if(r.ok){
+          kvSet('meta',{roles:r.roles||[],branches:r.branches||[]});
+          if(r.me) kvSet('me',r.me);
+          if(r.perms) kvSet('perms',r.perms);
+        }
         return r;
       }).catch(function(){
         return Promise.all([cachedMeta(),cachedUser(),kvGet('perms')]).then(function(a){
