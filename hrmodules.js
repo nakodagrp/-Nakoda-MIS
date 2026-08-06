@@ -128,11 +128,99 @@
       '<div style="align-self:end"><button class="btn" id="pyRun">Run payroll</button></div></div>'+
       '<div id="pyActions" class="pm2-bar" style="display:none"><button class="btn ghost sm" id="pyBank">⤓ Bank file (CMS)</button> <button class="btn ghost sm" id="pyReg">⤓ Salary register (Excel)</button> <button class="btn ghost sm" id="pyRegPdf">⤓ Salary register (PDF)</button><span id="pyLockWrap"></span></div>'+
       '<div class="field" style="margin:10px 0 0"><label>Find employee</label><input id="pyFind" class="in" placeholder="Type a name or code…" autocomplete="off"></div>'+
-      '<div id="pyWarn"></div><div id="pyTable"></div>';
+      '<div id="pyDirty"></div><div id="pyWarn"></div><div id="pyTable"></div>';
     $id('pyRun').onclick=runPay;
     loadPayslips();
   }
   var PAY={slips:[],month:ymNow(),locked:false};
+
+  /* ============================================================================================
+     v297 — PAYROLL EDITS WERE BEING LOST WITHOUT A WORD.
+
+     Typing into an addition or deduction only ever did this:
+
+         s._other[k].amt = numv(inp.value); refreshRow(row,s); paintKpi();
+
+     — it updated the in-memory slip and repainted the total. Nothing was sent anywhere. The ONLY
+     thing that persists an edit is the "Run payroll" button (collectAdj() -> API.runPayroll).
+
+     So you could type a ₹2,000 addition, watch the net go up to the rupee, close the app, come back,
+     and find it gone. Not lost in transit — never saved at all, and nothing on screen ever said so.
+     On payroll that is the worst possible failure: it looks exactly like success.
+
+     Three layers now stand between a typed figure and losing it:
+       1. A visible bar the moment anything is edited, with the count of affected staff and a Save
+          button. It does not go away until the edit is saved.
+       2. The browser's own "leave site?" prompt if the tab/app is closed while dirty.
+       3. A draft on the device. If the app is killed, the phone dies, or the browser is force-quit —
+          none of which fire step 2 — reopening the payroll screen offers the typing back.
+
+     Deliberately NOT auto-saved. runPayroll recalculates every slip and replaces PAY.slips wholesale,
+     so a save landing while somebody is mid-figure would redraw the row under their cursor. On payroll,
+     an explicit Save is worth the extra tap.
+     ============================================================================================ */
+  var PAY_DIRTY=false;
+  function payDraftKey(){ return 'nk_pay_draft_'+(PAY.month||ymNow())+'_'+((($id('pyBranch')||{}).value)||'all'); }
+  function payMarkDirty(){
+    PAY_DIRTY=true;
+    try{ localStorage.setItem(payDraftKey(), JSON.stringify({ts:Date.now(), adj:collectAdj()})); }catch(e){}
+    paintDirtyBar();
+  }
+  function payClearDirty(){
+    PAY_DIRTY=false;
+    try{ localStorage.removeItem(payDraftKey()); }catch(e){}
+    paintDirtyBar();
+  }
+  function dirtyCount(){ var a=collectAdj(); return Object.keys(a).length; }
+  function paintDirtyBar(){
+    var box=$id('pyDirty'); if(!box) return;
+    if(!PAY_DIRTY){ box.innerHTML=''; return; }
+    var n=dirtyCount();
+    box.innerHTML='<div class="py-dirty"><span class="py-dirty-ic">!</span>'+
+      '<span style="flex:1">Unsaved changes for '+n+' staff member'+(n===1?'':'s')+' — these are only on this screen until you save.</span>'+
+      '<button class="btn sm" id="pyDirtySave">Save now</button></div>';
+    var b=$id('pyDirtySave'); if(b) b.onclick=function(){ runPay(); };
+  }
+  /* The app being killed does not fire beforeunload, so the draft above is the real safety net.
+     This covers the ordinary case of closing the tab or navigating away. */
+  try{ window.addEventListener('beforeunload', function(e){
+    if(!PAY_DIRTY) return;
+    e.preventDefault(); e.returnValue='You have unsaved payroll changes.'; return e.returnValue;
+  }); }catch(e){}
+
+  /* Offer back anything the device still holds for this month+branch. */
+  function payOfferDraft(){
+    var raw=null; try{ raw=localStorage.getItem(payDraftKey()); }catch(e){}
+    if(!raw) return;
+    var d=null; try{ d=JSON.parse(raw); }catch(e){}
+    if(!d || !d.adj || !Object.keys(d.adj).length){ try{ localStorage.removeItem(payDraftKey()); }catch(e){} return; }
+    var when=new Date(d.ts||Date.now());
+    var box=$id('pyDirty'); if(!box) return;
+    box.innerHTML='<div class="py-draft"><span style="flex:1">Unsaved payroll edits from '+
+      esc(when.toLocaleDateString()+', '+when.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}))+
+      ' were found on this device.</span>'+
+      '<button class="btn sm" id="pyDraftYes">Restore</button> '+
+      '<button class="btn sm ghost" id="pyDraftNo">Discard</button></div>';
+    var y=$id('pyDraftYes'), n=$id('pyDraftNo');
+    if(y) y.onclick=function(){ payApplyDraft(d.adj); };
+    if(n) n.onclick=function(){ try{ localStorage.removeItem(payDraftKey()); }catch(e){} box.innerHTML=''; };
+  }
+  /* Put a restored draft back onto the slips currently on screen. Anyone who has left since the draft
+     was written is simply skipped — we never invent a slip for somebody payroll no longer lists. */
+  function payApplyDraft(adj){
+    var applied=0;
+    PAY.slips.forEach(function(s){
+      var a=adj[s.empId]; if(!a) return;
+      applied++;
+      s._inc=a.incentive||''; s._bon=a.bonus||''; s._trv=a.travel||''; s._pet=a.petrol||''; s._mis=a.misExp||'';
+      s._other=(a.other||[]).slice(); s._dedOther=(a.dedOther||[]).slice();
+      s._otherDed=a.otherDed||''; s._otherDedLabel=a.otherDedLabel||'';
+      s._lab=a.labTest||''; s._adv=a.advLab||'';
+      if(a.pfOv!=='') s._pfOv=a.pfOv; if(a.esiOv!=='') s._esiOv=a.esiOv; if(a.ptOv!=='') s._ptOv=a.ptOv;
+    });
+    paintPay(); PAY_DIRTY=true; paintDirtyBar();
+    toast(applied?('Restored unsaved edits for '+applied+' staff — press Save now to keep them'):'Those staff are not in this payroll run any more', !applied);
+  }
   var R='#A32D2D', G='#0F6E56';
   function m0(n){ return '₹'+money(n); }
   function myActual(s){ return Number(s.actualSalary)||Number(s.basic)||0; }
@@ -210,7 +298,7 @@
       lab:lab,adv:adv,dedOther:dedOther,dedOtherList:(s._dedOther||[]),
       ded:lopAmt+statutory,net:gross-statutory,grossMode:grossMode,pfOn:pfOn,noSalary:actual<=0};
   }
-  function loadPayslips(){ PAY.month=$id('pyMonth').value||ymNow(); API.listPayslips(PAY.month, ($id('pyBranch')||{}).value||'').then(function(r){ if(r&&r.ok){ PAY.slips=(r.slips||[]).map(initSlip); PAY.locked=!!r.locked; paintPay(); } }); }
+  function loadPayslips(){ PAY.month=$id('pyMonth').value||ymNow(); API.listPayslips(PAY.month, ($id('pyBranch')||{}).value||'').then(function(r){ if(r&&r.ok){ PAY.slips=(r.slips||[]).map(initSlip); PAY.locked=!!r.locked; PAY_DIRTY=false; paintPay(); payOfferDraft(); } }); }   /* v297: fresh server data is by definition clean; then offer back anything the device still holds */
   function initSlip(s){
     s._inc=Number(s.addIncentive)||0; s._bon=Number(s.addBonus)||0; s._trv=Number(s.addTravel)||0;
     s._other=[]; if(s.addOtherJson){ try{ s._other=JSON.parse(s.addOtherJson)||[]; }catch(e){ s._other=[]; } }
@@ -248,7 +336,8 @@
     API.runPayroll(PAY.month, ($id('pyBranch')||{}).value||'', collectAdj()).then(function(r){
       if(b){ b.disabled=false; b.textContent='Run payroll'; }
       if(r&&r.ok){ PAY.slips=(r.slips||[]).map(initSlip);
-        toast(quiet===true?'Attendance applied — payroll updated':('Payroll saved for '+r.slips.length+' staff'));
+        payClearDirty();   /* v297: the server now has it — drop the warning bar and the device draft */
+        toast(quiet===true?'Attendance applied — payroll updated':('Saved ✓ payroll updated for '+r.slips.length+' staff'));
         paintPay();
         /* keep whatever the user was searching for */
         var f2=$id('pyFind'); if(f2&&q){ f2.value=q; f2.oninput(); }
@@ -578,19 +667,22 @@
   }
   function wireDetail(row,i){
     var s=PAY.slips[i];
-    row.querySelectorAll('input[data-key]').forEach(function(inp){ inp.onclick=stop; inp.oninput=function(){ s[inp.getAttribute('data-key')]=numv(inp.value); refreshRow(row,s); paintKpi(); }; });
-    row.querySelectorAll('input[data-oi]').forEach(function(inp){ inp.onclick=stop; inp.oninput=function(){ var k=+inp.getAttribute('data-ok'), f=inp.getAttribute('data-of'); s._other[k]=s._other[k]||{label:'',amt:0}; if(f==='amt') s._other[k].amt=numv(inp.value); else s._other[k].label=inp.value; refreshRow(row,s); paintKpi(); }; });
-    row.querySelectorAll('[data-orem]').forEach(function(x){ x.onclick=function(e){ e.stopPropagation(); s._other.splice(+x.getAttribute('data-ok'),1); redrawDetail(row,i); }; });
+    /* v297: every one of these handlers used to end at paintKpi() — the figure was on screen and
+       nowhere else. touched() marks the field visibly and arms the unsaved-changes bar + device draft. */
+    function touched(inp){ if(inp&&inp.classList) inp.classList.add('py-edited'); payMarkDirty(); }
+    row.querySelectorAll('input[data-key]').forEach(function(inp){ inp.onclick=stop; inp.oninput=function(){ s[inp.getAttribute('data-key')]=numv(inp.value); refreshRow(row,s); paintKpi(); touched(inp); }; });
+    row.querySelectorAll('input[data-oi]').forEach(function(inp){ inp.onclick=stop; inp.oninput=function(){ var k=+inp.getAttribute('data-ok'), f=inp.getAttribute('data-of'); s._other[k]=s._other[k]||{label:'',amt:0}; if(f==='amt') s._other[k].amt=numv(inp.value); else s._other[k].label=inp.value; refreshRow(row,s); paintKpi(); touched(inp); }; });
+    row.querySelectorAll('[data-orem]').forEach(function(x){ x.onclick=function(e){ e.stopPropagation(); s._other.splice(+x.getAttribute('data-ok'),1); redrawDetail(row,i); payMarkDirty(); }; });
     var addb=row.querySelector('[data-oadd]'); if(addb) addb.onclick=function(e){ e.stopPropagation(); s._other=s._other||[]; s._other.push({label:'',amt:0}); redrawDetail(row,i); };
-    row.querySelectorAll('input[data-di]').forEach(function(inp){ inp.onclick=stop; inp.oninput=function(){ var k=+inp.getAttribute('data-dki'), f=inp.getAttribute('data-df'); s._dedOther=s._dedOther||[]; s._dedOther[k]=s._dedOther[k]||{label:'',amt:0}; if(f==='amt') s._dedOther[k].amt=numv(inp.value); else s._dedOther[k].label=inp.value; refreshRow(row,s); paintKpi(); }; });
-    row.querySelectorAll('[data-drem]').forEach(function(x){ x.onclick=function(e){ e.stopPropagation(); s._dedOther.splice(+x.getAttribute('data-dki'),1); redrawDetail(row,i); }; });
+    row.querySelectorAll('input[data-di]').forEach(function(inp){ inp.onclick=stop; inp.oninput=function(){ var k=+inp.getAttribute('data-dki'), f=inp.getAttribute('data-df'); s._dedOther=s._dedOther||[]; s._dedOther[k]=s._dedOther[k]||{label:'',amt:0}; if(f==='amt') s._dedOther[k].amt=numv(inp.value); else s._dedOther[k].label=inp.value; refreshRow(row,s); paintKpi(); touched(inp); }; });
+    row.querySelectorAll('[data-drem]').forEach(function(x){ x.onclick=function(e){ e.stopPropagation(); s._dedOther.splice(+x.getAttribute('data-dki'),1); redrawDetail(row,i); payMarkDirty(); }; });
     var dedb=row.querySelector('[data-dadd]'); if(dedb) dedb.onclick=function(e){ e.stopPropagation(); s._dedOther=s._dedOther||[]; s._dedOther.push({label:'',amt:0}); redrawDetail(row,i); };
     row.querySelectorAll('input[data-dov]').forEach(function(inp){ inp.onclick=stop; inp.oninput=function(){
-      s[inp.getAttribute('data-dk')]=inp.value; inp.className=hasOv(inp.value)?'ov':'auto'; refreshRow(row,s); paintKpi(); }; });
+      s[inp.getAttribute('data-dk')]=inp.value; inp.className=hasOv(inp.value)?'ov':'auto'; refreshRow(row,s); paintKpi(); payMarkDirty(); }; });
     row.querySelectorAll('[data-drst]').forEach(function(x){ x.onclick=function(e){ e.stopPropagation();
-      s[x.getAttribute('data-dk')]=''; redrawDetail(row,i); }; });
-    var od=row.querySelector('[data-otherded]'); if(od){ od.onclick=stop; od.oninput=function(){ s._otherDed=numv(od.value); refreshRow(row,s); paintKpi(); }; }
-    var ol=row.querySelector('[data-otherlbl]'); if(ol){ ol.onclick=stop; ol.oninput=function(){ s._otherDedLabel=ol.value; }; }
+      s[x.getAttribute('data-dk')]=''; redrawDetail(row,i); payMarkDirty(); }; });
+    var od=row.querySelector('[data-otherded]'); if(od){ od.onclick=stop; od.oninput=function(){ s._otherDed=numv(od.value); refreshRow(row,s); paintKpi(); touched(od); }; }
+    var ol=row.querySelector('[data-otherlbl]'); if(ol){ ol.onclick=stop; ol.oninput=function(){ s._otherDedLabel=ol.value; touched(ol); }; }
     var pdf=row.querySelector('[data-pdf]'); if(pdf) pdf.onclick=function(e){ e.stopPropagation(); var sc=computed().filter(function(x){return String(x.empId)===pdf.getAttribute('data-pdf');})[0]; payslipPdf(sc,sc.name,PAY.month); };
   }
   /* The month, day by day, on the row itself. Tap a day to change it; the change is written straight
