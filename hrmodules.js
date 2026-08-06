@@ -125,11 +125,14 @@
     v.innerHTML='<div class="page-head"><h1>Payroll</h1></div>'+
       '<div class="pm2-filt" style="grid-template-columns:1fr 1fr auto"><div><label>Month</label><input id="pyMonth" class="in" type="month" value="'+ymNow()+'"></div>'+
       '<div><label>Branch</label><select id="pyBranch" class="in"><option value="">All</option>'+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'">'+esc(b.BranchName)+'</option>';}).join('')+'</select></div>'+
-      '<div style="align-self:end"><button class="btn" id="pyRun">Run payroll</button></div></div>'+
+      '<div style="align-self:end"><span id="pyStatus" class="py-status"></span></div></div>'+
       '<div id="pyActions" class="pm2-bar" style="display:none"><button class="btn ghost sm" id="pyBank">⤓ Bank file (CMS)</button> <button class="btn ghost sm" id="pyReg">⤓ Salary register (Excel)</button> <button class="btn ghost sm" id="pyRegPdf">⤓ Salary register (PDF)</button><span id="pyLockWrap"></span></div>'+
       '<div class="field" style="margin:10px 0 0"><label>Find employee</label><input id="pyFind" class="in" placeholder="Type a name or code…" autocomplete="off"></div>'+
       '<div id="pyDirty"></div><div id="pyWarn"></div><div id="pyTable"></div>';
-    $id('pyRun').onclick=runPay;
+    /* v298: no Run payroll button. Pick a month and the payroll for it appears; type a figure and it
+       saves itself. See the auto-save block below for why this is safe on a payroll screen. */
+    $id('pyMonth').onchange=function(){ payFlushNow(); loadPayslips(); };
+    var _pb=$id('pyBranch'); if(_pb) _pb.onchange=function(){ payFlushNow(); loadPayslips(); };
     loadPayslips();
   }
   var PAY={slips:[],month:ymNow(),locked:false};
@@ -161,10 +164,79 @@
      ============================================================================================ */
   var PAY_DIRTY=false;
   function payDraftKey(){ return 'nk_pay_draft_'+(PAY.month||ymNow())+'_'+((($id('pyBranch')||{}).value)||'all'); }
+
+  /* ============================================================================================
+     v298 — NO BUTTON AT ALL.
+
+     Pick a month, the payroll appears. Type a figure, it saves itself. Nothing to press.
+
+     THE DANGER, AND HOW IT IS AVOIDED. runPayroll recalculates every slip and returns a fresh set.
+     The old runPay() then did PAY.slips = r.slips.map(initSlip) and paintPay() — a full redraw. Do
+     that while somebody is halfway through typing "2000" and the input is destroyed and rebuilt from
+     the server's copy: the caret jumps, and the two digits typed since the request went out are gone.
+     On payroll that is not a cosmetic bug, it silently changes what a person is paid.
+
+     So an auto-save NEVER repaints. It sends the figures, and on success does nothing to the DOM
+     beyond a small "Saved" tick. The screen is already correct — pcCalc() computes every displayed
+     total on the client from the same rules, so there is nothing on screen waiting to be corrected.
+     The server's authoritative version is picked up on the next month change or page open.
+
+     WRITES ARE SERIALISED. Payroll writes take a script-wide lock. Two saves in flight at once means
+     the second waits, and if the user is still typing a third is already queued. So only one request
+     is ever in the air; anything typed while it flies sets _payAgain, and exactly one more save runs
+     when it lands. Typing fast can never queue up twenty writes.
+
+     IF A SAVE FAILS, the amber unsaved bar comes straight back with a Retry, and the draft stays on
+     the device. Nothing is ever quietly dropped.
+     ============================================================================================ */
+  var _payTimer=null, _paySaving=false, _payAgain=false, _payLastErr='';
+  var PAY_AUTOSAVE_MS=1200;
+
+  function payStatus(kind, text){
+    var el=$id('pyStatus'); if(!el) return;
+    if(!kind){ el.className='py-status'; el.innerHTML=''; return; }
+    el.className='py-status py-status-'+kind;
+    el.innerHTML=(kind==='saving'?'<span class="loader dark"></span> ':(kind==='saved'?'✓ ':'⚠ '))+esc(text||'');
+  }
+  /* Called when the month/branch is about to change — get anything pending onto the server first. */
+  function payFlushNow(){ if(_payTimer){ clearTimeout(_payTimer); _payTimer=null; } if(PAY_DIRTY && !PAY.locked) paySave(); }
+
+  function paySchedule(){
+    if(PAY.locked) return;                       // a locked month is never written to
+    if(_payTimer) clearTimeout(_payTimer);
+    _payTimer=setTimeout(function(){ _payTimer=null; paySave(); }, PAY_AUTOSAVE_MS);
+  }
+  function paySave(){
+    if(PAY.locked) return;
+    if(_paySaving){ _payAgain=true; return; }    // one write at a time; remember that more arrived
+    _paySaving=true; _payLastErr='';
+    payStatus('saving','Saving…');
+    var month=PAY.month||ymNow(), branch=(($id('pyBranch')||{}).value)||'';
+    API.runPayroll(month, branch, collectAdj()).then(function(r){
+      _paySaving=false;
+      if(r&&r.ok){
+        /* Deliberately NOT touching PAY.slips or calling paintPay() — see the note above. */
+        payClearDirty();
+        payStatus('saved','Saved');
+        setTimeout(function(){ if(!PAY_DIRTY && !_paySaving) payStatus(null); }, 2500);
+      } else {
+        _payLastErr=(r&&r.error)||'Could not save';
+        PAY_DIRTY=true; paintDirtyBar(); payStatus('err',_payLastErr);
+      }
+      if(_payAgain){ _payAgain=false; paySchedule(); }
+    }).catch(function(){
+      _paySaving=false; _payLastErr='No connection';
+      PAY_DIRTY=true; paintDirtyBar(); payStatus('err','Not saved — will retry');
+      if(_payAgain){ _payAgain=false; }
+      setTimeout(function(){ if(PAY_DIRTY) paySchedule(); }, 8000);   // come back to it
+    });
+  }
+
   function payMarkDirty(){
     PAY_DIRTY=true;
     try{ localStorage.setItem(payDraftKey(), JSON.stringify({ts:Date.now(), adj:collectAdj()})); }catch(e){}
     paintDirtyBar();
+    paySchedule();
   }
   function payClearDirty(){
     PAY_DIRTY=false;
@@ -172,14 +244,18 @@
     paintDirtyBar();
   }
   function dirtyCount(){ var a=collectAdj(); return Object.keys(a).length; }
+  /* v298: with auto-save doing the work, this bar is now only for the case that MATTERS — a save that
+     did not land. Normal typing shows the quiet "Saving…/Saved" tick by the month picker instead, so
+     the screen is not shouting at somebody who has done nothing wrong. */
   function paintDirtyBar(){
     var box=$id('pyDirty'); if(!box) return;
-    if(!PAY_DIRTY){ box.innerHTML=''; return; }
+    if(!PAY_DIRTY || !_payLastErr){ box.innerHTML=''; return; }
     var n=dirtyCount();
     box.innerHTML='<div class="py-dirty"><span class="py-dirty-ic">!</span>'+
-      '<span style="flex:1">Unsaved changes for '+n+' staff member'+(n===1?'':'s')+' — these are only on this screen until you save.</span>'+
-      '<button class="btn sm" id="pyDirtySave">Save now</button></div>';
-    var b=$id('pyDirtySave'); if(b) b.onclick=function(){ runPay(); };
+      '<span style="flex:1"><b>Not saved</b> — '+esc(_payLastErr)+'. Changes for '+n+' staff member'+(n===1?'':'s')+
+      ' are still only on this device.</span>'+
+      '<button class="btn sm" id="pyDirtySave">Retry</button></div>';
+    var b=$id('pyDirtySave'); if(b) b.onclick=function(){ _payLastErr=''; paintDirtyBar(); paySave(); };
   }
   /* The app being killed does not fire beforeunload, so the draft above is the real safety net.
      This covers the ordinary case of closing the tab or navigating away. */
@@ -298,7 +374,24 @@
       lab:lab,adv:adv,dedOther:dedOther,dedOtherList:(s._dedOther||[]),
       ded:lopAmt+statutory,net:gross-statutory,grossMode:grossMode,pfOn:pfOn,noSalary:actual<=0};
   }
-  function loadPayslips(){ PAY.month=$id('pyMonth').value||ymNow(); API.listPayslips(PAY.month, ($id('pyBranch')||{}).value||'').then(function(r){ if(r&&r.ok){ PAY.slips=(r.slips||[]).map(initSlip); PAY.locked=!!r.locked; PAY_DIRTY=false; paintPay(); payOfferDraft(); } }); }   /* v297: fresh server data is by definition clean; then offer back anything the device still holds */
+  /* v298: picking a month is now the whole interaction. If that month has never been run, listPayslips
+     returns nothing (it only READS the Payslips sheet) — which is exactly what the Run payroll button
+     used to be for. Generate it automatically instead of showing an empty screen with nothing to press. */
+  function loadPayslips(){
+    PAY.month=$id('pyMonth').value||ymNow();
+    payStatus('saving','Loading…');
+    API.listPayslips(PAY.month, ($id('pyBranch')||{}).value||'').then(function(r){
+      if(!(r&&r.ok)){ payStatus('err',(r&&r.error)||'Could not load'); return; }
+      PAY.slips=(r.slips||[]).map(initSlip); PAY.locked=!!r.locked;
+      PAY_DIRTY=false; _payLastErr='';
+      if(!PAY.slips.length && !PAY.locked){
+        payStatus('saving','Preparing '+PAY.month+'…');
+        runPay(true);            // first time this month has been opened — build it
+        return;
+      }
+      payStatus(null); paintPay(); payOfferDraft();
+    }).catch(function(){ payStatus('err','Could not load'); });
+  }
   function initSlip(s){
     s._inc=Number(s.addIncentive)||0; s._bon=Number(s.addBonus)||0; s._trv=Number(s.addTravel)||0;
     s._other=[]; if(s.addOtherJson){ try{ s._other=JSON.parse(s.addOtherJson)||[]; }catch(e){ s._other=[]; } }
@@ -334,10 +427,13 @@
   function runPay(quiet){ var b=$id('pyRun'); if(b){ b.disabled=true; b.textContent='Running…'; } PAY.month=$id('pyMonth').value||ymNow();
     var find=$id('pyFind'), q=find?find.value:'';
     API.runPayroll(PAY.month, ($id('pyBranch')||{}).value||'', collectAdj()).then(function(r){
-      if(b){ b.disabled=false; b.textContent='Run payroll'; }
+      if(b){ b.disabled=false; b.textContent='Run payroll'; }   /* v298: button removed; harmless no-op kept for older cached markup */
       if(r&&r.ok){ PAY.slips=(r.slips||[]).map(initSlip);
-        payClearDirty();   /* v297: the server now has it — drop the warning bar and the device draft */
-        toast(quiet===true?'Attendance applied — payroll updated':('Saved ✓ payroll updated for '+r.slips.length+' staff'));
+        payClearDirty(); _payLastErr=''; payStatus(null);
+        /* v298: runPay is now only reached for a month being built for the first time, or an attendance
+           edit forcing a recalc — never while somebody is typing. Repainting here is safe. */
+        if(quiet!==true) toast('Payroll ready for '+r.slips.length+' staff');
+        else toast('Attendance applied — payroll updated');
         paintPay();
         /* keep whatever the user was searching for */
         var f2=$id('pyFind'); if(f2&&q){ f2.value=q; f2.oninput(); }
@@ -382,13 +478,13 @@
           rows.push({empId:p.empId, date:p.days[+c.getAttribute('data-bdd')], status:status}); });
         if(!rows.length) return;
         var msg=(status==='present')
-          ? 'Mark '+rows.length+' day'+(rows.length>1?'s':'')+' as PRESENT? The pay currently deducted for them is restored on the next Run payroll.'
+          ? 'Mark '+rows.length+' day'+(rows.length>1?'s':'')+' as PRESENT? The pay currently deducted for them is restored automatically.'
           : 'Mark '+rows.length+' day'+(rows.length>1?'s':'')+' as ABSENT? They are already deducted; this makes the absence explicit in Attendance.';
         if(!confirm(msg)) return;
         var bt=$id('bdSave'), bp=$id('bdPresent');
         if(bt) bt.disabled=true; if(bp) bp.disabled=true;
         API.confirmAbsent(rows).then(function(r2){
-          if(r2&&r2.ok){ closeModal(); toast(r2.saved+' day'+(r2.saved>1?'s':'')+' marked '+status+' — press Run payroll to apply'); loadPayslips(); }
+          if(r2&&r2.ok){ closeModal(); toast(r2.saved+' day'+(r2.saved>1?'s':'')+' marked '+status+' — applying…'); loadPayslips(); }
           else { toast((r2&&r2.error)||'Failed',true); sync(); } });
       }
       $id('bdSave').onclick=function(){ apply('absent'); };
@@ -400,12 +496,12 @@
 
   function paintPay(){
     var box=$id('pyTable'); if(!box) return; var act=$id('pyActions'); if(act) act.style.display=PAY.slips.length?'flex':'none';
-    if(!PAY.slips.length){ box.innerHTML='<div class="empty">No payslips. Pick a month and Run payroll.</div>'; return; }
+    if(!PAY.slips.length){ box.innerHTML='<div class="empty">No staff to show for this month.</div>'; return; }
     box.innerHTML=
       '<div id="pyKpi" class="pyk-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px"></div>'+
       '<div class="py2 py2-head"><div>Employee</div><div class="r">Actual / Basic</div><div class="r" style="color:'+G+'">Additions</div><div class="r" style="color:'+R+'">Deductions</div><div class="r">Net payable</div><div></div></div>'+
       '<div id="pyRows"></div>'+
-      '<div style="font-size:11px;color:#9aa0a6;margin-top:10px">Tap a row to open its Additions &amp; Deductions detail. Edit amounts and Net updates live; press <b>Run payroll</b> to save. PF 12% of basic · ESI 0.75% if gross ≤ ₹21,000 (adding pay can switch ESI off) · PT ₹200 · LOP = base ÷ days × absent.</div>';
+      '<div style="font-size:11px;color:#9aa0a6;margin-top:10px">Tap a row to open its Additions &amp; Deductions detail. Edit an amount and it saves by itself — watch the tick beside the month. PF 12% of basic · ESI 0.75% if gross ≤ ₹21,000 (adding pay can switch ESI off) · PT ₹200 · LOP = base ÷ days × absent.</div>';
     var rows=$id('pyRows');
     PAY.slips.forEach(function(s,i){
       var c=pcCalc(s);
@@ -686,7 +782,7 @@
     var pdf=row.querySelector('[data-pdf]'); if(pdf) pdf.onclick=function(e){ e.stopPropagation(); var sc=computed().filter(function(x){return String(x.empId)===pdf.getAttribute('data-pdf');})[0]; payslipPdf(sc,sc.name,PAY.month); };
   }
   /* The month, day by day, on the row itself. Tap a day to change it; the change is written straight
-     into Attendance (with an audit note) and payroll picks it up on the next Run payroll. */
+     into Attendance (with an audit note) and payroll recalculates itself straight afterwards. */
   var ATT={};
   var ASTYLE={ present:['py-d-p','P'], half:['py-d-h','½'], absent:['py-d-a','A'], leave:['py-d-l','L'],
     holiday:['py-d-o','H'], off:['py-d-o','·'], blank:['py-d-b','—'], future:['py-d-f',''] };
@@ -719,7 +815,7 @@
     openModal('Change '+date,'<div style="font-size:13px;color:#666;margin-bottom:10px">'+esc(s.name)+' · '+esc(date)+'</div>'+
       '<div style="display:flex;gap:8px;flex-wrap:wrap">'+opts.map(function(o){
         return '<button class="btn ghost" data-set="'+o[0]+'">'+o[1]+'</button>'; }).join('')+'</div>'+
-      '<div style="font-size:11.5px;color:#9aa0a6;margin-top:10px">Writes straight into Attendance with a note recording the change. Press Run payroll afterwards to apply it.</div><div id="pdMsg"></div>',
+      '<div style="font-size:11.5px;color:#9aa0a6;margin-top:10px">Writes straight into Attendance with a note recording the change, then payroll recalculates by itself.</div><div id="pdMsg"></div>',
       '<button class="btn ghost" onclick="closeModal()">Cancel</button>');
     document.querySelectorAll('[data-set]').forEach(function(b){
       b.onclick=function(){

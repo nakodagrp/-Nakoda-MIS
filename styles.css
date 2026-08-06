@@ -425,6 +425,11 @@ table.pm-grid{border-collapse:collapse;font-size:11px;min-width:560px}
 .py-dirty{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#FAEEDA;border:1px solid #EF9F27;border-radius:10px;padding:10px 14px;margin:12px 0;font-size:13px;color:#412402;font-weight:600}
 .py-dirty-ic{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;flex:none;border-radius:50%;background:#854F0B;color:#fff;font-weight:700;font-size:13px}
 .py-draft{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#E6F1FB;border:1px solid #85B7EB;border-radius:10px;padding:10px 14px;margin:12px 0;font-size:13px;color:#042C53;font-weight:600}
+/* v298: the quiet save tick that replaced the Run payroll button. Nothing to press; this just reports. */
+.py-status{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;min-height:36px;white-space:nowrap}
+.py-status-saving{color:#5f5e5a}
+.py-status-saved{color:#0F6E56}
+.py-status-err{color:#A32D2D}
 input.py-edited{border-color:#BA7517!important;background:#FDF7EC!important;box-shadow:inset 2px 0 0 #BA7517}
 /* v295: the punch is in flight. A disabled button with a live spinner replaces the toast that used to
    fade away after two seconds and leave the screen looking untouched — which is what made staff tap

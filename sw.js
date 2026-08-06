@@ -4,7 +4,7 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v295';   /* v295: punch is staged locally and painted instantly; service worker no longer double-fetches every cached file */
+var CACHE_VERSION = 'nakoda-mis-v299';   /* v299: payroll has no Run button - pick a month, type, it saves itself */
 var SHELL = [
   './',
   './index.html',
