@@ -1,0 +1,32 @@
+UPLOAD ALL 7 FILES IN THIS FOLDER. NOTHING ELSE IS NEEDED.
+
+WHY THIS FOLDER EXISTS
+  hrmodules.js keeps getting left behind. It is the file that removes the Run payroll
+  button and stops your typed additions being lost. Without it, nothing on the payroll
+  screen changes no matter how many times you upload the others.
+
+HOW
+  1. Open  https://github.com/nakodagrp/-Nakoda-MIS
+  2. Add file  ->  Upload files
+  3. Open this folder, press Ctrl+A to select ALL files, drag them onto the GitHub page
+  4. WAIT until GitHub lists all 7 file names on screen. Do not rush this step.
+     If it lists fewer than 7, drag the missing ones again before continuing.
+  5. Scroll down, press  Commit changes
+  6. Wait 1-2 minutes for GitHub Pages to rebuild
+
+CHECK IT WORKED
+  Open  https://nakodagrp.github.io/-Nakoda-MIS/deploy-check.html
+  Every row must say NEW in both columns.
+  If a row says OLD, that page tells you exactly which of the two problems you have.
+
+THE TELL, ON THE PAYROLL SCREEN
+  Before:  a red "Run payroll" button, and "No payslips. Pick a month and Run payroll."
+  After:   no button at all, and "No staff to show for this month."
+
+NEVER UPLOAD config.js  - it holds your live /exec URL.
+
+STILL TO DO, SEPARATELY (this is the slowness fix)
+  Paste  release-v299/Code_v300_READY_TO_PASTE.gs  into Apps Script,
+  run verifyHashPatch (must print ALL MATCH), then Deploy.
+  Your own measurement showed apiListMyTasks costs 5,681 ms of the 8,516 ms
+  dashboard load. Only that paste fixes it. No website file can.
