@@ -426,6 +426,16 @@ table.pm-grid{border-collapse:collapse;font-size:11px;min-width:560px}
 .py-dirty-ic{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;flex:none;border-radius:50%;background:#854F0B;color:#fff;font-weight:700;font-size:13px}
 .py-draft{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#E6F1FB;border:1px solid #85B7EB;border-radius:10px;padding:10px 14px;margin:12px 0;font-size:13px;color:#042C53;font-weight:600}
 /* v298: the quiet save tick that replaced the Run payroll button. Nothing to press; this just reports. */
+/* v302: the Save button on each employee panel, and the sticky bar that will not let you walk away. */
+.py-saverow{margin-top:10px}
+.py-saveline{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-top:0.5px solid var(--line,#e2e5ea);padding-top:10px}
+.py-savemsg{flex:1;font-size:12.5px;color:#5f5e5a;display:inline-flex;align-items:center;gap:6px}
+.py-savemsg.ok{color:#0F6E56;font-weight:600}
+.py-savemsg.warn{color:#854F0B;font-weight:600}
+.py-savebtn{border:0;border-radius:9px;padding:9px 22px;font-size:14px;font-weight:700;color:#fff;background:#1D9E75;cursor:pointer}
+.py-savebtn:disabled{background:#eef1f5;color:#9aa0a6;cursor:default}
+.py-savebtn.done{background:#eef1f5;color:#0F6E56}
+.py-dirty{position:sticky;top:0;z-index:30}
 .py-status{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;min-height:36px;white-space:nowrap}
 .py-status-saving{color:#5f5e5a}
 .py-status-saved{color:#0F6E56}

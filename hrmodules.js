@@ -166,31 +166,22 @@
   function payDraftKey(){ return 'nk_pay_draft_'+(PAY.month||ymNow())+'_'+((($id('pyBranch')||{}).value)||'all'); }
 
   /* ============================================================================================
-     v298 — NO BUTTON AT ALL.
+     v302 - BACK TO AN EXPLICIT SAVE, ON PURPOSE.
 
-     Pick a month, the payroll appears. Type a figure, it saves itself. Nothing to press.
+     v299 saved automatically as you typed. It worked, but on payroll "it saved itself, trust me" is
+     not a comfortable thing to be told about figures that decide what 93 people are paid. You asked
+     for a button, and a button is the right answer here: nothing is written until you say so, and
+     when you say so you get told it happened.
 
-     THE DANGER, AND HOW IT IS AVOIDED. runPayroll recalculates every slip and returns a fresh set.
-     The old runPay() then did PAY.slips = r.slips.map(initSlip) and paintPay() — a full redraw. Do
-     that while somebody is halfway through typing "2000" and the input is destroyed and rebuilt from
-     the server's copy: the caret jumps, and the two digits typed since the request went out are gone.
-     On payroll that is not a cosmetic bug, it silently changes what a person is paid.
+     What is kept from the auto-save work, because it was never about convenience:
+       - the draft on the device, so a killed app or a flat battery still cannot lose your typing
+       - the browser warning if you close the tab with unsaved changes
+       - one write at a time, so a fast double-click cannot send two payroll writes at once
+       - a save NEVER repaints the row you are editing (see paySave)
 
-     So an auto-save NEVER repaints. It sends the figures, and on success does nothing to the DOM
-     beyond a small "Saved" tick. The screen is already correct — pcCalc() computes every displayed
-     total on the client from the same rules, so there is nothing on screen waiting to be corrected.
-     The server's authoritative version is picked up on the next month change or page open.
-
-     WRITES ARE SERIALISED. Payroll writes take a script-wide lock. Two saves in flight at once means
-     the second waits, and if the user is still typing a third is already queued. So only one request
-     is ever in the air; anything typed while it flies sets _payAgain, and exactly one more save runs
-     when it lands. Typing fast can never queue up twenty writes.
-
-     IF A SAVE FAILS, the amber unsaved bar comes straight back with a Retry, and the draft stays on
-     the device. Nothing is ever quietly dropped.
+     What changed: the 1.2-second timer is gone. Only the Save button writes.
      ============================================================================================ */
-  var _payTimer=null, _paySaving=false, _payAgain=false, _payLastErr='';
-  var PAY_AUTOSAVE_MS=1200;
+  var _paySaving=false, _payLastErr='';
 
   function payStatus(kind, text){
     var el=$id('pyStatus'); if(!el) return;
@@ -198,45 +189,84 @@
     el.className='py-status py-status-'+kind;
     el.innerHTML=(kind==='saving'?'<span class="loader dark"></span> ':(kind==='saved'?'✓ ':'⚠ '))+esc(text||'');
   }
-  /* Called when the month/branch is about to change — get anything pending onto the server first. */
-  function payFlushNow(){ if(_payTimer){ clearTimeout(_payTimer); _payTimer=null; } if(PAY_DIRTY && !PAY.locked) paySave(); }
-
-  function paySchedule(){
-    if(PAY.locked) return;                       // a locked month is never written to
-    if(_payTimer) clearTimeout(_payTimer);
-    _payTimer=setTimeout(function(){ _payTimer=null; paySave(); }, PAY_AUTOSAVE_MS);
+  /* Month/branch is changing and there are unsaved figures. Never silently discard them. */
+  function payFlushNow(){
+    if(!PAY_DIRTY || PAY.locked) return true;
+    var n=dirtyCount();
+    if(confirm('You have unsaved changes for '+n+' staff member'+(n===1?'':'s')+'.\n\nOK = save them now\nCancel = throw them away')){
+      paySave(); return true;
+    }
+    payClearDirty(); return true;   // deliberately discarded — the draft goes too, or it would come back
   }
-  function paySave(){
-    if(PAY.locked) return;
-    if(_paySaving){ _payAgain=true; return; }    // one write at a time; remember that more arrived
+
+  function paySave(done){
+    if(PAY.locked){ toast('This month is locked — reopen it first.',true); return; }
+    if(_paySaving) return;                       // one payroll write at a time, always
+    if(!PAY_DIRTY){ toast('Nothing to save'); return; }
     _paySaving=true; _payLastErr='';
-    payStatus('saving','Saving…');
+    payStatus('saving','Saving…'); paintSaveRows(); paintDirtyBar();
     var month=PAY.month||ymNow(), branch=(($id('pyBranch')||{}).value)||'';
     API.runPayroll(month, branch, collectAdj()).then(function(r){
       _paySaving=false;
       if(r&&r.ok){
-        /* Deliberately NOT touching PAY.slips or calling paintPay() — see the note above. */
+        /* v298 note still applies: do NOT touch PAY.slips or call paintPay() here. The figures on
+           screen are already correct (pcCalc computes them locally), and rebuilding the inputs would
+           throw away the caret and anything typed in the last second. */
         payClearDirty();
-        payStatus('saved','Saved');
-        setTimeout(function(){ if(!PAY_DIRTY && !_paySaving) payStatus(null); }, 2500);
+        payStatus('saved','Saved ✓');
+        toast('Saved ✓ amounts are permanent now');
+        paintSaveRows();
+        setTimeout(function(){ if(!PAY_DIRTY && !_paySaving) payStatus(null); }, 3000);
+        if(typeof done==='function') done(true);
       } else {
         _payLastErr=(r&&r.error)||'Could not save';
-        PAY_DIRTY=true; paintDirtyBar(); payStatus('err',_payLastErr);
+        PAY_DIRTY=true; paintDirtyBar(); paintSaveRows(); payStatus('err',_payLastErr);
+        toast(_payLastErr,true);
+        if(typeof done==='function') done(false);
       }
-      if(_payAgain){ _payAgain=false; paySchedule(); }
     }).catch(function(){
       _paySaving=false; _payLastErr='No connection';
-      PAY_DIRTY=true; paintDirtyBar(); payStatus('err','Not saved — will retry');
-      if(_payAgain){ _payAgain=false; }
-      setTimeout(function(){ if(PAY_DIRTY) paySchedule(); }, 8000);   // come back to it
+      PAY_DIRTY=true; paintDirtyBar(); paintSaveRows(); payStatus('err','Not saved');
+      toast('Could not reach the server — your changes are still here, press Save again.',true);
+      if(typeof done==='function') done(false);
     });
   }
 
   function payMarkDirty(){
     PAY_DIRTY=true;
     try{ localStorage.setItem(payDraftKey(), JSON.stringify({ts:Date.now(), adj:collectAdj()})); }catch(e){}
-    paintDirtyBar();
-    paySchedule();
+    paintDirtyBar(); paintSaveRows();
+  }
+
+  /* The Save button inside every open employee panel. Same button, same action, wherever you are. */
+  function paintSaveRows(){
+    var rows=document.querySelectorAll('[data-saverow]'); if(!rows.length) return;
+    var n=PAY_DIRTY?dirtyCount():0;
+    Array.prototype.forEach.call(rows, function(el){
+      if(_paySaving){
+        el.innerHTML='<div class="py-saveline"><span class="py-savemsg"><span class="loader dark"></span> Saving…</span>'+
+          '<button class="py-savebtn" disabled>Saving…</button></div>';
+        return;
+      }
+      if(!PAY_DIRTY){
+        el.innerHTML='<div class="py-saveline"><span class="py-savemsg ok">✓ Saved — these amounts are permanent</span>'+
+          '<button class="py-savebtn done" disabled>Saved</button></div>';
+        return;
+      }
+      el.innerHTML='<div class="py-saveline"><span class="py-savemsg warn">Not saved yet — '+n+' staff changed</span>'+
+        '<button class="py-savebtn" data-dosave="1">Save</button></div>';
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-dosave]'), function(b){
+      b.onclick=function(e){ e.stopPropagation(); paySave(); };
+    });
+  }
+
+  /* v302: a salary register or bank file is a document that goes to a bank. It must never contain a
+     figure that exists only on somebody's screen. If there are unsaved changes, save first, then export. */
+  function payExportGuard(fn){
+    if(!PAY_DIRTY){ fn(); return; }
+    if(!confirm('You have unsaved changes.\n\nThe file must match what is actually saved, so it will be saved first.\n\nOK = save and download\nCancel = do not download')) return;
+    paySave(function(ok){ if(ok) fn(); else toast('Not downloaded — the save failed.',true); });
   }
   function payClearDirty(){
     PAY_DIRTY=false;
@@ -244,18 +274,19 @@
     paintDirtyBar();
   }
   function dirtyCount(){ var a=collectAdj(); return Object.keys(a).length; }
-  /* v298: with auto-save doing the work, this bar is now only for the case that MATTERS — a save that
-     did not land. Normal typing shows the quiet "Saving…/Saved" tick by the month picker instead, so
-     the screen is not shouting at somebody who has done nothing wrong. */
+  /* v302: with nothing saving by itself, this bar has to be impossible to walk past. It sticks to the
+     top of the page and stays there until the changes are saved, however far down the list you scroll. */
   function paintDirtyBar(){
     var box=$id('pyDirty'); if(!box) return;
-    if(!PAY_DIRTY || !_payLastErr){ box.innerHTML=''; return; }
+    if(!PAY_DIRTY){ box.innerHTML=''; return; }
     var n=dirtyCount();
+    var msg = _payLastErr
+      ? ('<b>Not saved</b> — '+esc(_payLastErr)+'. Your changes are still here; press Save to try again.')
+      : (n+' staff member'+(n===1?' has':'s have')+' unsaved changes.');
     box.innerHTML='<div class="py-dirty"><span class="py-dirty-ic">!</span>'+
-      '<span style="flex:1"><b>Not saved</b> — '+esc(_payLastErr)+'. Changes for '+n+' staff member'+(n===1?'':'s')+
-      ' are still only on this device.</span>'+
-      '<button class="btn sm" id="pyDirtySave">Retry</button></div>';
-    var b=$id('pyDirtySave'); if(b) b.onclick=function(){ _payLastErr=''; paintDirtyBar(); paySave(); };
+      '<span style="flex:1">'+msg+'</span>'+
+      '<button class="btn sm" id="pyDirtySave"'+(_paySaving?' disabled':'')+'>'+(_paySaving?'Saving…':'Save all')+'</button></div>';
+    var b=$id('pyDirtySave'); if(b) b.onclick=function(){ _payLastErr=''; paySave(); };
   }
   /* The app being killed does not fire beforeunload, so the draft above is the real safety net.
      This covers the ordinary case of closing the tab or navigating away. */
@@ -521,9 +552,11 @@
     });
     wireRows();
     paintKpi();
-    var bk=$id('pyBank'); if(bk) bk.onclick=function(){ bankXls(computed(),PAY.month); };
-    var rg=$id('pyReg'); if(rg) rg.onclick=function(){ registerXls(computed(),PAY.month); };
-    var rgp=$id('pyRegPdf'); if(rgp) rgp.onclick=function(){ registerPdf(computed(),PAY.month); };
+    /* v302: all three go through payExportGuard — a bank file or salary register must never carry a
+       figure that was only ever on screen. See the note on payExportGuard. */
+    var bk=$id('pyBank'); if(bk) bk.onclick=function(){ payExportGuard(function(){ bankXls(computed(),PAY.month); }); };
+    var rg=$id('pyReg'); if(rg) rg.onclick=function(){ payExportGuard(function(){ registerXls(computed(),PAY.month); }); };
+    var rgp=$id('pyRegPdf'); if(rgp) rgp.onclick=function(){ payExportGuard(function(){ registerPdf(computed(),PAY.month); }); };
     wireFind();
     paintLock();
   }
@@ -647,6 +680,10 @@
         otherDedLines(i,s._dedOther)+
         '<button class="py-addbtn" data-dadd="'+i+'">+ Add other deduction</button>'+
         '<div class="py-lt"><span>Total deductions</span><span data-c="dedtot" style="color:'+R+'">−'+m0(c.ded)+'</span></div>'+
+        /* v302: the Save button lives here, right under the figures being edited, so it is where the
+           eye already is. It saves EVERYBODY, not just this row - collectAdj() gathers every changed
+           slip - which is why it says so on the button when more than one person is affected. */
+        '<div class="py-saverow" data-saverow="'+i+'"></div>'+
         '<div style="margin-top:8px;text-align:right"><button class="btn ghost sm" data-pdf="'+esc(s.empId)+'">⤓ Download PDF</button></div></div>'+
       '<div class="py-att" data-att="'+i+'"><div class="py-bt" style="color:#185FA5">ATTENDANCE</div><div class="center-load" style="padding:8px 0"><span class="loader dark"></span></div></div>';
   }
@@ -760,6 +797,7 @@
         if(!open) loadAtt(row, +row.getAttribute('data-i')); };
       wireDetail(row, +row.getAttribute('data-i'));
     });
+    paintSaveRows();   /* v302: every open panel gets its Save button in the right state */
   }
   function wireDetail(row,i){
     var s=PAY.slips[i];
@@ -779,7 +817,8 @@
       s[x.getAttribute('data-dk')]=''; redrawDetail(row,i); payMarkDirty(); }; });
     var od=row.querySelector('[data-otherded]'); if(od){ od.onclick=stop; od.oninput=function(){ s._otherDed=numv(od.value); refreshRow(row,s); paintKpi(); touched(od); }; }
     var ol=row.querySelector('[data-otherlbl]'); if(ol){ ol.onclick=stop; ol.oninput=function(){ s._otherDedLabel=ol.value; touched(ol); }; }
-    var pdf=row.querySelector('[data-pdf]'); if(pdf) pdf.onclick=function(e){ e.stopPropagation(); var sc=computed().filter(function(x){return String(x.empId)===pdf.getAttribute('data-pdf');})[0]; payslipPdf(sc,sc.name,PAY.month); };
+    var pdf=row.querySelector('[data-pdf]'); if(pdf) pdf.onclick=function(e){ e.stopPropagation();
+      payExportGuard(function(){ var sc=computed().filter(function(x){return String(x.empId)===pdf.getAttribute('data-pdf');})[0]; payslipPdf(sc,sc.name,PAY.month); }); };   /* v302: a payslip handed to staff must match what is saved */
   }
   /* The month, day by day, on the row itself. Tap a day to change it; the change is written straight
      into Attendance (with an audit note) and payroll recalculates itself straight afterwards. */
@@ -833,7 +872,7 @@
       };
     });
   }
-  function redrawDetail(row,i){ var det=row.querySelector('.py-det'); det.innerHTML=buildDetail(PAY.slips[i],i); det.style.display='grid'; row.classList.add('open'); wireDetail(row,i); refreshRow(row,PAY.slips[i]); paintKpi(); }
+  function redrawDetail(row,i){ var det=row.querySelector('.py-det'); det.innerHTML=buildDetail(PAY.slips[i],i); det.style.display='grid'; row.classList.add('open'); wireDetail(row,i); refreshRow(row,PAY.slips[i]); paintKpi(); paintSaveRows(); }
   function refreshRow(row,s){
     var c=pcCalc(s);
     row.querySelector('[data-c="add"]').innerHTML=c.additions?'+'+m0(c.additions):'—';
