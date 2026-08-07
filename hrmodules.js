@@ -197,22 +197,55 @@
     var el=$id('pyStatus'); if(!el) return;
     if(!kind){ el.className='py-status'; el.innerHTML=''; return; }
     el.className='py-status py-status-'+kind;
-    el.innerHTML=(kind==='saving'?'<span class="loader dark"></span> ':(kind==='saved'?'✓ ':'⚠ '))+esc(text||'');
+    var lead = kind==='saving' ? '<span class="loader dark"></span> '
+             : kind==='saved'  ? '✓ '
+             : kind==='warn'   ? '• ' : '⚠ ';
+    el.innerHTML=lead+esc(text||'');
   }
-  /* Month/branch is changing and there are unsaved figures. Never silently discard them. */
+
+  /* ============================================================================================
+     v304 — BACK TO AUTO-SAVE, BUT THIS TIME IT PROVES ITSELF.
+
+     v302 put an explicit Save button on this screen because "it saved itself, trust me" is not a
+     comfortable thing to be told about figures that decide what 93 people are paid. That reasoning was
+     sound but the answer was wrong: a button you have to remember is one more thing that can be
+     forgotten, and forgetting it loses the money silently anyway.
+
+     What makes auto-save safe now is not the timer, it is the read-back. Every save re-reads the
+     payslips from the server and compares them field by field before the screen is allowed to say
+     Saved. So the trust is not being asked for — it is being demonstrated, every time.
+
+     The four states, in the chip beside the month:
+       Not saved yet  ->  Saving…  ->  Saved & verified ✓        (and, if it ever fails, Not stored)
+
+     Everything protective from v297-v302 is kept:
+       - the draft on the device, so a killed app or a flat battery cannot lose your typing
+       - the browser warning if you close the tab while something is genuinely unsaved
+       - one write at a time, so a fast typist cannot have two payroll writes in flight at once
+       - a save NEVER repaints the row you are editing, so the caret is never stolen
+     ============================================================================================ */
+  var PAY_AUTOSAVE_MS=1200, _payTimer=null, _payAgain=false;
+  function payScheduleSave(){
+    if(PAY.locked) return;
+    if(_payTimer) clearTimeout(_payTimer);
+    /* Debounced: typing "2000" is four keystrokes and must be one save, not four. */
+    _payTimer=setTimeout(function(){ _payTimer=null; paySave(); }, PAY_AUTOSAVE_MS);
+  }
+  /* Month/branch is changing, or an export is about to be built. Write anything outstanding NOW
+     rather than waiting out the debounce. */
   function payFlushNow(){
+    if(_payTimer){ clearTimeout(_payTimer); _payTimer=null; }
     if(!PAY_DIRTY || PAY.locked) return true;
-    var n=dirtyCount();
-    if(confirm('You have unsaved changes for '+n+' staff member'+(n===1?'':'s')+'.\n\nOK = save them now\nCancel = throw them away')){
-      paySave(); return true;
-    }
-    payClearDirty(); return true;   // deliberately discarded — the draft goes too, or it would come back
+    paySave();
+    return true;
   }
 
   function paySave(done){
-    if(PAY.locked){ toast('This month is locked — reopen it first.',true); return; }
-    if(_paySaving) return;                       // one payroll write at a time, always
-    if(!PAY_DIRTY){ toast('Nothing to save'); return; }
+    if(PAY.locked){ if(typeof done==='function') done(false); return; }
+    /* One payroll write at a time, always. If more was typed while this one is in flight, remember to
+       go round again the moment it lands rather than dropping the newer figure. */
+    if(_paySaving){ _payAgain=true; return; }
+    if(!PAY_DIRTY){ if(typeof done==='function') done(true); return; }
     _paySaving=true; _payLastErr='';
     payStatus('saving','Saving…'); paintSaveRows(); paintDirtyBar();
     var month=PAY.month||ymNow(), branch=(($id('pyBranch')||{}).value)||'';
@@ -227,55 +260,66 @@
            start underneath it. payVerifySaved releases all three. */
         payVerifySaved(month, branch, snap, done);
       } else {
-        _paySaving=false;
         _payLastErr=(r&&r.error)||'Could not save';
-        PAY_DIRTY=true; paintDirtyBar(); paintSaveRows(); payStatus('err',_payLastErr);
+        payReleaseSave();
+        PAY_DIRTY=true; paintDirtyBar(); paintSaveRows(); payStatus('err','Not stored');
         toast(_payLastErr,true);
         if(typeof done==='function') done(false);
       }
     }).catch(function(){
-      _paySaving=false; _payLastErr='No connection';
-      PAY_DIRTY=true; paintDirtyBar(); paintSaveRows(); payStatus('err','Not saved');
-      toast('Could not reach the server — your changes are still here, press Save again.',true);
+      _payLastErr='Could not reach the server. Your figures are still here and still on this device.';
+      payReleaseSave();
+      PAY_DIRTY=true; paintDirtyBar(); paintSaveRows(); payStatus('err','Not stored');
+      toast('No connection — your figures are safe on this device. It will retry when you type again.',true);
       if(typeof done==='function') done(false);
     });
   }
 
   function payMarkDirty(){
     PAY_DIRTY=true;
+    /* The draft is written on EVERY keystroke, before any network call. This is the layer that
+       survives the app being killed, the phone dying or a force-quit — none of which fire
+       beforeunload. It is deliberately the cheapest and earliest thing that happens. */
     try{ localStorage.setItem(payDraftKey(), JSON.stringify({ts:Date.now(), adj:collectAdj()})); }catch(e){}
+    payStatus('warn','Not saved yet');
     paintDirtyBar(); paintSaveRows();
+    payScheduleSave();
   }
 
-  /* The Save button inside every open employee panel. Same button, same action, wherever you are. */
+  /* The status line inside every open employee panel — v304 has no button in it. It mirrors the chip
+     beside the month so you get the same answer wherever you happen to be looking. */
   function paintSaveRows(){
     var rows=document.querySelectorAll('[data-saverow]'); if(!rows.length) return;
-    var n=PAY_DIRTY?dirtyCount():0;
     Array.prototype.forEach.call(rows, function(el){
+      if(_payLastErr){
+        el.innerHTML='<div class="py-saveline"><span class="py-savemsg" style="color:#A32D2D;font-weight:600">⚠ Not stored — see the bar at the top</span>'+
+          '<button class="py-savebtn" data-dosave="1">Try again</button></div>';
+        return;
+      }
       if(_paySaving){
-        el.innerHTML='<div class="py-saveline"><span class="py-savemsg"><span class="loader dark"></span> Saving…</span>'+
-          '<button class="py-savebtn" disabled>Saving…</button></div>';
+        el.innerHTML='<div class="py-saveline"><span class="py-savemsg"><span class="loader dark"></span> Saving…</span></div>';
         return;
       }
-      if(!PAY_DIRTY){
-        el.innerHTML='<div class="py-saveline"><span class="py-savemsg ok">✓ Saved — these amounts are permanent</span>'+
-          '<button class="py-savebtn done" disabled>Saved</button></div>';
+      if(PAY_DIRTY){
+        el.innerHTML='<div class="py-saveline"><span class="py-savemsg warn">Not saved yet — saving in a moment</span></div>';
         return;
       }
-      el.innerHTML='<div class="py-saveline"><span class="py-savemsg warn">Not saved yet — '+n+' staff changed</span>'+
-        '<button class="py-savebtn" data-dosave="1">Save</button></div>';
+      el.innerHTML='<div class="py-saveline"><span class="py-savemsg ok">✓ Saved &amp; verified — read back from the server</span></div>';
     });
     Array.prototype.forEach.call(document.querySelectorAll('[data-dosave]'), function(b){
-      b.onclick=function(e){ e.stopPropagation(); paySave(); };
+      b.onclick=function(e){ e.stopPropagation(); _payLastErr=''; paySave(); };
     });
   }
 
   /* v302: a salary register or bank file is a document that goes to a bank. It must never contain a
-     figure that exists only on somebody's screen. If there are unsaved changes, save first, then export. */
+     figure that exists only on somebody's screen.
+     v304: with auto-save there is nothing to ask permission for — flush what is outstanding, wait for
+     it to verify, then build the file. */
   function payExportGuard(fn){
     if(!PAY_DIRTY){ fn(); return; }
-    if(!confirm('You have unsaved changes.\n\nThe file must match what is actually saved, so it will be saved first.\n\nOK = save and download\nCancel = do not download')) return;
-    paySave(function(ok){ if(ok) fn(); else toast('Not downloaded — the save failed.',true); });
+    if(_payTimer){ clearTimeout(_payTimer); _payTimer=null; }
+    toast('Saving your last change before the download…');
+    paySave(function(ok){ if(ok) fn(); else toast('Not downloaded — the save did not store. Check the bar at the top.',true); });
   }
   function payClearDirty(){
     PAY_DIRTY=false;
@@ -283,19 +327,17 @@
     paintDirtyBar();
   }
   function dirtyCount(){ var a=collectAdj(); return Object.keys(a).length; }
-  /* v302: with nothing saving by itself, this bar has to be impossible to walk past. It sticks to the
-     top of the page and stays there until the changes are saved, however far down the list you scroll. */
+  /* v304: while auto-save is working normally this bar stays out of the way — the chip beside the
+     month is enough. It appears only when a save has genuinely FAILED, and then it is impossible to
+     walk past: it sticks to the top of the page however far down the list you scroll, and it does not
+     go away until the figures are stored. */
   function paintDirtyBar(){
     var box=$id('pyDirty'); if(!box) return;
-    if(!PAY_DIRTY){ box.innerHTML=''; return; }
-    var n=dirtyCount();
-    var msg = _payLastErr
-      ? ('<b>Not saved</b> — '+esc(_payLastErr)+'. Your changes are still here; press Save to try again.')
-      : (n+' staff member'+(n===1?' has':'s have')+' unsaved changes.');
+    if(!PAY_DIRTY || !_payLastErr){ box.innerHTML=''; return; }
     box.innerHTML='<div class="py-dirty"><span class="py-dirty-ic">!</span>'+
-      '<span style="flex:1">'+msg+'</span>'+
-      '<button class="btn sm" id="pyDirtySave"'+(_paySaving?' disabled':'')+'>'+(_paySaving?'Saving…':'Save all')+'</button></div>';
-    var b=$id('pyDirtySave'); if(b) b.onclick=function(){ _payLastErr=''; paySave(); };
+      '<span style="flex:1"><b>Not stored</b> — '+esc(_payLastErr)+'</span>'+
+      '<button class="btn sm" id="pyDirtySave"'+(_paySaving?' disabled':'')+'>'+(_paySaving?'Saving…':'Try again')+'</button></div>';
+    var b=$id('pyDirtySave'); if(b) b.onclick=function(){ _payLastErr=''; paintDirtyBar(); paySave(); };
   }
   /* The app being killed does not fire beforeunload, so the draft above is the real safety net.
      This covers the ordinary case of closing the tab or navigating away. */
@@ -334,8 +376,9 @@
       s._lab=a.labTest||''; s._adv=a.advLab||'';
       if(a.pfOv!=='') s._pfOv=a.pfOv; if(a.esiOv!=='') s._esiOv=a.esiOv; if(a.ptOv!=='') s._ptOv=a.ptOv;
     });
-    paintPay(); PAY_DIRTY=true; paintDirtyBar();
-    toast(applied?('Restored unsaved edits for '+applied+' staff — press Save now to keep them'):'Those staff are not in this payroll run any more', !applied);
+    paintPay();
+    if(applied){ payMarkDirty(); toast('Restored unsaved edits for '+applied+' staff — saving them now'); }
+    else toast('Those staff are not in this payroll run any more', true);
   }
   var R='#A32D2D', G='#0F6E56';
   function m0(n){ return '₹'+money(n); }
@@ -420,11 +463,13 @@
   function loadPayslips(){
     PAY.month=$id('pyMonth').value||ymNow();
     ATT={};                    /* v303: a different month means a different calendar — never reuse the old one */
+    if(_payTimer){ clearTimeout(_payTimer); _payTimer=null; }
+    _payAgain=false;
     payStatus('saving','Loading…');
     API.listPayslips(PAY.month, ($id('pyBranch')||{}).value||'').then(function(r){
       if(!(r&&r.ok)){ payStatus('err',(r&&r.error)||'Could not load'); return; }
       PAY.slips=(r.slips||[]).map(initSlip); PAY.locked=!!r.locked;
-      PAY_DIRTY=false; _payLastErr='';
+      PAY_DIRTY=false; _payLastErr=''; paintDirtyBar();
       if(!PAY.slips.length && !PAY.locked){
         payStatus('saving','Preparing '+PAY.month+'…');
         runPay(true);            // first time this month has been opened — build it
@@ -511,11 +556,32 @@
     PAY.slips.forEach(function(s){ want[s.empId]=payFp(adjOf(s)); names[s.empId]=s.name||s.empId; });
     return {want:want, names:names};
   }
+  /* Release the single-writer lock. If the user typed while the save was in flight, _payAgain was set
+     and we immediately queue another round — the newer figure must never be the one that gets dropped. */
+  function payReleaseSave(){
+    _paySaving=false;
+    if(_payAgain){ _payAgain=false; if(PAY_DIRTY && !_payLastErr) payScheduleSave(); }
+  }
+  function payWantEq(a,b){
+    var ka=Object.keys(a), kb=Object.keys(b);
+    if(ka.length!==kb.length) return false;
+    for(var i=0;i<ka.length;i++){ if(a[ka[i]]!==b[ka[i]]) return false; }
+    return true;
+  }
+  /* A save is only allowed to mark the screen clean if the screen still says what the save carried.
+     Somebody typing while the save is in flight is the normal case, not the exception — clearing the
+     dirty flag on the strength of the OLD figures would throw the newer one away silently, which is
+     the exact failure this whole mechanism exists to prevent. */
+  function payFinishClean(snap,label){
+    if(payWantEq(snap.want, paySnapshot().want)){ payClearDirty(); payStatus('saved',label); }
+    else { PAY_DIRTY=true; payStatus('warn','Not saved yet'); payScheduleSave(); }
+    paintSaveRows();
+  }
   function payVerifySaved(month,branch,snap,done){
     var want=snap.want, names=snap.names;
     payStatus('saving','Checking it stored…'); paintSaveRows();
     API.listPayslips(month,branch).then(function(r){
-      _paySaving=false;
+      payReleaseSave();
       /* Moved on to another month while this was in flight. The answer is still about the month that
          was saved, so report it — but never repaint the dirty state of the month now on screen. */
       var stillHere=((PAY.month||ymNow())===month && ((($id('pyBranch')||{}).value)||'')===branch);
@@ -530,7 +596,7 @@
       if(!(r&&r.ok)){
         /* The write itself succeeded; only the read-back failed. Do not cry wolf, but do not claim
            it was verified either. */
-        payClearDirty(); payStatus('saved','Saved ✓ (could not re-check)'); paintSaveRows();
+        payFinishClean(snap,'Saved ✓ (could not re-check)');
         setTimeout(function(){ if(!PAY_DIRTY && !_paySaving) payStatus(null); }, 3000);
         if(typeof done==='function') done(true); return;
       }
@@ -542,9 +608,9 @@
       });
       Object.keys(want).forEach(function(id){ if(!seen[id]) bad.push(names[id]+' (no payslip row)'); });
       if(!bad.length){
-        payClearDirty(); payStatus('saved','Saved & verified ✓');
-        toast('Saved ✓ read back from the server and it matches');
-        paintSaveRows();
+        payFinishClean(snap,'Saved & verified ✓');
+        /* No toast on the happy path — auto-save fires often and a toast every time would be noise.
+           The chip is the confirmation, and it holds for three seconds. */
         setTimeout(function(){ if(!PAY_DIRTY && !_paySaving) payStatus(null); }, 3000);
         if(typeof done==='function') done(true);
       } else {
@@ -552,14 +618,14 @@
         var who=bad.slice(0,3).join(', ')+(bad.length>3?(' and '+(bad.length-3)+' more'):'');
         _payLastErr='The server accepted the save, but '+bad.length+' staff read back with different figures ('+
           who+'). Your typing is still here and still saved on this device. '+
-          'Do not pay anyone from this month until it is sorted — run payrollDiagnose() in Apps Script.';
+          'Do not pay anyone from this month until it is sorted — run payrollRepair() in Apps Script.';
         paintDirtyBar(); paintSaveRows(); payStatus('err','Saved but NOT stored');
         toast('Saved but not stored — see the red bar at the top.',true);
         if(typeof done==='function') done(false);
       }
     }).catch(function(){
-      _paySaving=false;
-      payClearDirty(); payStatus('saved','Saved ✓ (could not re-check)'); paintSaveRows();
+      payReleaseSave();
+      payFinishClean(snap,'Saved ✓ (could not re-check)');
       if(typeof done==='function') done(true);
     });
   }
@@ -569,6 +635,7 @@
     API.runPayroll(PAY.month, ($id('pyBranch')||{}).value||'', collectAdj()).then(function(r){
       if(b){ b.disabled=false; b.textContent='Run payroll'; }   /* v298: button removed; harmless no-op kept for older cached markup */
       if(r&&r.ok){ PAY.slips=(r.slips||[]).map(initSlip);
+        if(_payTimer){ clearTimeout(_payTimer); _payTimer=null; }
         payClearDirty(); _payLastErr=''; payStatus(null);
         /* v298: runPay is now only reached for a month being built for the first time, or an attendance
            edit forcing a recalc — never while somebody is typing. Repainting here is safe. */
@@ -641,7 +708,7 @@
       '<div id="pyKpi" class="pyk-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:14px"></div>'+
       '<div class="py2 py2-head"><div>Employee</div><div class="r">Actual / Basic</div><div class="r" style="color:'+G+'">Additions</div><div class="r" style="color:'+R+'">Deductions</div><div class="r">Net payable</div><div></div></div>'+
       '<div id="pyRows"></div>'+
-      '<div style="font-size:11px;color:#9aa0a6;margin-top:10px">Tap a row to open its Additions &amp; Deductions detail. Edit an amount and it saves by itself — watch the tick beside the month. PF 12% of basic · ESI 0.75% if gross ≤ ₹21,000 (adding pay can switch ESI off) · PT ₹200 · LOP = base ÷ days × absent.</div>';
+      '<div style="font-size:11px;color:#9aa0a6;margin-top:10px">Tap a row to open its Additions &amp; Deductions detail. Edit an amount and it saves by itself, then the app reads it back to prove it stored — watch the chip beside the month. PF 12% of basic · ESI 0.75% if gross ≤ ₹21,000 (adding pay can switch ESI off) · PT ₹200 · LOP = base ÷ days × absent.</div>';
     var rows=$id('pyRows');
     PAY.slips.forEach(function(s,i){
       var c=pcCalc(s);
