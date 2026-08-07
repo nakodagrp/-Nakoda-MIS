@@ -122,17 +122,27 @@
       loadMySlip(); loadMyHistory(); return;
     }
     var brs=(S.meta&&S.meta.branches)||[];
+    /* v303: July's payroll is worked on in August, so defaulting to the current month meant reopening
+       the app always landed you on the wrong month — and an untouched month legitimately shows no
+       additions, which looked exactly like the edits had been lost. Come back where you left off. */
+    var lastM=''; try{ lastM=localStorage.getItem('nk_pay_month')||''; }catch(e){}
+    var lastB=''; try{ lastB=localStorage.getItem('nk_pay_branch')||''; }catch(e){}
+    if(!/^\d{4}-\d{2}$/.test(lastM)) lastM=ymNow();
     v.innerHTML='<div class="page-head"><h1>Payroll</h1></div>'+
-      '<div class="pm2-filt" style="grid-template-columns:1fr 1fr auto"><div><label>Month</label><input id="pyMonth" class="in" type="month" value="'+ymNow()+'"></div>'+
-      '<div><label>Branch</label><select id="pyBranch" class="in"><option value="">All</option>'+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'">'+esc(b.BranchName)+'</option>';}).join('')+'</select></div>'+
+      '<div class="pm2-filt" style="grid-template-columns:1fr 1fr auto"><div><label>Month</label><input id="pyMonth" class="in" type="month" value="'+esc(lastM)+'"></div>'+
+      '<div><label>Branch</label><select id="pyBranch" class="in"><option value="">All</option>'+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'"'+(String(b.BranchID)===lastB?' selected':'')+'>'+esc(b.BranchName)+'</option>';}).join('')+'</select></div>'+
       '<div style="align-self:end"><span id="pyStatus" class="py-status"></span></div></div>'+
-      '<div id="pyActions" class="pm2-bar" style="display:none"><button class="btn ghost sm" id="pyBank">⤓ Bank file (CMS)</button> <button class="btn ghost sm" id="pyReg">⤓ Salary register (Excel)</button> <button class="btn ghost sm" id="pyRegPdf">⤓ Salary register (PDF)</button><span id="pyLockWrap"></span></div>'+
+      '<div id="pyActions" class="pm2-bar" style="display:none"><button class="btn ghost sm" id="pyBank">⤓ Bank file (CMS)</button> <button class="btn ghost sm" id="pyReg">⤓ Salary register (Excel)</button> <button class="btn ghost sm" id="pyRegPdf">⤓ Salary register (PDF)</button> <button class="btn ghost sm" id="pyNonPf" title="Only staff with no PF deduction — gross-pay staff and anyone marked PF: No">⤓ Non-PF staff (Excel)</button><span id="pyLockWrap"></span></div>'+
       '<div class="field" style="margin:10px 0 0"><label>Find employee</label><input id="pyFind" class="in" placeholder="Type a name or code…" autocomplete="off"></div>'+
       '<div id="pyDirty"></div><div id="pyWarn"></div><div id="pyTable"></div>';
     /* v298: no Run payroll button. Pick a month and the payroll for it appears; type a figure and it
        saves itself. See the auto-save block below for why this is safe on a payroll screen. */
-    $id('pyMonth').onchange=function(){ payFlushNow(); loadPayslips(); };
-    var _pb=$id('pyBranch'); if(_pb) _pb.onchange=function(){ payFlushNow(); loadPayslips(); };
+    function rememberPayFilters(){
+      try{ localStorage.setItem('nk_pay_month',$id('pyMonth').value||''); }catch(e){}
+      try{ localStorage.setItem('nk_pay_branch',(($id('pyBranch')||{}).value)||''); }catch(e){}
+    }
+    $id('pyMonth').onchange=function(){ payFlushNow(); rememberPayFilters(); loadPayslips(); };
+    var _pb=$id('pyBranch'); if(_pb) _pb.onchange=function(){ payFlushNow(); rememberPayFilters(); loadPayslips(); };
     loadPayslips();
   }
   var PAY={slips:[],month:ymNow(),locked:false};
@@ -206,19 +216,18 @@
     _paySaving=true; _payLastErr='';
     payStatus('saving','Saving…'); paintSaveRows(); paintDirtyBar();
     var month=PAY.month||ymNow(), branch=(($id('pyBranch')||{}).value)||'';
+    var snap=paySnapshot();          /* v303: what this save must read back as — taken before anything can change */
     API.runPayroll(month, branch, collectAdj()).then(function(r){
-      _paySaving=false;
       if(r&&r.ok){
         /* v298 note still applies: do NOT touch PAY.slips or call paintPay() here. The figures on
            screen are already correct (pcCalc computes them locally), and rebuilding the inputs would
-           throw away the caret and anything typed in the last second. */
-        payClearDirty();
-        payStatus('saved','Saved ✓');
-        toast('Saved ✓ amounts are permanent now');
-        paintSaveRows();
-        setTimeout(function(){ if(!PAY_DIRTY && !_paySaving) payStatus(null); }, 3000);
-        if(typeof done==='function') done(true);
+           throw away the caret and anything typed in the last second.
+           v303: the dirty flag, the on-device draft and the _paySaving guard are deliberately NOT
+           released yet — the read-back is part of the save, and a second Save must not be able to
+           start underneath it. payVerifySaved releases all three. */
+        payVerifySaved(month, branch, snap, done);
       } else {
+        _paySaving=false;
         _payLastErr=(r&&r.error)||'Could not save';
         PAY_DIRTY=true; paintDirtyBar(); paintSaveRows(); payStatus('err',_payLastErr);
         toast(_payLastErr,true);
@@ -410,6 +419,7 @@
      used to be for. Generate it automatically instead of showing an empty screen with nothing to press. */
   function loadPayslips(){
     PAY.month=$id('pyMonth').value||ymNow();
+    ATT={};                    /* v303: a different month means a different calendar — never reuse the old one */
     payStatus('saving','Loading…');
     API.listPayslips(PAY.month, ($id('pyBranch')||{}).value||'').then(function(r){
       if(!(r&&r.ok)){ payStatus('err',(r&&r.error)||'Could not load'); return; }
@@ -441,19 +451,118 @@
     s._ptOv=(s.ptOverride===0||s.ptOverride)?String(s.ptOverride):'';
     return s;
   }
-  /* gather each employee's split additions + other deduction for the backend */
-  function collectAdj(){ var m={}; PAY.slips.forEach(function(s){
-    var inc=numv(s._inc),bon=numv(s._bon),trv=numv(s._trv),pet=numv(s._pet),mis=numv(s._mis);
+  /* One employee's typed additions + deductions, in the exact shape the backend expects. */
+  function adjOf(s){
     var other=(s._other||[]).map(function(o){return {label:String((o&&o.label)||'Other'),amt:numv(o&&o.amt)};}).filter(function(o){return o.amt>0;});
     var dedOther=(s._dedOther||[]).map(function(o){return {label:String((o&&o.label)||'Other deduction'),amt:numv(o&&o.amt)};}).filter(function(o){return o.amt>0;});
-    var od=numv(s._otherDed), lab=numv(s._lab), adv=numv(s._adv);
-    var hasO=hasOv(s._pfOv)||hasOv(s._esiOv)||hasOv(s._ptOv);
-    if(inc||bon||trv||pet||mis||other.length||od||lab||adv||dedOther.length||hasO)
-      m[s.empId]={incentive:inc,bonus:bon,travel:trv,petrol:pet,misExp:mis,other:other,
-      otherDed:od,otherDedLabel:s._otherDedLabel||'',
-      labTest:lab,advLab:adv,dedOther:dedOther,
+    return {incentive:numv(s._inc),bonus:numv(s._bon),travel:numv(s._trv),petrol:numv(s._pet),misExp:numv(s._mis),
+      other:other, otherDed:numv(s._otherDed), otherDedLabel:s._otherDedLabel||'',
+      labTest:numv(s._lab), advLab:numv(s._adv), dedOther:dedOther,
       pfOv:(hasOv(s._pfOv)?s._pfOv:''),esiOv:(hasOv(s._esiOv)?s._esiOv:''),ptOv:(hasOv(s._ptOv)?s._ptOv:'')};
+  }
+  function adjIsEmpty(a){
+    return !(a.incentive||a.bonus||a.travel||a.petrol||a.misExp||a.other.length||
+             a.otherDed||a.labTest||a.advLab||a.dedOther.length||
+             hasOv(a.pfOv)||hasOv(a.esiOv)||hasOv(a.ptOv));
+  }
+  /* gather each employee's split additions + other deduction for the backend.
+     Staff with nothing typed are left out — the backend treats a missing entry as "all zero", which
+     is also how a cleared figure gets cleared. */
+  function collectAdj(){ var m={}; PAY.slips.forEach(function(s){
+    var a=adjOf(s); if(!adjIsEmpty(a)) m[s.empId]=a;
   }); return m; }
+
+  /* ============================================================================================
+     v303 — A SAVE THAT DID NOT STICK USED TO LOOK EXACTLY LIKE ONE THAT DID.
+
+     The screen said "Saved ✓ amounts are permanent" the instant the server replied ok. But ok only
+     means the run finished — it does not prove the figures are readable again afterwards. If anything
+     between the write and the next read disagreed (most likely the month column: Sheets can turn the
+     text "2026-07" into a July 2026 DATE, after which listPayslips looks for the string and finds
+     nothing), the additions came back empty on the next open with no warning at all.
+
+     So the save now reads its own work back and compares it, field by field, before it is allowed to
+     say Saved. If anything does not match, the changes stay dirty, the on-device draft stays put, and
+     the bar says so in as many words. Never again a green tick over a lost figure.
+     ============================================================================================ */
+  function payFp(a){
+    function n(v){ return Math.max(0,Math.round(Number(v)||0)); }
+    /* The backend clips custom labels to 60 characters, so clip here too — otherwise a long reason
+       would come back shorter than it went and be reported as a failed save when nothing is wrong. */
+    function list(x){ return (x||[]).map(function(o){ return {l:String((o&&o.label)||'').slice(0,60).trim(), a:n(o&&o.amt)}; })
+      .filter(function(o){ return o.a>0; })
+      .sort(function(p,q){ return (p.l+p.a)<(q.l+q.a)?-1:1; })
+      .map(function(o){ return o.l+':'+o.a; }).join('|'); }
+    return [n(a.incentive),n(a.bonus),n(a.travel),n(a.petrol),n(a.misExp),list(a.other),
+            n(a.otherDed),n(a.labTest),n(a.advLab),list(a.dedOther)].join(',');
+  }
+  /* The same fingerprint, rebuilt from a slip as the server just handed it back. */
+  function payFpOfSlip(s){
+    var oth=[]; try{ oth=JSON.parse(s.addOtherJson||'[]')||[]; }catch(e){}
+    var dth=[]; try{ dth=JSON.parse(s.dedOtherJson||'[]')||[]; }catch(e){}
+    return payFp({incentive:s.addIncentive,bonus:s.addBonus,travel:s.addTravel,petrol:s.addPetrol,
+      misExp:s.addMis,other:oth,otherDed:s.otherDed,labTest:s.labTest,advLab:s.advLab,dedOther:dth});
+  }
+  /* A snapshot of what every slip on screen SHOULD read back as. Taken in the same tick as the save,
+     because payFlushNow can switch the month while the save is still in flight — comparing July's
+     figures against August's rows would raise a false alarm about money. */
+  function paySnapshot(){
+    var want={}, names={};
+    PAY.slips.forEach(function(s){ want[s.empId]=payFp(adjOf(s)); names[s.empId]=s.name||s.empId; });
+    return {want:want, names:names};
+  }
+  function payVerifySaved(month,branch,snap,done){
+    var want=snap.want, names=snap.names;
+    payStatus('saving','Checking it stored…'); paintSaveRows();
+    API.listPayslips(month,branch).then(function(r){
+      _paySaving=false;
+      /* Moved on to another month while this was in flight. The answer is still about the month that
+         was saved, so report it — but never repaint the dirty state of the month now on screen. */
+      var stillHere=((PAY.month||ymNow())===month && ((($id('pyBranch')||{}).value)||'')===branch);
+      if(!stillHere){
+        var moved=[];
+        if(r&&r.ok) (r.slips||[]).forEach(function(s){
+          if(want[s.empId]!==undefined && payFpOfSlip(s)!==want[s.empId]) moved.push(names[s.empId]); });
+        if(moved.length) toast(month+' did NOT store correctly for '+moved.length+' staff — go back to that month and check.',true);
+        if(typeof done==='function') done(!moved.length);
+        return;
+      }
+      if(!(r&&r.ok)){
+        /* The write itself succeeded; only the read-back failed. Do not cry wolf, but do not claim
+           it was verified either. */
+        payClearDirty(); payStatus('saved','Saved ✓ (could not re-check)'); paintSaveRows();
+        setTimeout(function(){ if(!PAY_DIRTY && !_paySaving) payStatus(null); }, 3000);
+        if(typeof done==='function') done(true); return;
+      }
+      var bad=[], seen={};
+      (r.slips||[]).forEach(function(s){
+        seen[s.empId]=1;
+        if(want[s.empId]===undefined) return;
+        if(payFpOfSlip(s)!==want[s.empId]) bad.push(names[s.empId]);
+      });
+      Object.keys(want).forEach(function(id){ if(!seen[id]) bad.push(names[id]+' (no payslip row)'); });
+      if(!bad.length){
+        payClearDirty(); payStatus('saved','Saved & verified ✓');
+        toast('Saved ✓ read back from the server and it matches');
+        paintSaveRows();
+        setTimeout(function(){ if(!PAY_DIRTY && !_paySaving) payStatus(null); }, 3000);
+        if(typeof done==='function') done(true);
+      } else {
+        PAY_DIRTY=true;
+        var who=bad.slice(0,3).join(', ')+(bad.length>3?(' and '+(bad.length-3)+' more'):'');
+        _payLastErr='The server accepted the save, but '+bad.length+' staff read back with different figures ('+
+          who+'). Your typing is still here and still saved on this device. '+
+          'Do not pay anyone from this month until it is sorted — run payrollDiagnose() in Apps Script.';
+        paintDirtyBar(); paintSaveRows(); payStatus('err','Saved but NOT stored');
+        toast('Saved but not stored — see the red bar at the top.',true);
+        if(typeof done==='function') done(false);
+      }
+    }).catch(function(){
+      _paySaving=false;
+      payClearDirty(); payStatus('saved','Saved ✓ (could not re-check)'); paintSaveRows();
+      if(typeof done==='function') done(true);
+    });
+  }
   /* quiet=true is the automatic re-run fired by an attendance change - same call, softer message. */
   function runPay(quiet){ var b=$id('pyRun'); if(b){ b.disabled=true; b.textContent='Running…'; } PAY.month=$id('pyMonth').value||ymNow();
     var find=$id('pyFind'), q=find?find.value:'';
@@ -557,6 +666,7 @@
     var bk=$id('pyBank'); if(bk) bk.onclick=function(){ payExportGuard(function(){ bankXls(computed(),PAY.month); }); };
     var rg=$id('pyReg'); if(rg) rg.onclick=function(){ payExportGuard(function(){ registerXls(computed(),PAY.month); }); };
     var rgp=$id('pyRegPdf'); if(rgp) rgp.onclick=function(){ payExportGuard(function(){ registerPdf(computed(),PAY.month); }); };
+    var np=$id('pyNonPf'); if(np) np.onclick=function(){ payExportGuard(function(){ nonPfXls(computed().filter(isNonPf),PAY.month); }); };
     wireFind();
     paintLock();
   }
@@ -822,22 +932,38 @@
   }
   /* The month, day by day, on the row itself. Tap a day to change it; the change is written straight
      into Attendance (with an audit note) and payroll recalculates itself straight afterwards. */
+  /* v303 — THE CALENDAR USED TO SHOW THE WRONG MONTH.
+     ATT was keyed by empId alone and never cleared when the month picker changed. Open somebody's row
+     in August, switch the picker to July, open the same row again and the AUGUST grid was served
+     straight back out of the cache — under a screen that said July everywhere else. On payroll that is
+     not a cosmetic slip: it is the grid you tap to change somebody's attendance.
+     The key now carries the month, the cache is emptied whenever the month or branch changes, and the
+     month it belongs to is printed on the header so the two can never disagree silently again. */
   var ATT={};
+  function attKey(empId){ return (PAY.month||ymNow())+'|'+empId; }
+  function attMonthLabel(m){
+    try{ var p=String(m).split('-'); return new Date(+p[0],+p[1]-1,1).toLocaleDateString('en-IN',{month:'long',year:'numeric'}).toUpperCase(); }
+    catch(e){ return String(m||''); }
+  }
   var ASTYLE={ present:['py-d-p','P'], half:['py-d-h','½'], absent:['py-d-a','A'], leave:['py-d-l','L'],
     holiday:['py-d-o','H'], off:['py-d-o','·'], blank:['py-d-b','—'], future:['py-d-f',''] };
   function loadAtt(row,i){
     var box=row.querySelector('[data-att="'+i+'"]'); if(!box) return;
     var s=PAY.slips[i]; if(!s) return;
-    if(ATT[s.empId]){ paintAtt(row,i); return; }
-    API.monthAttendance(PAY.month, s.empId).then(function(r){
-      if(r&&r.ok){ ATT[s.empId]=r; paintAtt(row,i); }
+    var month=PAY.month||ymNow(), k=attKey(s.empId);
+    if(ATT[k]){ paintAtt(row,i); return; }
+    API.monthAttendance(month, s.empId).then(function(r){
+      /* The month may have been changed again while this was in flight — never paint a stale answer. */
+      if(r&&r.ok){ ATT[month+'|'+s.empId]=r; if((PAY.month||ymNow())===month) paintAtt(row,i); }
       else box.innerHTML='<div class="py-lopsub">'+esc((r&&r.error)||'Could not load attendance.')+'</div>';
     });
   }
   function paintAtt(row,i){
     var box=row.querySelector('[data-att="'+i+'"]'); if(!box) return;
-    var s=PAY.slips[i], d=ATT[s.empId]; if(!d) return;
-    box.innerHTML='<div class="py-bt" style="color:#185FA5">ATTENDANCE · tap a day to change it</div>'+
+    var s=PAY.slips[i], d=ATT[attKey(s.empId)]; if(!d) return;
+    /* Belt and braces: the server echoes the month back, so refuse to paint anything else. */
+    if(d.month && String(d.month)!==String(PAY.month||ymNow())) return;
+    box.innerHTML='<div class="py-bt" style="color:#185FA5">ATTENDANCE · '+esc(attMonthLabel(PAY.month))+' · tap a day to change it</div>'+
       '<div class="py-days">'+d.days.map(function(x){
         var y=ASTYLE[x.status]||ASTYLE.blank;
         return '<span class="py-d '+y[0]+(x.locked?' py-d-lock':'')+'" data-day="'+esc(x.date)+'" title="'+esc(x.date+(x.label?(' · '+x.label):''))+'"><b>'+x.day+'</b>'+y[1]+'</span>';
@@ -861,7 +987,7 @@
         var st=b.getAttribute('data-set');
         document.querySelectorAll('[data-set]').forEach(function(x){ x.disabled=true; });
         API.confirmAbsent([{empId:s.empId,date:date,status:st}]).then(function(r){
-          if(r&&r.ok){ delete ATT[s.empId]; closeModal();
+          if(r&&r.ok){ delete ATT[attKey(s.empId)]; closeModal();
             /* Re-run straight away. The old flow saved the day and left it to the user to press Run
                payroll; until they did, the LOP, PF, net and every export still showed the old figure. */
             toast(date+' set to '+st+' — recalculating…');
@@ -1070,6 +1196,116 @@
     a.href=u; a.download='Salary-Register-'+month+'.xls'; a.click();
     setTimeout(function(){URL.revokeObjectURL(u);},2000);
     toast('Salary register exported — formulas are live');
+  }
+
+  /* ============================================================ NON-PF STAFF REGISTER (v303)
+     "Non-PF cut" means nothing is deducted for provident fund — that is BOTH the gross-pay staff
+     (PayMode = gross) AND anyone on the standard track whose Employees row says PF Applicable = No.
+     The GROSS STAFF tab inside the main register only carries the summary columns; this is the full
+     picture for those people on one sheet — every earning head, every deduction head, bank details
+     and the net — so the list can be handed over or checked without opening anybody's row.
+     One employee per row, totals at the bottom, filter row on the headers. */
+  function isNonPf(s){ return String(s.payMode||'')==='gross' || s.pfOn===false || s.pfOn===0; }
+  var NONPF_COLS=[
+    ['SR',5],['CODE',10],['NAME',28],['BRANCH',14],['PAY MODE',10],
+    ['ACTUAL SALARY',13],['MONTH DAYS',11],['PRESENT DAYS',12],['LOP DAYS',9],['PER DAY',9],
+    ['LOP CUT',10],['EARNED',11],
+    ['INCENTIVE',10],['BONUS',9],['TRAVEL',9],['PETROL',9],['MIS EXP',9],['ATT BONUS',10],['OTHER ADD',11],['TOTAL ADD',11],
+    ['GROSS',11],
+    ['PF',8],['ESIC',8],['PT',8],['LAB TEST',10],['ADVANCE / LOAN',13],['OTHER DED',11],['TOTAL DED',11],
+    ['NET PAYABLE',13],['IFSC',12],['ACCOUNT NO',18],['MOBILE',12]];
+  function nonPfXls(slips,month){
+    if(!slips||!slips.length){ toast('No non-PF staff in this payroll run.',true); return; }
+    var brSel=$id('pyBranch'), brLabel=(brSel&&brSel.value)?(brSel.options[brSel.selectedIndex].text):'All branches';
+    var mlabel=month; try{ var mp=String(month).split('-'); mlabel=new Date(+mp[0],+mp[1]-1,1).toLocaleDateString('en-IN',{month:'long',year:'numeric'}).toUpperCase(); }catch(e){}
+    var xml='<?xml version="1.0"?>\n<?mso-application progid="Excel.Sheet"?>\n'+
+      '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" '+
+      'xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">'+
+      '<Styles>'+
+        '<Style ss:ID="t"><Font ss:Bold="1" ss:Size="12"/></Style>'+
+        '<Style ss:ID="h"><Font ss:Bold="1" ss:Size="9"/><Interior ss:Color="#F3F4F6" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous"/><Border ss:Position="Top" ss:LineStyle="Continuous"/><Border ss:Position="Left" ss:LineStyle="Continuous"/><Border ss:Position="Right" ss:LineStyle="Continuous"/></Borders></Style>'+
+        '<Style ss:ID="ge"><Font ss:Bold="1" ss:Size="9" ss:Color="#0F6E56"/><Interior ss:Color="#E1F5EE" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/></Style>'+
+        '<Style ss:ID="gd"><Font ss:Bold="1" ss:Size="9" ss:Color="#A32D2D"/><Interior ss:Color="#FCEBEB" ss:Pattern="Solid"/><Alignment ss:Horizontal="Center"/></Style>'+
+        '<Style ss:ID="n"><NumberFormat ss:Format="#,##0"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous"/><Border ss:Position="Top" ss:LineStyle="Continuous"/><Border ss:Position="Left" ss:LineStyle="Continuous"/><Border ss:Position="Right" ss:LineStyle="Continuous"/></Borders></Style>'+
+        '<Style ss:ID="f"><NumberFormat ss:Format="#,##0"/><Interior ss:Color="#F2FBF7" ss:Pattern="Solid"/><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous"/><Border ss:Position="Top" ss:LineStyle="Continuous"/><Border ss:Position="Left" ss:LineStyle="Continuous"/><Border ss:Position="Right" ss:LineStyle="Continuous"/></Borders></Style>'+
+        '<Style ss:ID="s"><Borders><Border ss:Position="Bottom" ss:LineStyle="Continuous"/><Border ss:Position="Top" ss:LineStyle="Continuous"/><Border ss:Position="Left" ss:LineStyle="Continuous"/><Border ss:Position="Right" ss:LineStyle="Continuous"/></Borders></Style>'+
+        '<Style ss:ID="tot"><Font ss:Bold="1"/><NumberFormat ss:Format="#,##0"/><Interior ss:Color="#F3F4F6" ss:Pattern="Solid"/><Borders><Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="2"/><Border ss:Position="Bottom" ss:LineStyle="Continuous"/><Border ss:Position="Left" ss:LineStyle="Continuous"/><Border ss:Position="Right" ss:LineStyle="Continuous"/></Borders></Style>'+
+      '</Styles>'+
+      '<Worksheet ss:Name="NON-PF STAFF"><Table>'+
+      NONPF_COLS.map(function(c){ return '<Column ss:Width="'+(c[1]*7)+'"/>'; }).join('');
+    xml+=xRow(xStr('NAKODA DIAGNOSTICS PVT LTD — STAFF WITH NO PF DEDUCTION','t'));
+    xml+=xRow(xStr(mlabel+'  ·  '+brLabel+'  ·  '+slips.length+' staff'));
+    xml+=xRow(xStr('Gross-pay staff (per day = salary × 12 ÷ 365, no 26-day basis) and standard staff marked PF Applicable = No. ESIC and PT still apply where they are switched on.'));
+    /* Banded group header so the earnings block and the deductions block read apart at a glance. */
+    xml+=xRow(xAt(13)+' ss:StyleID="ge"><Data ss:Type="String">ADDITIONS (+)</Data></Cell>'+
+              xAt(22)+' ss:StyleID="gd"><Data ss:Type="String">DEDUCTIONS (−)</Data></Cell>');
+    xml+=xRow(NONPF_COLS.map(function(c){ return xStr(c[0],'h'); }).join(''));
+    var first=6, sr=0;
+    var sums={}; [6,8,9,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29].forEach(function(i){ sums[i]=0; });
+    slips.forEach(function(r){
+      sr++;
+      var addOther=(Number(r.addOther)||0);
+      var dedOtherAll=(Number(r.otherDed)||0)+(Number(r.dedOther)||0);
+      var totalDed=Number(r.deductions)||0, lopCut=Number(r.lopAmt)||0;
+      var v={6:Number(r.actualSalary)||0, 8:Number(r.attDays)||0, 9:Number(r.lopDays)||0,
+        11:lopCut, 12:Number(r.earned)||0,
+        13:Number(r.addIncentive)||0, 14:Number(r.addBonus)||0, 15:Number(r.addTravel)||0,
+        16:Number(r.addPetrol)||0, 17:Number(r.addMis)||0, 18:Number(r.attBonus)||0,
+        19:addOther, 20:Number(r.additions)||0, 21:Number(r.gross)||0,
+        22:Number(r.pf)||0, 23:Number(r.esi)||0, 24:Number(r.pt)||0,
+        25:Number(r.labTest)||0, 26:Number(r.advLab)||0, 27:dedOtherAll,
+        28:totalDed, 29:Number(r.net)||0};
+      Object.keys(sums).forEach(function(k){ sums[k]+=Number(v[k])||0; });
+      xml+=xRow(
+        xNum(sr,'s')+xStr(r.empId||'','s')+xStr(r.name||'','s')+xStr(brName(r.branchId),'s')+
+        xStr(String(r.payMode||'')==='gross'?'GROSS':'NO PF','s')+
+        xNum(v[6],'n')+
+        '<Cell ss:StyleID="n"><Data ss:Type="Number">'+(Number(r.totalDays)||0)+'</Data></Cell>'+
+        '<Cell ss:StyleID="n"><Data ss:Type="Number">'+v[8]+'</Data></Cell>'+
+        '<Cell ss:StyleID="n"><Data ss:Type="Number">'+v[9]+'</Data></Cell>'+
+        xNum(r.perDay,'n')+
+        xNum(v[11],'n')+xNum(v[12],'f','=RC[-6]-RC[-1]')+
+        xNum(v[13],'n')+xNum(v[14],'n')+xNum(v[15],'n')+xNum(v[16],'n')+xNum(v[17],'n')+xNum(v[18],'n')+xNum(v[19],'n')+
+        xNum(v[20],'f','=SUM(RC[-7]:RC[-1])')+
+        xNum(v[21],'f','=RC[-9]+RC[-1]')+
+        xNum(v[22],'n')+xNum(v[23],'n')+xNum(v[24],'n')+xNum(v[25],'n')+xNum(v[26],'n')+xNum(v[27],'n')+
+        xNum(v[28],'f','=SUM(RC[-6]:RC[-1])+RC[-17]')+
+        xNum(v[29],'f','=RC[-8]-RC[-1]')+
+        xStr(r.ifsc||'','s')+xStr(String(r.acct||''),'s')+xStr(String(r.mobile||''),'s'));
+    });
+    var last=first+slips.length-1;
+    /* TOTAL row: label in col 3, sums under every money column, blanks elsewhere. */
+    var totCells=xAt(3)+' ss:StyleID="tot"><Data ss:Type="String">TOTAL ('+slips.length+' staff)</Data></Cell>'+xStr('','tot');
+    /* Anything not in `sums` is a label or a per-person rate (PAY MODE, MONTH DAYS, PER DAY) — adding
+       those up would produce a number that means nothing, so those cells stay empty. */
+    for(var col=5; col<=29; col++){
+      totCells += (sums[col]===undefined) ? xStr('','tot')
+                                          : xNum(sums[col],'tot','=SUM(R'+first+'C:R'+last+'C)');
+    }
+    xml+=xRow(totCells);
+    /* 32 columns is too wide to be useful raw: freeze SR/CODE/NAME and the header block so the name
+       stays on screen while you scroll right, and set the print to landscape scaled to one page wide
+       so it comes out of the printer readable instead of sliced across six sheets. */
+    xml+='</Table>'+
+      '<WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">'+
+        '<PageSetup><Layout x:Orientation="Landscape"/>'+
+          '<PageMargins x:Bottom="0.4" x:Left="0.3" x:Right="0.3" x:Top="0.4"/></PageSetup>'+
+        '<FitToPage/>'+
+        '<Print><ValidPrinterInfo/><PaperSizeIndex>9</PaperSizeIndex>'+
+          '<FitWidth>1</FitWidth><FitHeight>0</FitHeight>'+
+          '<HorizontalResolution>600</HorizontalResolution><VerticalResolution>600</VerticalResolution></Print>'+
+        '<FreezePanes/><FrozenNoSplit/>'+
+        '<SplitHorizontalPosition>5</SplitHorizontalPosition><SplitVerticalPosition>3</SplitVerticalPosition>'+
+        '<TopRowBottomPane>5</TopRowBottomPane><LeftColumnRightPane>3</LeftColumnRightPane>'+
+        '<ActivePane>0</ActivePane>'+
+      '</WorksheetOptions>'+
+      '<AutoFilter x:Range="R5C1:R'+last+'C'+NONPF_COLS.length+'" xmlns="urn:schemas-microsoft-com:office:excel"/>'+
+      '</Worksheet></Workbook>';
+    var blob=new Blob(['﻿'+xml],{type:'application/vnd.ms-excel'});
+    var u=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=u; a.download='Non-PF-Staff-'+month+'.xls'; a.click();
+    setTimeout(function(){URL.revokeObjectURL(u);},2000);
+    toast(slips.length+' non-PF staff exported');
   }
 
   /* PF staff, in the exact shape of the accountant's PF SHEET. */
