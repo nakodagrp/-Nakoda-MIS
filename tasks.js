@@ -4,7 +4,7 @@
   var VIEW_OWNER=null, OWNER_NAME='', TARGETS=[];   // EA/admin can view another person's (e.g. Director's) tasks
   var PRI={High:'#C0392B',Normal:'#1A8AC2',Low:'#9aa0a6'};
   function meId(){ return S.user&&S.user.EmpID; }
-  function calToItem(e){ return { taskId:'CAL::'+e.entryId, calId:e.entryId, isCal:true, source:'calendar', title:e.title, dueDate:e.date, dueTime:e.startTime, endTime:e.endTime, priority:'', status:(String(e.status)==='done'?'done':'open'), checklist:(e.checklist||'[]') }; }
+  function calToItem(e){ return { taskId:'CAL::'+e.entryId, calId:e.entryId, isCal:true, source:'calendar', title:e.title, dueDate:e.date, dueTime:e.startTime, endTime:e.endTime, priority:'', status:(String(e.status)==='done'?'done':'open'), checklist:(e.checklist||'[]'), notes:(e.notes||'') }; }
   function combined(){ return TASKS.concat(CALITEMS); }
 
   function pc(t){ try{ return Array.isArray(t.checklist)?t.checklist:JSON.parse(t.checklist||'[]'); }catch(e){ return []; } }
@@ -421,11 +421,55 @@
       (String(e.status)==='verified'?'':'<div style="margin-top:11px;font-size:11.5px;color:#854f0b;background:#faf4e2;border-radius:8px;padding:7px 9px;line-height:1.5">Not counted anywhere yet. Verifying puts this day into the dashboard and releases its stock batch.</div>')+
       '</div>';
   }
+  /* The meeting, as a meeting: when it is, what it is, and the two things you actually want to do to
+     it. Both buttons act on the calendar entry, which is the record that really exists. */
+  function openCalDetail(t){
+    var when=esc(dueLabel(t))+(t.dueTime?(' · '+esc(t.dueTime)+(t.endTime?('–'+esc(t.endTime)):'')):'');
+    var done=(t.status==='done');
+    var body='<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'+
+        '<span style="background:#ECEAFB;color:#5046b8;border-radius:12px;font-size:10px;padding:2px 9px;font-weight:600">📅 Meeting / Calendar</span>'+
+        (done?'<span style="background:#eaf7ef;color:#1a8f4c;border-radius:12px;font-size:10px;padding:2px 9px;font-weight:600">done</span>':'')+
+      '</div>'+
+      '<div style="font-size:13px;color:#444;margin-bottom:4px"><b>When</b> · '+when+'</div>'+
+      (t.notes?('<div style="font-size:13px;background:#f6f7f9;border-radius:8px;padding:10px;white-space:pre-line;margin-top:8px">'+esc(t.notes)+'</div>'):'')+
+      '<div style="font-size:11.5px;color:#9aa0a6;margin-top:10px;line-height:1.5">This is a calendar entry, not an assigned task. Deleting it removes it from the calendar and from this list.</div>'+
+      '<div id="cdMsg"></div>';
+    var foot='<button class="btn ghost" onclick="closeModal()">Close</button>'+
+      '<button class="btn ghost" id="cdDel" style="color:#A32D2D;border-color:#e3b1b1">Delete</button>'+
+      '<button class="btn" id="cdDone">'+(done?'Mark not done':'✓ Mark done')+'</button>';
+    openModal(t.title, body, foot);
+    function refresh(){
+      API.cachedCalendar(curOwner()).then(function(e){
+        if(e){ CALITEMS=e.filter(function(x){return String(x.status)!=='deleted';}).map(calToItem); paintList(); }
+      });
+    }
+    document.getElementById('cdDone').onclick=function(){
+      var b=this; b.disabled=true;
+      API.updateCalEntry(t.calId,{status:(done?'pending':'done')},curOwner()).then(function(r){
+        if(r&&(r.ok||r.offline)){ closeModal(); toast(done?'Marked not done':'Marked done'); refresh(); }
+        else { document.getElementById('cdMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; b.disabled=false; }
+      });
+    };
+    document.getElementById('cdDel').onclick=function(){
+      if(!confirm('Delete "'+(t.title||'this meeting')+'"?')) return;
+      var b=this; b.disabled=true;
+      API.updateCalEntry(t.calId,{status:'deleted'},curOwner()).then(function(r){
+        if(r&&(r.ok||r.offline)){ closeModal(); toast('Deleted'); refresh(); }
+        else { document.getElementById('cdMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; b.disabled=false; }
+      });
+    };
+  }
   function openTaskDetail(id){
     var t=byId(id); if(!t) return; var cl=pc(t);
     /* A training task is not a tick-box — open the actual lesson (video + quiz).
        The task auto-closes server-side when the quiz is passed, so there is no manual Complete. */
     if(t.source==='training' && t.instanceId && window.openTrainingVideo){ window.openTrainingVideo(t.instanceId); return; }
+    /* v306: A MEETING IS NOT A TASK, AND PRETENDING IT WAS BROKE IT.
+       Calendar entries are folded into My Tasks with a synthetic id of the form CAL::<entryId>. Every
+       branch of this modal then treated them as ordinary tasks — so Complete called updateTask with an
+       id the Tasks sheet has never contained and came back "Task not found", and there was no way to
+       delete from here at all. Hence "I open it and it does nothing". They get their own panel. */
+    if(t.isCal){ openCalDetail(t); return; }
     var isDaily=(t.source==='accounts' && t.instanceId);
     var isDep=(t.source==='deposit' && t.instanceId);
     var isAtt=(t.source==='attendance' && t.instanceId);   /* instanceId holds the attId — see ensureAttApprovalTasks_ */

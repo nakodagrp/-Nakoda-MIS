@@ -4,7 +4,7 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v305';   /* v305: daily collection is filed then verified - it counts nowhere until checked; expenses approved line by line */
+var CACHE_VERSION = 'nakoda-mis-v306';   /* v306: duplicate meetings stopped at source and deletable; daily Reject with a reason; banner counts only pending days */
 var SHELL = [
   './',
   './index.html',

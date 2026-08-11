@@ -109,9 +109,13 @@
         /* v305: verification is live again. A day is FILED first and counts nowhere until it is
            verified — so the status column is the important one on this screen, and an unverified day
            carries the button to deal with it right here rather than only inside My Tasks. */
+        /* v306: Reject sits beside Verify. A rejected day is not a mistake to hide — it stays in the
+           list with its reason so the figure and the explanation travel together, and it counts
+           nowhere until that day is re-filed. */
         var statusCell = stt==='verified' ? '<span class="chip paid">✓ verified</span>'
-          : stt==='rejected' ? '<span class="chip" style="background:#fdecec;color:#b23b3b">✗ rejected</span>'
-          : (canV ? '<button class="btn ghost sm" data-dvf="'+esc(d.dayId)+'" style="color:#1a8f4c;border-color:#1a8f4c;font-weight:500">Verify</button>'
+          : stt==='rejected' ? '<span class="chip" style="background:#fdecec;color:#b23b3b" title="'+esc(d.notes||'')+'">✗ rejected</span>'
+          : (canV ? '<button class="btn ghost sm" data-dvf="'+esc(d.dayId)+'" style="color:#1a8f4c;border-color:#1a8f4c;font-weight:500">Verify</button>'+
+                    ' <button class="btn ghost sm" data-drj="'+esc(d.dayId)+'" style="color:#b23b3b;border-color:#b23b3b">Reject</button>'
                   : '<span class="chip partial">awaiting check</span>');
         return '<tr><td>'+esc(branchName(d.branchId))+'</td><td>'+esc(d.date)+'</td><td>₹'+money(d.b2cCash)+'</td><td>₹'+money(d.b2cBank)+'</td><td>₹'+money(d.other)+'</td><td>'+(d.patients||0)+'</td><td>'+(d.tests||0)+'</td><td>₹'+money(coll)+'</td><td>'+docLinks(d)+'</td><td>'+statusCell+'</td></tr>'; }).join(''):'<tr><td class="empty" colspan="10">No entries this month.</td></tr>')+'</tbody></table></div>'+
       (total>PAGE?'<div class="acc-pager">'+(ACC.dailyPage>0?'<button class="btn ghost sm" id="dlyPrev">‹ Prev</button>':'<span></span>')+'<span>'+(start+1)+'–'+Math.min(start+PAGE,total)+' of '+total+'</span>'+(ACC.dailyPage<pages-1?'<button class="btn ghost sm" id="dlyNext">Next ›</button>':'<span></span>')+'</div>':'');
@@ -129,6 +133,28 @@
           if(rv&&rv.ok){ toast('Verified — this day now counts'); loadDaily(); loadPendingBar(); }
           else { toast((rv&&rv.error)||'Could not verify',true); b.disabled=false; b.textContent='Verify'; }
         });
+      };
+    });
+    /* v306: rejecting insists on a reason. Written into the row's notes, so in three months the
+       sheet still explains itself. */
+    document.querySelectorAll('#accBody [data-drj]').forEach(function(b){
+      b.onclick=function(){
+        var id=b.getAttribute('data-drj');
+        openModal('Reject this day',
+          '<div style="font-size:13px;color:#666;margin-bottom:9px">The day stays in the list marked rejected and counts nowhere until it is re-filed. Write what is wrong with it.</div>'+
+          '<textarea id="drjWhy" rows="3" placeholder="e.g. B2C cash does not match the report — 2,000 short" style="width:100%;border:1px solid #d9d9d9;border-radius:8px;padding:8px;font-size:13px"></textarea>'+
+          '<div id="drjMsg"></div>',
+          '<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="drjGo" style="background:#b23b3b">Reject this day</button>');
+        var g=$id('drjGo'); if(!g) return;
+        g.onclick=function(){
+          var why=(($id('drjWhy')||{}).value||'').trim();
+          if(!why){ $id('drjMsg').innerHTML='<div class="msg error">Write the reason first.</div>'; return; }
+          g.disabled=true;
+          API.rejectDaily(id,why).then(function(rr){
+            if(rr&&rr.ok){ closeModal(); toast('Day rejected — re-file it to put it right'); loadDaily(); loadPendingBar(); }
+            else { $id('drjMsg').innerHTML='<div class="msg error">'+esc((rr&&rr.error)||'Failed')+'</div>'; g.disabled=false; }
+          });
+        };
       };
     });
     loadPendingBar();
