@@ -102,24 +102,60 @@
     var dlyBtn=canDaily()?'<button class="btn" id="dlyAdd">+ Daily entry</button>':'';
     var depBtn=canEnter()?'<button class="btn ghost" id="dlyDep">🏦 Bank deposit</button>':'';
     var actions=(dlyBtn||depBtn)?('<div class="fin-actions">'+dlyBtn+depBtn+'</div>'):'';
-    box.innerHTML=actions+
+    var canV=!!r.canVerify || canDaily();
+    box.innerHTML=actions+'<div id="dlyPendBar"></div>'+
       '<div class="table-wrap"><table><thead><tr><th>Branch</th><th>Date</th><th>B2C cash</th><th>B2C bank</th><th>Other</th><th>Patients</th><th>Tests</th><th>Collection</th><th>Docs</th><th>Status</th></tr></thead><tbody>'+
       (rows.length?rows.map(function(d){ var coll=(Number(d.cashIn)||0)+(Number(d.bankIn)||0)+(Number(d.other)||0); var stt=String(d.status);
-        /* v275: verification is retired — the accountant files the report herself, so there is nobody
-           left to check it. New entries save as 'verified'. The three legacy states are still RENDERED
-           (rows filed before this update can be pending or rejected) but no Verify/Reject buttons are
-           offered any more; re-saving that day's entry replaces the row and clears the old state. */
-        var statusCell = stt==='rejected' ? '<span class="chip" style="background:#fdecec;color:#b23b3b">✗ rejected (old)</span>'
-          : stt==='pending' ? '<span class="chip partial">pending (old)</span>'
-          : '<span class="chip paid">✓ filed</span>';
+        /* v305: verification is live again. A day is FILED first and counts nowhere until it is
+           verified — so the status column is the important one on this screen, and an unverified day
+           carries the button to deal with it right here rather than only inside My Tasks. */
+        var statusCell = stt==='verified' ? '<span class="chip paid">✓ verified</span>'
+          : stt==='rejected' ? '<span class="chip" style="background:#fdecec;color:#b23b3b">✗ rejected</span>'
+          : (canV ? '<button class="btn ghost sm" data-dvf="'+esc(d.dayId)+'" style="color:#1a8f4c;border-color:#1a8f4c;font-weight:500">Verify</button>'
+                  : '<span class="chip partial">awaiting check</span>');
         return '<tr><td>'+esc(branchName(d.branchId))+'</td><td>'+esc(d.date)+'</td><td>₹'+money(d.b2cCash)+'</td><td>₹'+money(d.b2cBank)+'</td><td>₹'+money(d.other)+'</td><td>'+(d.patients||0)+'</td><td>'+(d.tests||0)+'</td><td>₹'+money(coll)+'</td><td>'+docLinks(d)+'</td><td>'+statusCell+'</td></tr>'; }).join(''):'<tr><td class="empty" colspan="10">No entries this month.</td></tr>')+'</tbody></table></div>'+
       (total>PAGE?'<div class="acc-pager">'+(ACC.dailyPage>0?'<button class="btn ghost sm" id="dlyPrev">‹ Prev</button>':'<span></span>')+'<span>'+(start+1)+'–'+Math.min(start+PAGE,total)+' of '+total+'</span>'+(ACC.dailyPage<pages-1?'<button class="btn ghost sm" id="dlyNext">Next ›</button>':'<span></span>')+'</div>':'');
     var a=$id('dlyAdd'); if(a) a.onclick=openDailyForm;
     var dp=$id('dlyDep'); if(dp) dp.onclick=function(){ var t=document.querySelector('#accTabs span[data-t="deposit"]'); if(t){ t.click(); } else { ACC.tab='deposit'; paintTab(); } };   // open the Bank Deposit tab (table), not the form directly
     var pv=$id('dlyPrev'); if(pv) pv.onclick=function(){ ACC.dailyPage--; loadDaily(); };
     var nx=$id('dlyNext'); if(nx) nx.onclick=function(){ ACC.dailyPage++; loadDaily(); };
-    /* v275: the Verify / Reject handlers that lived here are gone with the workflow. */
+    /* v305: verify straight from the row. No Reject — a wrong figure is corrected by re-filing that
+       day, which overwrites the row and reopens the task. */
+    document.querySelectorAll('#accBody [data-dvf]').forEach(function(b){
+      b.onclick=function(){
+        var id=b.getAttribute('data-dvf');
+        b.disabled=true; b.textContent='Verifying…';
+        API.verifyDaily(id).then(function(rv){
+          if(rv&&rv.ok){ toast('Verified — this day now counts'); loadDaily(); loadPendingBar(); }
+          else { toast((rv&&rv.error)||'Could not verify',true); b.disabled=false; b.textContent='Verify'; }
+        });
+      };
+    });
+    loadPendingBar();
   }); }
+  /* The standing reminder. Auto-save-style quiet when there is nothing outstanding, impossible to walk
+     past when there is — because an unverified day is money missing from every figure in the app, and
+     a stock batch sitting on hold, and neither of those announces itself anywhere else. */
+  function loadPendingBar(){
+    API.pendingDaily().then(function(r){
+      var box=$id('dlyPendBar'); if(!box) return;
+      if(!r||!r.ok||!r.pending||!r.pending.length){ box.innerHTML=''; return; }
+      var p=r.pending, oldest=p[0], n=p.length;
+      var total=0; p.forEach(function(x){ total+=Number(x.total)||0; });
+      var age=Number(oldest.ageDays)||0;
+      var aged=age>=2;
+      box.innerHTML='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:'+(aged?'#fdecec':'#faf4e2')+
+        ';border:1px solid '+(aged?'#e3b1b1':'#efc98a')+';border-radius:10px;padding:10px 13px;margin:10px 0;font-size:13px;color:'+(aged?'#7a2020':'#5c3d00')+'">'+
+        '<span style="flex:1;line-height:1.6"><b>'+n+' day'+(n===1?'':'s')+' waiting for verification</b> — ₹'+money(total)+
+        ' is not in the dashboard and '+(n===1?'its stock batch is':'their stock batches are')+' on hold. Oldest is '+
+        esc(oldest.branchName||'')+' '+esc(oldest.date)+(age?(' · '+age+' day'+(age===1?'':'s')+' ago'):' · today')+'.</span>'+
+        '<button class="btn ghost sm" id="dlyPendGo">Show them</button></div>';
+      var g=$id('dlyPendGo'); if(g) g.onclick=function(){
+        var f=$id('accBody'); if(f) f.scrollIntoView({behavior:'smooth',block:'start'});
+        toast(n+' day'+(n===1?'':'s')+' marked Verify in the list below');
+      };
+    }).catch(function(){});
+  }
   function openDepositForm(){
     var brs=(S.meta&&S.meta.branches)||[];
     var brField=canViewAll()?'<div class="field full"><label>Branch *</label><select id="dpBranch" class="in"><option value="">Select branch</option>'+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'"'+(b.BranchID===ACC.branch?' selected':'')+'>'+esc(b.BranchName)+'</option>';}).join('')+'</select></div>':'';
@@ -206,7 +242,11 @@
       this.disabled=true;
       API.saveDaily({branchId:bid,date:$id('dlDate').value,patients:$id('dlPat').value,tests:$id('dlTests').value,
         b2cCash:$id('dlB2cCash').value,b2cBank:$id('dlB2cBank').value,b2dCash:0,b2dBank:0,other:0,expense:($id('dlExpense')||{}).value,
-        b2cDocUrl:st.b2cDocUrl,b2dDocUrl:st.b2dDocUrl,otherDocUrl:st.otherDocUrl,testXlUrl:st.testXlUrl}).then(function(r){ if(r&&r.ok){ closeModal(); toast('Saved'); loadDaily(); } else { $id('dlMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; var b=$id('dlSave'); if(b) b.disabled=false; } });
+        b2cDocUrl:st.b2cDocUrl,b2dDocUrl:st.b2dDocUrl,otherDocUrl:st.otherDocUrl,testXlUrl:st.testXlUrl}).then(function(r){ if(r&&r.ok){ closeModal();
+        /* v305: say plainly that filing is not the end of it. "Saved" used to mean done, because the
+           row went straight to verified — it no longer does, and a day left unverified counts nowhere. */
+        toast('Filed — now waiting for your verification. It is in My Tasks.');
+        loadDaily(); } else { $id('dlMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; var b=$id('dlSave'); if(b) b.disabled=false; } });
     };
   }
 

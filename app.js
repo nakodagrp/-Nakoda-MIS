@@ -436,7 +436,7 @@ window.openMobileMore=openMobileMore; window.closeMobileMore=closeMobileMore;
 
 /* dashboard */
 function greetWord(){ var h=new Date().getHours(); return h<12?'Good morning':(h<17?'Good afternoon':'Good evening'); }
-var DASH={emps:[],cards:[],prices:{},tasks:[],procs:[],cal:[],chaseT:0,chaseC:0,daily:[],training:null};
+var DASH={emps:[],cards:[],prices:{},tasks:[],procs:[],cal:[],chaseT:0,chaseC:0,daily:[],pendingDaily:[],training:null};
 function priceMap(arr){ var m={}; (arr||[]).forEach(function(p){ m[p.typeId+'|'+p.branchId]=Number(p.price)||0; }); return m; }
 function fmtMoney(n){ return Math.round(n||0).toLocaleString('en-IN'); }
 function todayD(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
@@ -650,6 +650,10 @@ function loadDashboard(){
     API.listDaily('', ym).then(function(r){ if(r&&r.ok){ DASH.daily=r.daily||[]; renderDashboard(); } }).catch(function(){});
     /* Verified bank deposits shift a branch's Cash → Bank/UPI on the by-branch table (total business unchanged). */
     API.listDeposits('', ym).then(function(r){ if(r&&r.ok){ DASH.deposits=r.deposits||[]; renderDashboard(); } }).catch(function(){});
+    /* v305: how much money is filed but not yet verified. Without this the dashboard simply reads low
+       with no explanation — the figure is correct, but "correct and unexplained" is indistinguishable
+       from "wrong" to anyone looking at it, and that is how people stop trusting a number. */
+    API.pendingDaily().then(function(r){ if(r&&r.ok){ DASH.pendingDaily=r.pending||[]; renderDashboard(); } }).catch(function(){});
   }
   /* org-wide training progress for the dashboard "Staff Training" tile */
   if(isMonitorRole() || (S.perms && (S.perms.canViewAll||S.perms.level==='BRANCH_MGR'))){
@@ -703,15 +707,19 @@ function renderDashboard(){
   var brs={}; emp.forEach(function(e){if(e.Branch)brs[e.Branch]=1;}); cards.forEach(function(c){if(c.branchId)brs[c.branchId]=1;});
   var staffN=emp.filter(function(e){return e.Status==='Active';}).length;
   /* Daily business for the selected month — per-branch map + scoped totals. business = cash + bank + other. */
+  /* v305: only VERIFIED days are money. A day that has been filed but not yet checked is deliberately
+     absent from every figure here — the accountant's banner in Accounts is what tells her it is
+     missing, and verifying it puts it in. Summing unverified rows would make the check decorative. */
+  var _dcounted=(DASH.daily||[]).filter(function(d){ return String(d.status)==='verified'; });
   var dailyByBr={};
-  (DASH.daily||[]).forEach(function(d){ var b=String(d.branchId||''); if(b)brs[b]=1; var o=dailyByBr[b]||(dailyByBr[b]={cash:0,bank:0,other:0,pat:0,test:0}); o.cash+=Number(d.cashIn)||0; o.bank+=Number(d.bankIn)||0; o.other+=Number(d.other)||0; o.pat+=Number(d.patients)||0; o.test+=Number(d.tests)||0; });
+  _dcounted.forEach(function(d){ var b=String(d.branchId||''); if(b)brs[b]=1; var o=dailyByBr[b]||(dailyByBr[b]={cash:0,bank:0,other:0,pat:0,test:0}); o.cash+=Number(d.cashIn)||0; o.bank+=Number(d.bankIn)||0; o.other+=Number(d.other)||0; o.pat+=Number(d.patients)||0; o.test+=Number(d.tests)||0; });
   /* Verified bank deposits move a branch's cash into the bank, but only up to the cash actually on hand —
      you can't deposit more cash than you collected, so cash never goes negative (business total unchanged). */
   var _depByBr={};
   (DASH.deposits||[]).forEach(function(d){ if(String(d.status)!=='approved') return; var b=String(d.branchId||''); if(!b) return; _depByBr[b]=(_depByBr[b]||0)+(Number(d.amount)||0); });
   Object.keys(_depByBr).forEach(function(b){ var o=dailyByBr[b]||(dailyByBr[b]={cash:0,bank:0,other:0,pat:0,test:0}); var shift=Math.min(_depByBr[b], Math.max(0,o.cash)); o.cash-=shift; o.bank+=shift; });
   var cashMTD=0,bankMTD=0,otherMTD=0,patMTD=0,testMTD=0;
-  (DASH.daily||[]).forEach(function(d){ if(effBranch && String(d.branchId)!==String(effBranch)) return; cashMTD+=Number(d.cashIn)||0; bankMTD+=Number(d.bankIn)||0; otherMTD+=Number(d.other)||0; patMTD+=Number(d.patients)||0; testMTD+=Number(d.tests)||0; });
+  _dcounted.forEach(function(d){ if(effBranch && String(d.branchId)!==String(effBranch)) return; cashMTD+=Number(d.cashIn)||0; bankMTD+=Number(d.bankIn)||0; otherMTD+=Number(d.other)||0; patMTD+=Number(d.patients)||0; testMTD+=Number(d.tests)||0; });
   var _depScoped=0;
   (DASH.deposits||[]).forEach(function(d){ if(String(d.status)!=='approved') return; if(effBranch && String(d.branchId)!==String(effBranch)) return; _depScoped+=(Number(d.amount)||0); });
   var _shiftM=Math.min(_depScoped, Math.max(0,cashMTD)); cashMTD-=_shiftM; bankMTD+=_shiftM;
@@ -786,6 +794,7 @@ function renderDashboard(){
       return {name:branchName(bid),staff:be,cards:bc.length,rev:brev,cash:dd.cash,bank:dd.bank,other:dd.other,biz:biz,pat:dd.pat,test:dd.test,
         avg:(dd.pat>0?Math.round(biz/dd.pat):0), rTest:(dd.test>0?Math.round(biz/dd.test):0), rStaff:(be>0?Math.round(biz/be):0)};
     }).sort(function(a,b){return b.biz-a.biz;});
+    html+=heldBackStrip();
     html+='<div class="section-label">By branch · business this month</div><div class="card"><div class="table-wrap swipe"><table><thead><tr><th>Branch</th><th>Business (MTD)</th><th>Cash</th><th>Bank / UPI</th><th>Other</th><th>Patients</th><th>Avg / patient</th><th>Tests</th><th>Rev / test</th><th>No. of cards</th><th>Card business</th><th>Staff</th><th>Rev / staff</th></tr></thead><tbody>'+
       rows.map(function(r){return '<tr><td><b>'+esc(r.name)+'</b></td><td>₹'+fmtMoney(r.biz)+'</td><td>₹'+fmtMoney(r.cash)+'</td><td>₹'+fmtMoney(r.bank)+'</td><td>₹'+fmtMoney(r.other)+'</td><td>'+r.pat+'</td><td>₹'+fmtMoney(r.avg)+'</td><td>'+r.test+'</td><td>₹'+fmtMoney(r.rTest)+'</td><td>'+r.cards+'</td><td>₹'+fmtMoney(r.rev)+'</td><td>'+r.staff+'</td><td>₹'+fmtMoney(r.rStaff)+'</td></tr>';}).join('')+'</tbody></table></div></div>';
   }
@@ -850,6 +859,26 @@ function renderDashboard(){
   }catch(_dashErr){ try{ console.error('renderDashboard error:',_dashErr); var _de=document.getElementById('dashExtra'); if(_de && !String(_de.innerHTML||'').trim()){ _de.innerHTML='<div class="empty" style="padding:20px">Dashboard couldn\'t load fully — tap ⋯ More ▸ Check update, or reload the app. ('+esc((_dashErr&&_dashErr.message)||_dashErr)+')</div>'; } }catch(_e2){} }
 }
 function kpi(n,l){ return '<div class="kpi"><div class="n">'+n+'</div><div class="l">'+esc(l)+'</div></div>'; }
+/* v305: the money the dashboard is deliberately NOT counting yet, and why.
+   Only shown when there is something outstanding — a clean day shows nothing at all. Silent on any
+   screen where the user cannot act on it either: it names the branches and the oldest day, so the
+   answer to "why is business low today" is on the same screen as the low figure. */
+function heldBackStrip(){
+  var p=(DASH.pendingDaily||[]);
+  if(!p.length) return '';
+  var total=0, oldest=p[0], brs={};
+  p.forEach(function(d){ total+=Number(d.total)||0; if(d.branchName) brs[d.branchName]=1; });
+  var age=Number(oldest.ageDays)||0, aged=age>=2;
+  var names=Object.keys(brs);
+  var who=names.length>2 ? (names.length+' branches') : names.join(' and ');
+  return '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;'+
+    'background:'+(aged?'#fdecec':'#faf4e2')+';border:1px solid '+(aged?'#e3b1b1':'#efc98a')+';'+
+    'border-radius:10px;padding:10px 13px;margin:12px 0;font-size:13px;color:'+(aged?'#7a2020':'#5c3d00')+'">'+
+    '<span style="flex:1;line-height:1.6"><b>₹'+fmtMoney(total)+' is not counted above</b> — '+
+      p.length+' day'+(p.length===1?'':'s')+' filed but not yet verified'+(who?(' ('+esc(who)+')'):'')+'. '+
+      'Oldest is '+esc(oldest.date)+(age?(' · '+age+' day'+(age===1?'':'s')+' ago'):' · today')+'. '+
+      'It joins these figures as soon as it is verified in Accounts.</span></div>';
+}
 function kpiC(n,l,cls){ return '<div class="kpi k-'+(cls||'')+'"><div class="n">'+n+'</div><div class="l">'+esc(l)+'</div></div>'; }
 /* Open the CRM page straight to one pipeline (deep-link from the dashboard department cards).
    go('crm') paints the pipeline list; openPipeline() then replaces it with that pipeline's board. */

@@ -318,14 +318,90 @@
     return h+'</div>';
   }
 
-  function dailyPanelHtml(e){
+  /* v305: the day's expenses, each approved or rejected on its own line. They are NOT swept in with
+     the day — an expense with no bill attached should be stoppable without holding up the collection
+     figures, and the collection should be verifiable without waiting on a queried expense. */
+  function expLinesHtml(exps, canV){
+    function m(n){ return '₹'+Math.round(Number(n)||0).toLocaleString('en-IN'); }
+    if(!exps || !exps.length)
+      return '<div style="margin-top:12px;font-size:12px;color:#9aa0a6">No expenses filed for this day.</div>';
+    var tot=0; exps.forEach(function(x){ tot+=Number(x.amount)||0; });
+    var rows=exps.map(function(x){
+      var st=String(x.status||'pending');
+      var badge = st==='approved' ? '<span style="font-size:11px;background:#eaf7ef;color:#1a8f4c;padding:3px 9px;border-radius:20px;font-weight:600">✓ approved</span>'
+                : st==='rejected' ? '<span style="font-size:11px;background:#fdecec;color:#b23b3b;padding:3px 9px;border-radius:20px;font-weight:600">✗ rejected</span>'
+                : '';
+      var acts = (canV && st!=='approved' && st!=='rejected')
+        ? '<button class="btn ghost sm" data-expok="'+esc(x.ledId)+'" style="color:#1a8f4c;border-color:#1a8f4c;padding:3px 10px;font-size:11.5px">Approve</button>'+
+          ' <button class="btn ghost sm" data-expno="'+esc(x.ledId)+'" style="color:#b23b3b;border-color:#b23b3b;padding:3px 10px;font-size:11.5px">Reject</button>'
+        : badge;
+      /* A cash expense with no bill is the one worth looking at twice, so it is called out rather than
+         left for somebody to notice the missing paperclip. */
+      var noBill = !x.billUrl;
+      return '<div data-exprow="'+esc(x.ledId)+'" style="display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid var(--line)">'+
+        '<div style="flex:1;min-width:0">'+
+          '<div style="font-size:12.5px">'+esc(x.category||'Expense')+(x.party?(' <span style="color:#9aa0a6">· '+esc(x.party)+'</span>'):'')+'</div>'+
+          '<div style="font-size:11px;color:'+(noBill?'#b23b3b':'#9aa0a6')+'">'+esc(x.mode||'')+' · '+
+            (x.billUrl?('<a href="'+esc(x.billUrl)+'" target="_blank" rel="noopener" style="color:var(--red)">bill ↗</a>'):'no bill attached')+'</div>'+
+        '</div>'+
+        '<span style="font-size:12.5px;white-space:nowrap">'+m(x.amount)+'</span>'+
+        '<span style="white-space:nowrap" data-expact="'+esc(x.ledId)+'">'+acts+'</span></div>';
+    }).join('');
+    return '<div style="margin-top:12px">'+
+      '<div style="font-size:11px;color:#9aa0a6;letter-spacing:.04em;margin-bottom:2px">EXPENSES THIS DAY — approved one by one</div>'+
+      rows+
+      '<div style="display:flex;justify-content:space-between;border-top:1px solid var(--line);margin-top:6px;padding-top:6px;font-size:12.5px;font-weight:700">'+
+        '<span>Total expenses</span><span style="color:#A32D2D">'+m(tot)+'</span></div></div>';
+  }
+  /* Approve/reject a single line without closing the task or reloading the day. */
+  function wireDailyExpenses(t){
+    document.querySelectorAll('#modalRoot [data-expok],#modalRoot [data-expno]').forEach(function(b){
+      b.onclick=function(){
+        var id=b.getAttribute('data-expok')||b.getAttribute('data-expno');
+        var act=b.hasAttribute('data-expok')?'approve':'reject';
+        var cell=document.querySelector('#modalRoot [data-expact="'+id+'"]');
+        if(cell) cell.innerHTML='<span style="font-size:11px;color:#9aa0a6">saving…</span>';
+        API.setLedger(id,act).then(function(r){
+          if(r&&r.ok){
+            if(cell) cell.innerHTML = act==='approve'
+              ? '<span style="font-size:11px;background:#eaf7ef;color:#1a8f4c;padding:3px 9px;border-radius:20px;font-weight:600">✓ approved</span>'
+              : '<span style="font-size:11px;background:#fdecec;color:#b23b3b;padding:3px 9px;border-radius:20px;font-weight:600">✗ rejected</span>';
+            toast(act==='approve'?'Expense approved':'Expense rejected');
+          } else {
+            toast((r&&r.error)||'Could not update the expense',true);
+            if(cell) cell.innerHTML='<button class="btn ghost sm" data-expok="'+id+'" style="color:#1a8f4c;border-color:#1a8f4c;padding:3px 10px;font-size:11.5px">Approve</button>'+
+              ' <button class="btn ghost sm" data-expno="'+id+'" style="color:#b23b3b;border-color:#b23b3b;padding:3px 10px;font-size:11.5px">Reject</button>';
+            wireDailyExpenses(t);
+          }
+        });
+      };
+    });
+  }
+  function dailyPanelHtml(e, exps, canV, files){
     function m(n){ return '₹'+Math.round(Number(n)||0).toLocaleString('en-IN'); }
     var b2cCash=Number(e.b2cCash)||0,b2cBank=Number(e.b2cBank)||0,b2dCash=Number(e.b2dCash)||0,b2dBank=Number(e.b2dBank)||0;
     var total=b2cCash+b2cBank+b2dCash+b2dBank;
+    /* v305: name the file. "B2C document" told you something was attached but not which file, so the
+       only way to check a day was to open every one. The server now resolves the real name and size
+       from Drive; when it cannot (a deleted file, a link from before this change) the label falls back
+       to what it always said, so the row never goes blank. */
+    files=files||{};
+    function fsize(b){ b=Number(b)||0; if(!b) return ''; return b<1048576?(Math.round(b/1024)+' KB'):((b/1048576).toFixed(1)+' MB'); }
+    function docLink(url,label,key){
+      if(!url) return '';
+      var meta=files[key]||{}, nm=String(meta.name||'').trim(), sz=fsize(meta.size);
+      var main=nm||label;
+      return '<a href="'+esc(url)+'" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:7px;color:var(--red);font-weight:600;text-decoration:none">'+
+        '<span style="flex:none">📎</span>'+
+        '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(main)+
+          (nm?('<span style="color:#9aa0a6;font-weight:400"> · '+esc(label)+(sz?(' · '+sz):'')+'</span>'):'')+'</span>'+
+        '<span style="flex:none;color:#9aa0a6">↗</span></a>';
+    }
     var docs=[];
-    if(e.b2cDocUrl) docs.push('<a href="'+esc(e.b2cDocUrl)+'" target="_blank" rel="noopener" style="color:var(--red);font-weight:600">📎 B2C document ↗</a>');
-    if(e.b2dDocUrl) docs.push('<a href="'+esc(e.b2dDocUrl)+'" target="_blank" rel="noopener" style="color:var(--red);font-weight:600">📎 B2D document ↗</a>');
-    if(e.testXlUrl) docs.push('<a href="'+esc(e.testXlUrl)+'" target="_blank" rel="noopener" style="color:var(--red);font-weight:600">📎 Tests Excel ↗</a>');
+    var d1=docLink(e.b2cDocUrl,'B2C report','b2cDocUrl'); if(d1) docs.push(d1);
+    var d2=docLink(e.b2dDocUrl,'B2D report','b2dDocUrl'); if(d2) docs.push(d2);
+    var d3=docLink(e.otherDocUrl,'Other document','otherDocUrl'); if(d3) docs.push(d3);
+    var d4=docLink(e.testXlUrl,'Tests Excel','testXlUrl'); if(d4) docs.push(d4);
     return '<div style="border:1px solid var(--line);border-radius:10px;padding:11px;margin-top:10px">'+
       '<div style="font-weight:700;font-size:12.5px;margin-bottom:8px">'+esc(e.branchName||e.branchId||'')+' · '+esc(e.date||'')+(String(e.status)==='verified'?' · <span style="color:#1a7f37">verified</span>':'')+'</div>'+
       '<table style="width:100%;font-size:13px;border-collapse:collapse">'+
@@ -334,7 +410,15 @@
       '<tr><td style="color:#888;padding:3px 0">Patients</td><td style="text-align:right">'+(Number(e.patients)||0)+'</td><td style="color:#888;text-align:right;padding-left:10px">Tests</td><td style="text-align:right">'+(Number(e.tests)||0)+'</td></tr>'+
       '</table>'+
       '<div style="display:flex;justify-content:space-between;border-top:1px solid var(--line);margin-top:7px;padding-top:7px;font-weight:700"><span>Total business</span><span style="color:#1a7f37">'+m(total)+'</span></div>'+
-      '<div style="margin-top:10px;font-size:13px;display:flex;flex-direction:column;gap:6px">'+(docs.length?docs.join(''):'<span style="color:#999">No documents attached</span>')+'</div>'+
+      '<div style="font-size:11px;color:#9aa0a6;letter-spacing:.04em;margin-top:12px;margin-bottom:4px">ATTACHED DOCUMENTS — tap to open</div>'+
+      '<div style="font-size:13px;display:flex;flex-direction:column;gap:7px">'+
+        (docs.length?docs.join(''):'<span style="color:#999">No documents attached</span>')+
+        /* Money was taken but nothing was attached to account for it — say so here rather than leave a
+           gap that reads the same as "this day had no B2C business". */
+        ((b2cCash+b2cBank)>0 && !e.b2cDocUrl ? '<span style="color:#A32D2D;font-size:12px">⚠ B2C report not attached</span>' : '')+
+      '</div>'+
+      expLinesHtml(exps, canV)+
+      (String(e.status)==='verified'?'':'<div style="margin-top:11px;font-size:11.5px;color:#854f0b;background:#faf4e2;border-radius:8px;padding:7px 9px;line-height:1.5">Not counted anywhere yet. Verifying puts this day into the dashboard and releases its stock batch.</div>')+
       '</div>';
   }
   function openTaskDetail(id){
@@ -376,7 +460,11 @@
       :isAtt?(t.status==='done'?'Reopen':'✓ Approve & complete')
       :isLeave?(t.status==='done'?'Reopen':'✓ Approve')
       :(t.status==='done'?'Reopen':'✓ Complete');
-    var rejectBtn=((isDaily||isDep||isAtt||isLeave)&&t.status!=='done')?'<button class="btn ghost" id="tdReject" style="color:#A32D2D;border-color:#e3b1b1">✕ Reject</button>':'';
+    /* v305: no Reject on a daily-collection task. The accountant files the day and then verifies it,
+       so "reject" would mean rejecting her own entry — the honest fix for a wrong figure is to re-file
+       that day from Accounts, which overwrites the row and reopens this task. Deposits, attendance and
+       leave are filed by somebody else, so they keep their Reject. */
+    var rejectBtn=((isDep||isAtt||isLeave)&&t.status!=='done')?'<button class="btn ghost" id="tdReject" style="color:#A32D2D;border-color:#e3b1b1">✕ Reject</button>':'';
     var foot='<button class="btn ghost" onclick="closeModal()">Close</button><button class="btn ghost" id="tdEdit">Edit</button>'+rejectBtn+'<button class="btn" id="tdComplete">'+completeLabel+'</button>';
     openModal(t.title, body, foot);
     document.querySelectorAll('#modalRoot [data-ci]').forEach(function(cb){ cb.onchange=function(){ cl[parseInt(cb.getAttribute('data-ci'),10)].done=cb.checked; var sp=cb.parentNode.querySelector('span'); if(sp) sp.style.cssText=cb.checked?'text-decoration:line-through;color:#999':''; t.checklist=cl; t._pending=true; API.updateTask(t.taskId,{checklist:cl}); }; });
@@ -397,7 +485,9 @@
       rp.then(function(r){ if(r&&r.ok){ closeModal(); toast(isAtt?'Attendance rejected':isDep?'Deposit rejected':isLeave?'Leave rejected — the applicant has been notified':'Entry rejected — the sender has been notified'); if(window.renderMyTasks) window.renderMyTasks(); else paintList(); } else { toast((r&&r.error)||'Could not reject',true); rj.disabled=false; } });
     };
     if(isDaily){
-      API.getDaily(t.instanceId).then(function(r){ var box=document.getElementById('tdDaily'); if(!box) return; if(r&&r.ok&&r.entry){ box.outerHTML=dailyPanelHtml(r.entry); } else { box.textContent=(r&&r.error)||'Could not load entry.'; } });
+      API.getDaily(t.instanceId).then(function(r){ var box=document.getElementById('tdDaily'); if(!box) return;
+        if(r&&r.ok&&r.entry){ box.outerHTML=dailyPanelHtml(r.entry, r.expenses||[], !!r.canVerify, r.files||{}); wireDailyExpenses(t); }
+        else { box.textContent=(r&&r.error)||'Could not load entry.'; } });
     }
     if(isAtt){
       API.getAttendance(t.instanceId).then(function(r){ var box=document.getElementById('tdAtt'); if(!box) return;

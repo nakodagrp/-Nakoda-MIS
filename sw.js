@@ -4,7 +4,7 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v302';   /* v302: payroll Save button - nothing is written until you press it; exports only ever contain saved figures */
+var CACHE_VERSION = 'nakoda-mis-v305';   /* v305: daily collection is filed then verified - it counts nowhere until checked; expenses approved line by line */
 var SHELL = [
   './',
   './index.html',
