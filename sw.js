@@ -4,7 +4,7 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v306';   /* v306: duplicate meetings stopped at source and deletable; daily Reject with a reason; banner counts only pending days */
+var CACHE_VERSION = 'nakoda-mis-v306b';  /* v306b: a meeting that only exists on the device can now be cleared; follow-up duplication closed */
 var SHELL = [
   './',
   './index.html',

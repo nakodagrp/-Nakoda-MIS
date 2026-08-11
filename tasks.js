@@ -179,7 +179,9 @@
 
   function toggleDone(id){ var t=byId(id); if(!t) return;
     if(t.isCal){ var nc=t.status==='done'?'pending':'done'; t.status=(nc==='done'?'done':'open'); t._pending=true; paintList();
-      API.updateCalEntry(t.calId,{status:nc},curOwner()).then(function(){ API.cachedCalendar(curOwner()).then(function(e){ if(e){ CALITEMS=e.filter(function(x){return String(x.status)!=='deleted';}).map(calToItem); paintList(); } }); }); return; }
+      API.updateCalEntry(t.calId,{status:nc},curOwner()).then(function(){
+        API.listCalendar(curOwner()).then(function(r){ if(r&&r.ok){ CALITEMS=(r.entries||[]).map(calToItem); paintList(); } }).catch(function(){});
+      }); return; }
     var ns=t.status==='done'?'open':'done'; t.status=ns; t._pending=true; paintList(); API.setTaskStatus(id,ns).then(function(){ return API.listMyTasks(); }).then(function(r){ if(r&&r.ok) TASKS=r.tasks||[]; paintList(); }); }
 
   /* v262: inline attendance panel for the "Approve attendance" task. Before this the task carried only
@@ -438,24 +440,39 @@
       '<button class="btn ghost" id="cdDel" style="color:#A32D2D;border-color:#e3b1b1">Delete</button>'+
       '<button class="btn" id="cdDone">'+(done?'Mark not done':'✓ Mark done')+'</button>';
     openModal(t.title, body, foot);
+    /* v306.3: re-pull from the SERVER, not the device copy. The device copy is exactly what goes stale
+       — it can hold an entry the sheet never received — so refreshing from it would leave the phantom
+       on screen. listCalendar overwrites the local copy with the server's, which is what clears it. */
     function refresh(){
-      API.cachedCalendar(curOwner()).then(function(e){
-        if(e){ CALITEMS=e.filter(function(x){return String(x.status)!=='deleted';}).map(calToItem); paintList(); }
-      });
+      API.listCalendar(curOwner()).then(function(r){
+        if(r&&r.ok){ CALITEMS=(r.entries||[]).map(calToItem); paintList(); }
+      }).catch(function(){});
+    }
+    /* A failure here usually means the entry is not on the server at all. Say so plainly and resync,
+       so the row disappears instead of sitting there failing every time it is tapped. */
+    function calFail(msg,btn){
+      var box=document.getElementById('cdMsg');
+      if(box) box.innerHTML='<div class="msg error">'+esc(msg||'Failed')+'</div>';
+      if(btn) btn.disabled=false;
+      refresh();
     }
     document.getElementById('cdDone').onclick=function(){
       var b=this; b.disabled=true;
       API.updateCalEntry(t.calId,{status:(done?'pending':'done')},curOwner()).then(function(r){
         if(r&&(r.ok||r.offline)){ closeModal(); toast(done?'Marked not done':'Marked done'); refresh(); }
-        else { document.getElementById('cdMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; b.disabled=false; }
+        else calFail((r&&r.error)==='Entry not found.'
+          ? 'This meeting is not on the server — it was only ever saved on this device. Refreshing the list; it should disappear.'
+          : ((r&&r.error)||'Failed'), b);
       });
     };
     document.getElementById('cdDel').onclick=function(){
       if(!confirm('Delete "'+(t.title||'this meeting')+'"?')) return;
       var b=this; b.disabled=true;
+      /* The server treats deleting an absent entry as already done, so this now succeeds either way
+         and the refresh clears it off the list. */
       API.updateCalEntry(t.calId,{status:'deleted'},curOwner()).then(function(r){
         if(r&&(r.ok||r.offline)){ closeModal(); toast('Deleted'); refresh(); }
-        else { document.getElementById('cdMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; b.disabled=false; }
+        else calFail((r&&r.error)||'Failed', b);
       });
     };
   }
