@@ -173,8 +173,13 @@
       (t&&t.benefitsText?t.benefitsText:'')+'\n\n'+
       'Please save '+(bm||'our number')+' as *Nakoda Lab* for any emergency.';
   }
-  function openCardDetail(cardNumber){
-    API.getCard(cardNumber).then(function(r){
+  /* v308c SPEED. issueCard and renewCard already RETURN the finished card, its type and its branch
+     name. This used to throw all three away and ask the server for them again, so creating a card cost
+     a second full round trip before the picture appeared. Pass `pre` and it opens instantly; called
+     with just a number (from the list) it still fetches, exactly as before. */
+  function openCardDetail(cardNumber, pre){
+    var got = pre ? Promise.resolve(pre) : API.getCard(cardNumber);
+    got.then(function(r){
       if(!r.ok){ toast(r.error,true); return; }
       var c=r.card, t=r.type, msg=buildMessage(c,t,r.branchName,branchPhone(c.branchId));
       var info='<div class="grid2" style="font-size:13px;margin-top:12px">'+
@@ -221,7 +226,7 @@
         }).catch(function(){ ap.disabled=false; ap.textContent='🚀 Send via Official API'; st.textContent='Network error — try again.'; toast('Network error — sending via API needs internet.',true); });
       };
       var ac=document.getElementById('cdActivate'); if(ac) ac.onclick=function(){ API.markCardActivated(c.cardNumber).then(function(rr){ if(rr.ok){ closeModal(); toast('Marked activated'); renderMembershipCards(); } else toast(rr.error,true); }); };
-      var rn=document.getElementById('cdRenew'); if(rn) rn.onclick=function(){ if(!confirm('Renew this card? A new card with a fresh '+(t?t.validityMonths:12)+'-month validity will be issued.')) return; API.renewCard(c.cardNumber).then(function(rr){ if(rr.ok){ closeModal(); toast('Renewed: '+rr.card.cardNumber); renderMembershipCards(); } else toast(rr.error,true); }); };
+      var rn=document.getElementById('cdRenew'); if(rn) rn.onclick=function(){ if(!confirm('Renew this card? A new card with a fresh '+(t?t.validityMonths:12)+'-month validity will be issued.')) return; API.renewCard(c.cardNumber).then(function(rr){ if(rr.ok){ closeModal(); toast('Renewed: '+rr.card.cardNumber); openCardDetail(rr.card.cardNumber, rr); } else toast(rr.error,true); }); };
       var cn=document.getElementById('cdCancel'); if(cn) cn.onclick=function(){ var why=prompt('Reason for cancelling?',''); if(why===null) return; API.cancelCard(c.cardNumber,why).then(function(rr){ if(rr.ok){ closeModal(); toast('Card cancelled'); renderMembershipCards(); } else toast(rr.error,true); }); };
     });
   }
@@ -276,9 +281,9 @@
       if(!data.typeId){ toast('Select a card type.',true); return; }
       var btn=document.getElementById('ic_save'); btn.disabled=true; btn.innerHTML='<span class="loader"></span> Creating…';
       API.issueCard(data).then(function(r){
-        if(r.ok){ closeModal(); toast('Card issued: '+r.card.cardNumber); openCardDetail(r.card.cardNumber); renderMembershipCards(); return; }
+        if(r.ok){ closeModal(); toast('Card issued: '+r.card.cardNumber); openCardDetail(r.card.cardNumber, r); return; }
         if(String(r.error).indexOf('DUPLICATE')===0){
-          if(confirm(r.error.replace('DUPLICATE: ','')+'\n\nReplace the old card and issue this new one?')){ data.replaceExisting=true; return API.issueCard(data).then(function(r2){ if(r2.ok){ closeModal(); toast('Card issued: '+r2.card.cardNumber); openCardDetail(r2.card.cardNumber); renderMembershipCards(); } else toast(r2.error,true); }); }
+          if(confirm(r.error.replace('DUPLICATE: ','')+'\n\nReplace the old card and issue this new one?')){ data.replaceExisting=true; return API.issueCard(data).then(function(r2){ if(r2.ok){ closeModal(); toast('Card issued: '+r2.card.cardNumber); openCardDetail(r2.card.cardNumber, r2); } else toast(r2.error,true); }); }
         } else { toast(r.error,true); }
         btn.disabled=false; btn.textContent='Create card';
       }).catch(function(){ toast('Issuing a card needs an internet connection.',true); btn.disabled=false; btn.textContent='Create card'; });

@@ -373,7 +373,11 @@
     },
     waSendCard:function(cardNumber,imageBase64,phone){
       if(!navigator.onLine) return Promise.resolve({ok:false,error:'Sending via the WhatsApp API needs an internet connection.'});
-      return call('waSendCard',{token:getToken(),cardNumber:cardNumber,imageBase64:imageBase64,phone:phone||''}).then(function(r){ if(r.ok) API.refreshCards(); return r; });
+      /* v308c: a 1012x638 card as base64 is 160-530 KB in the request body, and the same request also
+         has to wait for the WhatsApp API to answer. Against NET's default 60s ceiling that upload lost
+         the race on branch connections and reported a failure for a send that was often still in
+         flight. Uploads already get 180s for exactly this reason; a card send now gets it too. */
+      return call('waSendCard',{token:getToken(),cardNumber:cardNumber,imageBase64:imageBase64,phone:phone||''}, 180000).then(function(r){ if(r.ok) API.refreshCards(); return r; });
     },
     listWaTemplates:function(){ return call('listWaTemplates',{token:getToken()}); },
     saveWaTemplate:function(data){

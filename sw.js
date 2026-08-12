@@ -4,7 +4,7 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v307';  /* v307: CRM/process engine, Process Builder, Process Flow Monitor, Staff Performance, Star performers, Marketing, notifications, Quality Control and KPI & Scoring removed; Repeat test moved to Inventory */
+var CACHE_VERSION = 'nakoda-mis-v308';  /* v308: expenses file as pending (no self-approval), reject needs a reason, duplicate expense/deposit writes made idempotent, card issuing halved its sheet reads. Includes all of v307. */
 var SHELL = [
   './',
   './index.html',
