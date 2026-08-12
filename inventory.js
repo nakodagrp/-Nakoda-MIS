@@ -5,14 +5,20 @@
   function canMgr(){ return lvl()==='SUPER'||lvl()==='HR_ADMIN'||['MIS','Logistics','Admin','Operations Manager','Director'].indexOf(S.user&&S.user.Role)>=0; }
   function canUser(){ return canMgr()||lvl()==='BRANCH_MGR'||['Lab Technician','Pathologist','CRM'].indexOf(S.user&&S.user.Role)>=0; }
   function money(n){ return Math.round(Number(n)||0).toLocaleString('en-IN'); }
-  function today(){ return new Date().toISOString().slice(0,10); }
+  /* v261: toISOString() is UTC — between midnight and 05:30 India time it returns yesterday. */
+  function today(){ var d=new Date();
+    return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
   var INV={branch:'',tab:'stock',items:[],vendors:[],cnMode:'auto'};
   var STAGES=[['raised','Raised'],['given','Given'],['received','Received'],['billed','Bill'],['paid','Pay']];
 
   function renderInventory(){
     var v=$id('page-inventory'), brs=(S.meta&&S.meta.branches)||[];
     if(!INV.branch && !(S.perms&&S.perms.canViewAll||canMgr())) INV.branch=(S.user&&S.user.Branch)||'';
-    var tabs=[['stock','Stock'],['consume','Consumption'],['indents','Indents'],['audit','Physical Check']]; if(canMgr()) tabs.push(['items','Items'],['vendors','Vendors'],['payments','Payments']);
+    /* v307: "Repeat test" moved here from the Quality Control page, which was removed. It was never a
+       QC feature in substance — it deducts per-test consumables from THIS module's stock. Leaving it on
+       a deleted page would have meant repeat-test reagent use silently stopped being recorded, and the
+       stock figures drifting high with nothing to explain why. */
+    var tabs=[['stock','Stock'],['consume','Consumption'],['repeat','Repeat test'],['indents','Indents'],['audit','Physical Check']]; if(canMgr()) tabs.push(['items','Items'],['vendors','Vendors'],['payments','Payments']);
     if(['MIS','Logistics','Admin','Director'].indexOf(S.user&&S.user.Role)>=0){ tabs.splice(1,0,['saappr','Approvals']); tabs.push(['sarcp','Recipes']); }
     v.innerHTML='<div class="page-head"><h1>Inventory</h1></div>'+
       '<div class="acc-top">'+((S.perms&&S.perms.canViewAll||canMgr())?'<select class="in" id="invBranch" style="max-width:170px"><option value="">Pick branch</option>'+brs.map(function(b){return '<option value="'+esc(b.BranchID)+'"'+(b.BranchID===INV.branch?' selected':'')+'>'+esc(b.BranchName)+'</option>';}).join('')+'</select>':'<span class="acc-br">'+esc(branchName(INV.branch))+'</span>')+'</div>'+
@@ -25,10 +31,33 @@
     paint();
   }
   function paint(){ var b=$id('invBody'); if(!b) return; b.innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>';
-    ({stock:loadStock,consume:loadConsume,indents:function(){ if(window.renderPUIndents) window.renderPUIndents(b,INV.branch); else loadIndents(); },audit:loadAudit,items:loadItems,vendors:loadVendors,payments:loadPayments,
+    ({stock:loadStock,consume:loadConsume,repeat:loadRepeat,indents:function(){ if(window.renderPUIndents) window.renderPUIndents(b,INV.branch); else loadIndents(); },audit:loadAudit,items:loadItems,vendors:loadVendors,payments:loadPayments,
       saappr:function(){ if(window.renderSAApprovals) window.renderSAApprovals(b,INV.branch); else b.innerHTML='<div class="empty">Approvals module not loaded — upload stockauto.js.</div>'; },
       sarcp:function(){ if(window.renderSARecipes) window.renderSARecipes(b); else b.innerHTML='<div class="empty">Recipes module not loaded — upload stockauto.js.</div>'; }}[INV.tab]||loadStock)(); }
   function loadPayments(){ var b=$id('invBody'); if(!b) return; if(window.renderPayReq) window.renderPayReq(b); else b.innerHTML='<div class="empty">Payments module not loaded — upload payreq.js.</div>'; }
+  /* ---------- Repeat test (deducts per-test consumables) — moved from qc.js in v307 ----------
+     The branch comes from the Inventory page's own picker rather than a second one of its own, so the
+     stock you are looking at and the stock you are deducting from can never be different branches. */
+  function loadRepeat(b){
+    b.innerHTML='<div class="card"><div class="section-label" style="margin-top:0">Log repeat test</div>'+
+      '<div class="muted" style="font-size:12px;margin:-4px 0 10px">Deducts per-test consumables from '+esc(branchName(INV.branch)||'the selected branch')+'.</div>'+
+      '<div class="grid2">'+
+        '<div class="field"><label>Test</label><input id="rpTest" class="in" placeholder="e.g. CBC"></div>'+
+        '<div class="field"><label>Repeats</label><input id="rpQty" class="in" type="number" value="1" min="1"></div>'+
+        '<div class="field"><label>Reason</label><select id="rpReason" class="in"><option>Sample issue</option><option>Instrument error</option><option>Verification</option><option>Critical value recheck</option></select></div>'+
+      '</div><div style="margin-top:10px"><div class="muted" style="font-size:11px;margin-bottom:4px">Will deduct (per-test consumables × repeats):</div><div id="rpPrev" class="muted" style="font-size:12px">Loading…</div></div>'+
+      '<button class="btn" id="rpSave" style="margin-top:10px">Save — deduct stock</button><div id="rpMsg"></div></div>';
+    var ITEMS=[];
+    function prev(){ var q=+$id('rpQty').value||1, per=ITEMS.filter(function(i){return i.mapBasis==='test';});
+      $id('rpPrev').innerHTML=per.length?per.map(function(i){ return esc(i.name)+' −'+((Number(i.perUse)||0)*q)+(i.unit?(' '+esc(i.unit)):''); }).join(' · '):'No per-test consumables configured — set an item’s basis to "test" on the Items tab.'; }
+    API.qcInvItems().then(function(r){ ITEMS=(r&&r.ok)?(r.rows||[]):[]; prev(); });
+    $id('rpQty').addEventListener('input',prev);
+    $id('rpSave').onclick=function(){ var t=$id('rpTest').value.trim(); if(!t){ $id('rpMsg').innerHTML='<div class="msg error">Enter the test.</div>'; return; }
+      var bt=this; bt.disabled=true;
+      API.logRepeat({test:t,qty:+$id('rpQty').value||1,reason:$id('rpReason').value,branchId:INV.branch||''}).then(function(r){ bt.disabled=false;
+        if(r&&r.ok){ toast('Repeat logged · '+r.items+' items deducted'); $id('rpTest').value=''; $id('rpMsg').innerHTML=''; }
+        else $id('rpMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; }); };
+  }
 
   /* ---- Stock (month grid, colour-coded MIN/MAX) ---- */
   function gColor(v,min,max){ if(max>0 && v>max) return 'g-above'; if(v<min) return 'g-below'; if(v<=min*1.2) return 'g-near'; return 'g-ok'; }

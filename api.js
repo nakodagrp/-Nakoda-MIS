@@ -54,7 +54,7 @@
     saveDeposit:1,verifyDeposit:1,rejectDeposit:1,
     saveItem:1,deleteItem:1,saveVendor:1,deleteVendor:1,saveConsumption:1,saveManualConsumption:1,raiseIndent:1,advanceIndent:1,saveAudit:1,approveAudit:1,
     createPayRequest:1,setPayRequest:1,
-    saveSection:1,deleteSection:1,saveVideo:1,deleteVideo:1,submitQuiz:1,saveAsset:1,deleteAsset:1,
+    saveSection:1,deleteSection:1,saveVideo:1,deleteVideo:1,submitQuiz:1,saveAsset:1,deleteAsset:1,logRepeat:1,
     login:1,validate:1,logout:1,uploadFile:1,importOldCards:1,attachSelfie:1,waTest:1,waSendCard:1,saveWaTemplate:1,waTestTemplate:1,
     submitSuggestion:1,replySuggestion:1,saveFixedAsset:1,deleteFixedAsset:1,completeFollowup:1};
   /* Writes that already do their own optimistic queueing inside the method (don't double-queue here). */
@@ -442,18 +442,14 @@
        still reads it for the personal KPI box, which is not the deleted Staff Performance report. */
     staffPerformance:function(from,to,branch){ var k='staffperf_'+(from||'')+'_'+(to||'')+'_'+(branch||''); return call('staffPerformance',{token:getToken(),fromDate:from||'',toDate:to||'',branch:branch||''}).then(function(r){ if(r&&r.ok) kvSet(k,r.rows); return r; }).catch(function(){ return kvGet(k).then(function(v){ return v?{ok:true,rows:v,offline:true}:{ok:false,offline:true}; }); }); },
     savePhoto:function(dataUri){ return call('savePhoto',{token:getToken(),dataUri:dataUri}); },
-    saveQcMaterial:function(d){ return call('saveQcMaterial',{token:getToken(),data:d}); },
-    listQcMaterials:function(){ return call('listQcMaterials',{token:getToken()}); },
-    saveQcRun:function(d){ return call('saveQcRun',{token:getToken(),data:d}); },
-    listQcRuns:function(f){ return call('listQcRuns',{token:getToken(),filter:f||{}}); },
-    verifyQcRun:function(id,action,note){ return call('verifyQcRun',{token:getToken(),runId:id,action:action,note:note||''}); },
+    /* v307: the QC endpoints went with the Quality Control page. qcInvItems and logRepeat are KEPT —
+       they now serve Inventory ▸ Repeat test, which is what they always really did. */
     qcInvItems:function(){ return call('qcInvItems',{token:getToken()}); },
     logRepeat:function(d){ return call('logRepeat',{token:getToken(),data:d}); },
     financeDashboard:function(ym,branch){ return call('financeDashboard',{token:getToken(),ym:ym||'',branch:branch||''}); },
     quickLog:function(d){ return call('quickLog',{token:getToken(),data:d}); },
-    getKpiConfig:function(){ return call('getKpiConfig',{token:getToken()}); },
-    saveKpiTarget:function(d){ return call('saveKpiTarget',{token:getToken(),data:d}); },
-    saveWeights:function(d){ return call('saveWeights',{token:getToken(),data:d}); },
+    /* v307: getKpiConfig / saveKpiTarget / saveWeights removed with the KPI & Scoring page. The saved
+       targets still drive the profile KPI box server-side; they are just not editable in the app. */
     /* v307: saveStage / deleteStage / reorderStages / saveField / deleteField / reorderFields /
        saveStageEdges removed — they only ever served the Process Builder. */
     capitalLedger:function(b){ return call('capitalLedger',{token:getToken(),branch:b||''}); },   /* v276 */

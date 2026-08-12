@@ -316,10 +316,7 @@ function applyPerms(){
      Only its two process-driven tabs were removed. Same roles as before. */
   var canMon=(S.perms.level==='SUPER')||(S.user && ['Operations Manager','Process Coordinator'].indexOf(S.user.Role)>=0);
   document.querySelectorAll('[data-page="taskmon"]').forEach(function(n){ n.classList.toggle('hidden',!canMon); });
-  var canQc=(S.perms.level==='SUPER')||S.perms.level==='BRANCH_MGR'||(S.user && ['QC Manager','Pathologist','Lab Technician','Operations Manager','Director'].indexOf(S.user.Role)>=0);
-  document.querySelectorAll('[data-page="qc"]').forEach(function(n){ n.classList.toggle('hidden',!canQc); });
-  var canKpi=(S.perms.level==='SUPER')||(S.user && ['HR','Director','Operations Manager'].indexOf(S.user.Role)>=0);
-  document.querySelectorAll('[data-page="kpiadmin"]').forEach(function(n){ n.classList.toggle('hidden',!canKpi); });
+  /* v307: Quality Control and KPI & Scoring removed. "Log repeat test" moved to Inventory. */
   var canRec=S.perms.canManageRecurring||(S.perms.level==='SUPER')||(S.user && S.user.Role==='Executive Assistant');
   document.querySelectorAll('[data-page="recurring"]').forEach(function(n){ n.classList.toggle('hidden',!canRec); });
   /* v307: Partner and Consultant have been excluded from training since v276 — the server returns them
@@ -369,7 +366,7 @@ var currentPage='dashboard';
 function go(page){
   currentPage=page;
   document.querySelectorAll('.nav-item').forEach(function(n){ n.classList.toggle('active', n.getAttribute('data-page')===page); });
-  ['dashboard','tasks','calendar','attendance','leave','field','policy','training','assets','fixedassets','inventory','payreq','payroll','accounts','recurring','taskmon','qc','kpiadmin','employees','profile','branches','watemplates','cards','cardstatus','suggest','mdinbox'].forEach(function(p){ var el=$('page-'+p); if(el) el.classList.toggle('hidden',p!==page); });
+  ['dashboard','tasks','calendar','attendance','leave','field','policy','training','assets','fixedassets','inventory','payreq','payroll','accounts','recurring','taskmon','employees','profile','branches','watemplates','cards','cardstatus','suggest','mdinbox'].forEach(function(p){ var el=$('page-'+p); if(el) el.classList.toggle('hidden',p!==page); });
   if(page==='dashboard') loadDashboard();
   if(page==='tasks' && window.renderMyTasks) window.renderMyTasks();
   if(page==='calendar' && window.renderCalendar) window.renderCalendar();
@@ -388,8 +385,6 @@ function go(page){
   if(page==='accounts' && window.renderAccounts) window.renderAccounts();
   if(page==='recurring' && window.renderRecurring) window.renderRecurring();
   if(page==='taskmon' && window.renderTaskMonitor) window.renderTaskMonitor();
-  if(page==='qc' && window.renderQc) window.renderQc();
-  if(page==='kpiadmin' && window.renderKpiAdmin) window.renderKpiAdmin();
   if(page==='employees') loadEmployees();
   if(page==='profile') loadProfile();
   if(page==='branches' && window.renderBranches) window.renderBranches();
@@ -400,7 +395,7 @@ function go(page){
 }
 
 /* ---------- mobile bottom navigation + "More" sheet ---------- */
-var NAVDEF=[['dashboard','▦','Home'],['tasks','✓','Tasks'],['calendar','📅','Calendar'],['attendance','🕒','Attend'],['recurring','🔁','Recurring'],['taskmon','📋','Follow-ups'],['qc','🧪','QC'],['kpiadmin','🎯','KPI'],['employees','👥','Staff'],['leave','🌴','Leave'],['field','🚗','Field'],['policy','📋','Policy'],['training','🎓','Training'],['assets','🗂','Information'],['fixedassets','🛠','Asset Mgmt'],['inventory','📦','Inventory'],['payreq','🧾','Payments'],['payroll','💰','Payroll'],['accounts','📊','Accounts'],['cards','🏷','Cards'],['cardstatus','✅','Status'],['suggest','✉','Suggest'],['mdinbox','📨','MD Inbox'],['branches','🏢','Branches'],['watemplates','💬','WA Templates'],['profile','⚙','Profile']];
+var NAVDEF=[['dashboard','▦','Home'],['tasks','✓','Tasks'],['calendar','📅','Calendar'],['attendance','🕒','Attend'],['recurring','🔁','Recurring'],['taskmon','📋','Follow-ups'],['employees','👥','Staff'],['leave','🌴','Leave'],['field','🚗','Field'],['policy','📋','Policy'],['training','🎓','Training'],['assets','🗂','Information'],['fixedassets','🛠','Asset Mgmt'],['inventory','📦','Inventory'],['payreq','🧾','Payments'],['payroll','💰','Payroll'],['accounts','📊','Accounts'],['cards','🏷','Cards'],['cardstatus','✅','Status'],['suggest','✉','Suggest'],['mdinbox','📨','MD Inbox'],['branches','🏢','Branches'],['watemplates','💬','WA Templates'],['profile','⚙','Profile']];
 function visibleNav(){ return NAVDEF.filter(function(d){ var el=document.querySelector('.nav-item[data-page="'+d[0]+'"]'); return el && !el.classList.contains('hidden'); }); }
 function navBtn(d){ return '<button data-page="'+d[0]+'"><span class="ic">'+d[1]+'</span><span>'+d[2]+'</span></button>'; }
 function buildMobileBottomNav(){

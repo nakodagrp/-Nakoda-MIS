@@ -4,7 +4,7 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v307';  /* v307: CRM/process engine, Process Builder, Process Flow Monitor, Staff Performance, Star performers, Marketing and the whole notification system removed */
+var CACHE_VERSION = 'nakoda-mis-v307';  /* v307: CRM/process engine, Process Builder, Process Flow Monitor, Staff Performance, Star performers, Marketing, notifications, Quality Control and KPI & Scoring removed; Repeat test moved to Inventory */
 var SHELL = [
   './',
   './index.html',
@@ -36,8 +36,6 @@ var SHELL = [
   './partnerreview.js',
   './bankpreview.js',
   './quicklog.js',
-  './kpiadmin.js',
-  './qc.js',
   './extras.js',
   './icons/login-logo.png',
   './icons/logo-white.png',
