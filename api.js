@@ -229,6 +229,9 @@
   /* ---------- public API ---------- */
   var API={
     onStatus:onStatus, getToken:getToken, configured:configured,
+    /* v308: accounts.js stamps each new expense / deposit with an id BEFORE sending, so a replayed
+       request carries the same id and the server can recognise it instead of writing a second row. */
+    newLedId:function(){ return 'LED'+uuid()+uuid(); },
 
     /* ---- Suggestion / Complaint to MD ---- */
     submitSuggestion:function(data){ return call('submitSuggestion',{token:getToken(),data:data}); },
@@ -519,7 +522,7 @@
     rejectDeposit:function(id,reason){ return call('rejectDeposit',{token:getToken(),ledId:id,reason:reason}); },
     addLedger:function(d){ return call('addLedger',{token:getToken(),data:d}); },
     listLedger:function(b,ym,op){ return call('listLedger',{token:getToken(),branch:b,ym:ym,onlyPending:op}); },
-    setLedger:function(id,a){ return call('setLedger',{token:getToken(),ledId:id,act:a}); },
+    setLedger:function(id,a,reason){ return call('setLedger',{token:getToken(),ledId:id,act:a,reason:reason||''}); },
     saveInvoice:function(d){ return call('saveInvoice',{token:getToken(),data:d}); },
     listInvoices:function(b,s){ return call('listInvoices',{token:getToken(),branch:b,status:s}); },
     recordPayment:function(id,a){ return call('recordPayment',{token:getToken(),invId:id,amount:a}); },
