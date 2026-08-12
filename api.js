@@ -49,7 +49,6 @@
   var WRITES={createEmployee:1,updateEmployee:1,setStatus:1,resetPassword:1,changePassword:1,createBranch:1,updateBranch:1,
     upsertCardType:1,issueCard:1,renewCard:1,cancelCard:1,setCardPrice:1,markCardSent:1,markCardActivated:1,
     createTask:1,updateTask:1,setTaskStatus:1,deleteTask:1,createCalEntry:1,updateCalEntry:1,saveRecurring:1,setRecurringActive:1,
-    startInstance:1,advanceStage:1,saveProcess:1,saveStage:1,deleteStage:1,reorderStages:1,saveField:1,deleteField:1,
     checkIn:1,checkOut:1,setAttendance:1,applyLeave:1,setLeave:1,cancelLeave:1,saveHoliday:1,savePolicy:1,ackPolicy:1,submitClaim:1,setClaim:1,runPayroll:1,approvePayroll:1,confirmAbsent:1,
     saveDaily:1,verifyDaily:1,rejectDaily:1,addLedger:1,setLedger:1,saveInvoice:1,recordPayment:1,saveBankRows:1,saveBankRule:1,
     saveDeposit:1,verifyDeposit:1,rejectDeposit:1,
@@ -57,16 +56,12 @@
     createPayRequest:1,setPayRequest:1,
     saveSection:1,deleteSection:1,saveVideo:1,deleteVideo:1,submitQuiz:1,saveAsset:1,deleteAsset:1,
     login:1,validate:1,logout:1,uploadFile:1,importOldCards:1,attachSelfie:1,waTest:1,waSendCard:1,saveWaTemplate:1,waTestTemplate:1,
-    submitSuggestion:1,replySuggestion:1,saveFixedAsset:1,deleteFixedAsset:1,completeFollowup:1,
-    nfMarkRead:1,nfMarkAllRead:1,nfRegisterPush:1,nfUnregisterPush:1};
+    submitSuggestion:1,replySuggestion:1,saveFixedAsset:1,deleteFixedAsset:1,completeFollowup:1};
   /* Writes that already do their own optimistic queueing inside the method (don't double-queue here). */
   var SELF_QUEUE={createEmployee:1,updateEmployee:1,setStatus:1,issueCard:1,renewCard:1,cancelCard:1,markCardSent:1,markCardActivated:1,
-    createTask:1,updateTask:1,setTaskStatus:1,deleteTask:1,createCalEntry:1,updateCalEntry:1,startInstance:1,advanceStage:1,attachSelfie:1};
+    createTask:1,updateTask:1,setTaskStatus:1,deleteTask:1,createCalEntry:1,updateCalEntry:1,attachSelfie:1};
   /* Writes that MUST stay online (auth, server-computed, exact-time, bulk). */
-  var NOQUEUE={login:1,validate:1,logout:1,changePassword:1,resetPassword:1,checkIn:1,checkOut:1,runPayroll:1,approvePayroll:1,confirmAbsent:1,uploadFile:1,importOldCards:1,submitQuiz:1,waTest:1,waSendCard:1,saveWaTemplate:1,waTestTemplate:1,
-    /* A push token is only meaningful to the server that is live right now — queueing a stale
-       one to replay hours later would register a subscription the browser may already have rotated. */
-    nfRegisterPush:1,nfUnregisterPush:1};
+  var NOQUEUE={login:1,validate:1,logout:1,changePassword:1,resetPassword:1,checkIn:1,checkOut:1,runPayroll:1,approvePayroll:1,confirmAbsent:1,uploadFile:1,importOldCards:1,submitQuiz:1,waTest:1,waSendCard:1,saveWaTemplate:1,waTestTemplate:1};
   /* ---------------- ATTACHMENTS ----------------------------------------------------
      A phone photo of a report is 4-8 MB. Sent as base64 it grows by a third, so ~10 MB was
      going up a branch connection against a hard 60-second abort — the request was killed
@@ -426,8 +421,6 @@
     refreshCal:function(owner){ return API.listCalendar(owner).catch(function(){}); },
     createCalEntry:function(data){ var id='CAL-'+uuid(); var d=Object.assign({status:'pending'},data,{entryId:id}); var owner=d.ownerEmpId||''; var f=function(){ return queueCal('createCalEntry',{data:d},function(){ return addCalCache(owner,Object.assign({},d,{_pending:true})); }).then(function(r){ r.entryId=id; return r; }); }; if(navigator.onLine) return call('createCalEntry',{token:getToken(),data:d}).then(function(r){ if(r.ok) API.refreshCal(owner); return r; }).catch(f); return f(); },
     updateCalEntry:function(entryId,data,owner){ var f=function(){ return queueCal('updateCalEntry',{entryId:entryId,data:data},function(){ return patchCal(owner,entryId,data); }); }; if(navigator.onLine) return call('updateCalEntry',{token:getToken(),entryId:entryId,data:data}).then(function(r){ if(r.ok) API.refreshCal(owner); return r; }).catch(f); return f(); },
-    cachedProcesses:function(){ return kvGet('processes'); },
-    listProcesses:function(){ return call('listProcesses',{token:getToken()}).then(function(r){ if(r.ok) kvSet('processes',r.processes); return r; }).catch(function(){ return kvGet('processes').then(function(x){ return {ok:true,processes:x||[],offline:true}; }); }); },
     /* v189: ONE round-trip for everything the dashboard needs. Feeds the same caches the individual
        list* calls use, so every other page's instant cache-first paint benefits too. */
     dashboard:function(){
@@ -438,28 +431,17 @@
           if(r.cards) kvSet('cards',r.cards);
           if(r.prices) kvSet('cardprices',r.prices);
           if(r.tasks) kvSet('tasks',r.tasks);
-          if(r.processes) kvSet('processes',r.processes);
           if(r.entries) kvSet('cal_'+(r.owner||''),r.entries);
         }
         return r;
       });
     },
-    getProcess:function(pid){ return call('getProcess',{token:getToken(),processId:pid}).then(function(r){ if(r.ok) kvSet('procdef_'+pid,r); return r; }).catch(function(){ return kvGet('procdef_'+pid).then(function(x){ return x||{ok:false,offline:true}; }); }); },
-    cachedInstances:function(pid,status){ return kvGet('inst_'+pid+'_'+(status||'running')); },
-    listInstances:function(pid,status){ var sf=status||'running', k='inst_'+pid+'_'+sf; return call('listInstances',{token:getToken(),processId:pid,status:sf}).then(function(r){ if(r.ok) kvSet(k,r); return r; }).catch(function(){ return kvGet(k).then(function(x){ return x||{ok:true,instances:[],stages:[],offline:true}; }); }); },
-    cachedInstance:function(iid){ return kvGet('inst1_'+iid); },
-    getInstance:function(iid){ return call('getInstance',{token:getToken(),instanceId:iid}).then(function(r){ if(r&&r.ok) kvSet('inst1_'+iid,r); return r; }).catch(function(){ return kvGet('inst1_'+iid).then(function(x){ return x||{ok:false,offline:true}; }); }); },
-    startInstance:function(pid,data){ var f=function(){ return queueGeneric('startInstance',{processId:pid,data:data}); }; if(navigator.onLine) return call('startInstance',{token:getToken(),processId:pid,data:data}).catch(f); return f(); },
-    advanceStage:function(iid,data){ var f=function(){ return queueGeneric('advanceStage',{instanceId:iid,data:data}); }; if(navigator.onLine) return call('advanceStage',{token:getToken(),instanceId:iid,data:data}).catch(f); return f(); },
-    cachedProcessMonitor:function(pid){ return kvGet('procmon_'+pid); },
-    processMonitor:function(pid,filter){ return call('processMonitor',{token:getToken(),processId:pid,filter:filter||{}}).then(function(r){ if(r.ok) kvSet('procmon_'+pid,r); return r; }).catch(function(){ return kvGet('procmon_'+pid).then(function(x){ return x||{ok:true,rows:[],stages:[],offline:true}; }); }); },
-    saveProcess:function(d){ return call('saveProcess',{token:getToken(),data:d}).then(function(r){ if(r.ok) API.listProcesses(); return r; }); },
-    activityScorecard:function(from,to){ return call('activityScorecard',{token:getToken(),fromDate:from||'',toDate:to||''}); },
+    /* v307: the process-engine surface (getProcess / listInstances / getInstance / startInstance /
+       advanceStage / processMonitor / saveProcess / activityScorecard and their caches) was removed with
+       the CRM, Process Builder and Process Flow Monitor pages. staffPerformance stays — the profile page
+       still reads it for the personal KPI box, which is not the deleted Staff Performance report. */
     staffPerformance:function(from,to,branch){ var k='staffperf_'+(from||'')+'_'+(to||'')+'_'+(branch||''); return call('staffPerformance',{token:getToken(),fromDate:from||'',toDate:to||'',branch:branch||''}).then(function(r){ if(r&&r.ok) kvSet(k,r.rows); return r; }).catch(function(){ return kvGet(k).then(function(v){ return v?{ok:true,rows:v,offline:true}:{ok:false,offline:true}; }); }); },
     savePhoto:function(dataUri){ return call('savePhoto',{token:getToken(),dataUri:dataUri}); },
-    saveCampaign:function(d){ return call('saveCampaign',{token:getToken(),data:d}); },
-    listCampaigns:function(from,to,branch){ return call('listCampaigns',{token:getToken(),fromDate:from||'',toDate:to||'',branch:branch||''}); },
-    startNurture:function(d){ return call('startNurture',{token:getToken(),data:d}); },
     saveQcMaterial:function(d){ return call('saveQcMaterial',{token:getToken(),data:d}); },
     listQcMaterials:function(){ return call('listQcMaterials',{token:getToken()}); },
     saveQcRun:function(d){ return call('saveQcRun',{token:getToken(),data:d}); },
@@ -472,13 +454,8 @@
     getKpiConfig:function(){ return call('getKpiConfig',{token:getToken()}); },
     saveKpiTarget:function(d){ return call('saveKpiTarget',{token:getToken(),data:d}); },
     saveWeights:function(d){ return call('saveWeights',{token:getToken(),data:d}); },
-    saveStage:function(d){ return call('saveStage',{token:getToken(),data:d}); },
-    deleteStage:function(id){ return call('deleteStage',{token:getToken(),stageId:id}); },
-    reorderStages:function(pid,order){ return call('reorderStages',{token:getToken(),processId:pid,order:order}); },
-    saveField:function(d){ return call('saveField',{token:getToken(),data:d}); },
-    deleteField:function(id){ return call('deleteField',{token:getToken(),fieldId:id}); },
-    reorderFields:function(order){ return call('reorderFields',{token:getToken(),order:order}); },
-    saveStageEdges:function(pid,fromStageId,toStageIds){ return call('saveStageEdges',{token:getToken(),processId:pid,fromStageId:fromStageId,toStageIds:toStageIds}); },
+    /* v307: saveStage / deleteStage / reorderStages / saveField / deleteField / reorderFields /
+       saveStageEdges removed — they only ever served the Process Builder. */
     capitalLedger:function(b){ return call('capitalLedger',{token:getToken(),branch:b||''}); },   /* v276 */
     /* v295: a punch now carries its OWN deadline instead of inheriting NET's 60-second default.
        Sixty seconds was chosen for bulk uploads, not for a person standing at a door holding a phone.
@@ -618,16 +595,8 @@
     listTasksFor:function(owner){ return call('listTasksFor',{token:getToken(),ownerEmpId:owner}).then(function(r){ if(r.ok) kvSet('tasksfor_'+owner,r.tasks); return r; }).catch(function(){ return kvGet('tasksfor_'+owner).then(function(t){ return {ok:true,tasks:t||[],offline:true}; }); }); },
     branchAssignees:function(branchId,includeRole,allBranches){ var k='brassign_'+(allBranches?'all':(branchId||'me'))+(includeRole?('_'+includeRole):''); return call('branchAssignees',{token:getToken(),branchId:branchId||'',includeRole:includeRole||'',allBranches:allBranches?1:''}).then(function(r){ if(r&&r.ok) kvSet(k,r.employees); return r; }).catch(function(){ return kvGet(k).then(function(v){ return {ok:true,employees:v||[],offline:true}; }); }); },
 
-    /* ---------- notifications (v274) ----------
-       Reads go through call() so they inherit cache-first-when-offline for free:
-       the bell keeps showing the last known list with no connection. */
-    nfList:function(limit){ return call('nfList',{token:getToken(),limit:limit||50}); },
-    nfCount:function(){ return call('nfCount',{token:getToken()}); },
-    nfMarkRead:function(ids){ return call('nfMarkRead',{token:getToken(),notifIds:ids||[]}); },
-    nfMarkAllRead:function(){ return call('nfMarkAllRead',{token:getToken()}); },
-    nfRegisterPush:function(fcmToken,platform,ua){ return call('nfRegisterPush',{token:getToken(),fcmToken:fcmToken,platform:platform||'',ua:ua||''}); },
-    nfUnregisterPush:function(fcmToken){ return call('nfUnregisterPush',{token:getToken(),fcmToken:fcmToken}); },
-    nfPushConfig:function(){ return call('nfPushConfig',{token:getToken()}); },
+    /* v307: the notification endpoints (nfList / nfCount / nfMarkRead / nfMarkAllRead /
+       nfRegisterPush / nfUnregisterPush / nfPushConfig) were removed with the bell and push. */
 
     /* fire-and-forget cache refresh */
     refreshEmployees:function(){ return API.listEmployees().catch(function(){}); },

@@ -311,20 +311,23 @@ function applyPerms(){
   document.querySelectorAll('[data-page="cards"]').forEach(function(n){ n.classList.remove('hidden'); });
   document.querySelectorAll('[data-page="cardstatus"]').forEach(function(n){ n.classList.remove('hidden'); });
   $('addEmpBtn').classList.toggle('hidden', !S.perms.canCreate);
+  /* v307: CRM / Process Builder / Staff Performance / Marketing removed — their gates went with them.
+     The Follow-ups page (formerly "Process Flow Monitor") is KEPT: it never touched the process engine.
+     Only its two process-driven tabs were removed. Same roles as before. */
   var canMon=(S.perms.level==='SUPER')||(S.user && ['Operations Manager','Process Coordinator'].indexOf(S.user.Role)>=0);
   document.querySelectorAll('[data-page="taskmon"]').forEach(function(n){ n.classList.toggle('hidden',!canMon); });
-  var canPerf=canMon||S.perms.level==='BRANCH_MGR'||(S.user && S.user.Role==='Accounts');   // monitors see all branches; branch managers see their own; Accounts for the attendance register
-  document.querySelectorAll('[data-page="staffperf"]').forEach(function(n){ n.classList.toggle('hidden',!canPerf); });
-  var canMkt=(S.perms.level==='SUPER')||S.perms.level==='BRANCH_MGR'||(S.user && ['Operations Manager','Marketing Manager','Director'].indexOf(S.user.Role)>=0);
-  document.querySelectorAll('[data-page="marketing"]').forEach(function(n){ n.classList.toggle('hidden',!canMkt); });
   var canQc=(S.perms.level==='SUPER')||S.perms.level==='BRANCH_MGR'||(S.user && ['QC Manager','Pathologist','Lab Technician','Operations Manager','Director'].indexOf(S.user.Role)>=0);
   document.querySelectorAll('[data-page="qc"]').forEach(function(n){ n.classList.toggle('hidden',!canQc); });
   var canKpi=(S.perms.level==='SUPER')||(S.user && ['HR','Director','Operations Manager'].indexOf(S.user.Role)>=0);
   document.querySelectorAll('[data-page="kpiadmin"]').forEach(function(n){ n.classList.toggle('hidden',!canKpi); });
   var canRec=S.perms.canManageRecurring||(S.perms.level==='SUPER')||(S.user && S.user.Role==='Executive Assistant');
   document.querySelectorAll('[data-page="recurring"]').forEach(function(n){ n.classList.toggle('hidden',!canRec); });
-  var canBuild=(S.perms.level==='SUPER')||(S.user && S.user.Role==='Executive Assistant');
-  document.querySelectorAll('[data-page="builder"]').forEach(function(n){ n.classList.toggle('hidden',!canBuild); });
+  /* v307: Partner and Consultant have been excluded from training since v276 — the server returns them
+     an empty list, spawns them no task and strips their role from any video. The menu entry was never
+     gated to match, so a Partner could still open Training and find a blank page. Same role list as the
+     backend's TRAINING_EXCLUDED_ROLES; keep the two in step if either changes. */
+  var canTrain=['Partner','Consultant'].indexOf(String((S.user||{}).Role||'').trim())<0;
+  document.querySelectorAll('[data-page="training"]').forEach(function(n){ n.classList.toggle('hidden',!canTrain); });
   /* v262: Senior Technician gets the same daily-collection authority CRM has — nav entry here,
      the + Daily entry button in accounts.js canEnter(), and the server gate in Code.gs accEnter_. */
   var canAcc=S.perms.canViewAll||S.perms.level==='BRANCH_MGR'||S.perms.level==='BRANCH_VIEW'||(S.user && ['CRM','Accounts','Senior Technician'].indexOf(S.user.Role)>=0);
@@ -332,8 +335,9 @@ function applyPerms(){
   var canMD=(S.perms.level==='SUPER')||(S.user && ['Director','Executive Assistant'].indexOf(S.user.Role)>=0);
   document.querySelectorAll('[data-page="mdinbox"]').forEach(function(n){ n.classList.toggle('hidden',!canMD); });
   /* v197: consultant — bare menu: Dashboard + My Profile ONLY (runs last so it overrides the grants
-     above). The dashboard's franchise tile deep-links to the CRM board, so no CRM menu entry is needed.
-     Also hides the sidebar group labels; the mobile bottom nav rebuilds from visible items below. */
+     above). Also hides the sidebar group labels; the mobile bottom nav rebuilds from visible items below.
+     v307: the franchise-pipeline dashboard these roles were given went with the CRM engine — a consultant
+     now lands on the ordinary staff dashboard (own tasks and calendar). */
   var _cons=isConsultantRole();
   if(_cons){
     var _keep={dashboard:1,profile:1};
@@ -365,7 +369,7 @@ var currentPage='dashboard';
 function go(page){
   currentPage=page;
   document.querySelectorAll('.nav-item').forEach(function(n){ n.classList.toggle('active', n.getAttribute('data-page')===page); });
-  ['dashboard','tasks','calendar','attendance','leave','field','policy','training','assets','fixedassets','inventory','payreq','payroll','accounts','recurring','crm','builder','taskmon','staffperf','marketing','qc','kpiadmin','employees','profile','branches','watemplates','cards','cardstatus','suggest','mdinbox'].forEach(function(p){ $('page-'+p).classList.toggle('hidden',p!==page); });
+  ['dashboard','tasks','calendar','attendance','leave','field','policy','training','assets','fixedassets','inventory','payreq','payroll','accounts','recurring','taskmon','qc','kpiadmin','employees','profile','branches','watemplates','cards','cardstatus','suggest','mdinbox'].forEach(function(p){ var el=$('page-'+p); if(el) el.classList.toggle('hidden',p!==page); });
   if(page==='dashboard') loadDashboard();
   if(page==='tasks' && window.renderMyTasks) window.renderMyTasks();
   if(page==='calendar' && window.renderCalendar) window.renderCalendar();
@@ -383,11 +387,7 @@ function go(page){
   if(page==='payroll' && window.renderPayroll) window.renderPayroll();
   if(page==='accounts' && window.renderAccounts) window.renderAccounts();
   if(page==='recurring' && window.renderRecurring) window.renderRecurring();
-  if(page==='crm' && window.renderCRM) window.renderCRM();
-  if(page==='builder' && window.renderBuilder) window.renderBuilder();
   if(page==='taskmon' && window.renderTaskMonitor) window.renderTaskMonitor();
-  if(page==='staffperf' && window.renderStaffPerf) window.renderStaffPerf();
-  if(page==='marketing' && window.renderMarketing) window.renderMarketing();
   if(page==='qc' && window.renderQc) window.renderQc();
   if(page==='kpiadmin' && window.renderKpiAdmin) window.renderKpiAdmin();
   if(page==='employees') loadEmployees();
@@ -400,7 +400,7 @@ function go(page){
 }
 
 /* ---------- mobile bottom navigation + "More" sheet ---------- */
-var NAVDEF=[['dashboard','▦','Home'],['tasks','✓','Tasks'],['calendar','📅','Calendar'],['attendance','🕒','Attend'],['crm','📁','CRM'],['builder','🔧','Builder'],['recurring','🔁','Recurring'],['taskmon','📋','Monitor'],['staffperf','📈','Performance'],['marketing','📣','Marketing'],['qc','🧪','QC'],['kpiadmin','🎯','KPI'],['employees','👥','Staff'],['leave','🌴','Leave'],['field','🚗','Field'],['policy','📋','Policy'],['training','🎓','Training'],['assets','🗂','Information'],['fixedassets','🛠','Asset Mgmt'],['inventory','📦','Inventory'],['payreq','🧾','Payments'],['payroll','💰','Payroll'],['accounts','📊','Accounts'],['cards','🏷','Cards'],['cardstatus','✅','Status'],['suggest','✉','Suggest'],['mdinbox','📨','MD Inbox'],['branches','🏢','Branches'],['watemplates','💬','WA Templates'],['profile','⚙','Profile']];
+var NAVDEF=[['dashboard','▦','Home'],['tasks','✓','Tasks'],['calendar','📅','Calendar'],['attendance','🕒','Attend'],['recurring','🔁','Recurring'],['taskmon','📋','Follow-ups'],['qc','🧪','QC'],['kpiadmin','🎯','KPI'],['employees','👥','Staff'],['leave','🌴','Leave'],['field','🚗','Field'],['policy','📋','Policy'],['training','🎓','Training'],['assets','🗂','Information'],['fixedassets','🛠','Asset Mgmt'],['inventory','📦','Inventory'],['payreq','🧾','Payments'],['payroll','💰','Payroll'],['accounts','📊','Accounts'],['cards','🏷','Cards'],['cardstatus','✅','Status'],['suggest','✉','Suggest'],['mdinbox','📨','MD Inbox'],['branches','🏢','Branches'],['watemplates','💬','WA Templates'],['profile','⚙','Profile']];
 function visibleNav(){ return NAVDEF.filter(function(d){ var el=document.querySelector('.nav-item[data-page="'+d[0]+'"]'); return el && !el.classList.contains('hidden'); }); }
 function navBtn(d){ return '<button data-page="'+d[0]+'"><span class="ic">'+d[1]+'</span><span>'+d[2]+'</span></button>'; }
 function buildMobileBottomNav(){
@@ -436,7 +436,7 @@ window.openMobileMore=openMobileMore; window.closeMobileMore=closeMobileMore;
 
 /* dashboard */
 function greetWord(){ var h=new Date().getHours(); return h<12?'Good morning':(h<17?'Good afternoon':'Good evening'); }
-var DASH={emps:[],cards:[],prices:{},tasks:[],procs:[],cal:[],chaseT:0,chaseC:0,daily:[],pendingDaily:[],training:null};
+var DASH={emps:[],cards:[],prices:{},tasks:[],cal:[],chaseT:0,chaseC:0,daily:[],pendingDaily:[],training:null};
 function priceMap(arr){ var m={}; (arr||[]).forEach(function(p){ m[p.typeId+'|'+p.branchId]=Number(p.price)||0; }); return m; }
 function fmtMoney(n){ return Math.round(n||0).toLocaleString('en-IN'); }
 function todayD(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
@@ -479,11 +479,11 @@ var DT_SRC={ tasks:[], cal:[] };
    the popup (attendance figures, leave dates, daily-cash totals). Clicking their box opens it. */
 var DT_APPROVAL={attendance:1,leave:1,accounts:1,deposit:1,training:1};
 function dtBadge(t){
-  var m={ training:['#eafaf3','#1aa37a','🎓 Training'], process:['#eafaf3','#1aa37a','📁 CRM stage'],
+  var m={ training:['#eafaf3','#1aa37a','🎓 Training'],
           attendance:['#fdeaea','#a3271f','🕒 Attendance'], leave:['#eef7ee','#1a7f37','🌴 Leave'],
-          nrlead:['#fff4e8','#c47f00','↻ Not responding'], accounts:['#eef2ff','#4253c5','📊 Daily cash'],
+          accounts:['#eef2ff','#4253c5','📊 Daily cash'],
           deposit:['#eef2ff','#4253c5','🏦 Deposit'], recurring:['#f3f0ff','#6f63d6','🔁 Recurring'],
-          calendar:['#ECEAFB','#5046b8','📅 Calendar'] };
+          calendar:['#ECEAFB','#5046b8','📅 Calendar'] };   /* v307: the 'process' → "📁 CRM stage" badge went with the engine */
   var d=m[String(t.source)];
   if(!d && String(t.source)==='assigned') d=['#eef2ff','#4253c5','Assigned by '+(t.assignedByName||'manager')];
   if(!d) return '';
@@ -491,7 +491,9 @@ function dtBadge(t){
 }
 function dtItems(){
   var S=window.taskShared;
-  var tasks=(DASH.tasks||[]).filter(function(t){ return String(t.status)!=='deleted'; });
+  /* v307: process/CRM rows stay in the sheet but can no longer be opened anywhere, so they are filtered
+     out here exactly as they are in My Tasks — otherwise the dashboard would count dead work as overdue. */
+  var tasks=(DASH.tasks||[]).filter(function(t){ var s=String(t.source); return String(t.status)!=='deleted' && s!=='process' && s!=='nrlead'; });
   var cal=(DASH.cal||[]).filter(function(c){ return String(c.status)!=='deleted'; });
   DT_SRC={tasks:tasks, cal:cal};
   if(!S) return tasks;                                    /* tasks.js not loaded yet — degrade, never throw */
@@ -606,20 +608,19 @@ function loadDashboard(){
   var scope=(S.perms&&S.perms.canManageAll)?'org-wide':(lvl==='BRANCH_MGR'?('branch: '+branchName(u.Branch)):(lvl==='BRANCH_VIEW'?('branch: '+branchName(u.Branch)+' (view)'):(S.perms&&S.perms.canViewAll?'all branches (view)':'self-service')));
   $('greetMeta').textContent=[u.Role,(u.OfficeType==='Branch'?branchName(u.Branch):'Corporate Office'),scope].filter(Boolean).join(' · ');
   if(!DASH.emps.length && !DASH.cards.length) $('kpis').innerHTML='<div class="kpi"><div class="n"><span class="loader dark"></span></div><div class="l">Loading…</div></div>';
-  Promise.all([API.cachedEmployees(),API.cachedCards(),API.cachedPrices(),API.cachedTasks(),API.cachedCalendar(u.EmpID),API.cachedProcesses()]).then(function(a){
-    if(a[0]) DASH.emps=a[0]; if(a[1]) DASH.cards=a[1]; DASH.prices=priceMap(a[2]||[]); if(a[3]) DASH.tasks=a[3]; if(a[4]) DASH.cal=a[4]; if(a[5]) DASH.procs=a[5];
+  Promise.all([API.cachedEmployees(),API.cachedCards(),API.cachedPrices(),API.cachedTasks(),API.cachedCalendar(u.EmpID)]).then(function(a){
+    if(a[0]) DASH.emps=a[0]; if(a[1]) DASH.cards=a[1]; DASH.prices=priceMap(a[2]||[]); if(a[3]) DASH.tasks=a[3]; if(a[4]) DASH.cal=a[4];
     renderDashboard();
   });
   /* v189: one combined server call instead of six parallel ones — falls back to the old
      six-call path automatically if the Apps Script hasn't been redeployed yet. */
   function legacyDashLoad(){
-    Promise.all([API.listEmployees().catch(e0),API.listCards({}).catch(e0),API.listCardPrices().catch(e0),API.listMyTasks().catch(e0),API.listProcesses().catch(e0),API.listCalendar(u.EmpID).catch(e0)]).then(function(a){
+    Promise.all([API.listEmployees().catch(e0),API.listCards({}).catch(e0),API.listCardPrices().catch(e0),API.listMyTasks().catch(e0),API.listCalendar(u.EmpID).catch(e0)]).then(function(a){
       if(a[0]&&a[0].ok){ DASH.emps=a[0].employees; S.employees=a[0].employees; S.perms=a[0].perms||S.perms; }
       if(a[1]&&a[1].ok){ DASH.cards=a[1].cards; }
       if(a[2]&&a[2].ok){ DASH.prices=priceMap(a[2].prices); }
       if(a[3]&&a[3].ok){ DASH.tasks=a[3].tasks||[]; }
-      if(a[4]&&a[4].ok){ DASH.procs=a[4].processes||[]; }
-      if(a[5]&&a[5].ok){ DASH.cal=a[5].entries||[]; }
+      if(a[4]&&a[4].ok){ DASH.cal=a[4].entries||[]; }
       renderDashboard();
     });
   }
@@ -630,11 +631,12 @@ function loadDashboard(){
       if(r.cards) DASH.cards=r.cards;
       if(r.prices) DASH.prices=priceMap(r.prices);
       if(r.tasks) DASH.tasks=r.tasks;
-      if(r.processes) DASH.procs=r.processes;
       if(r.entries) DASH.cal=r.entries;
       renderDashboard();
     } else legacyDashLoad();
   }).catch(function(){ legacyDashLoad(); });
+  /* "To chase" — overdue work across the whole team, for the roles that chase it. Feeds the KPI tile
+     and the row that opens Follow-ups. Unchanged from v306; the Follow-ups page it links to is kept. */
   if(isMonitorRole()){
     Promise.all([API.listAllTasks().catch(e0),API.listAllCalendar().catch(e0)]).then(function(a){
       var tdy=todayD(), nowMin=new Date().getHours()*60+new Date().getMinutes(), floor=daysAgoD(CHASE_WINDOW_DAYS);
@@ -655,23 +657,8 @@ function loadDashboard(){
        from "wrong" to anyone looking at it, and that is how people stop trusting a number. */
     API.pendingDaily().then(function(r){ if(r&&r.ok){ DASH.pendingDaily=r.pending||[]; renderDashboard(); } }).catch(function(){});
   }
-  /* org-wide training progress for the dashboard "Staff Training" tile */
-  if(isMonitorRole() || (S.perms && (S.perms.canViewAll||S.perms.level==='BRANCH_MGR'))){
-    API.trainingStats().then(function(r){ if(r&&r.ok){ DASH.training=r; renderDashboard(); } }).catch(function(){});
-  }
-  /* consultant: "Won this month" KPI — count franchise leads closed_won in the current month */
-  if(isConsultantRole()){
-    var fwSeen={};
-    var fw=function(procs){
-      var fp=(procs||[]).filter(function(p){ return /franchis/i.test(p.name||''); })[0];
-      if(!fp || fwSeen[fp.processId]) return; fwSeen[fp.processId]=1;
-      API.listInstances(fp.processId,'closed').then(function(r){ if(r&&r.ok){ var m=todayD().slice(0,7);
-        DASH.frWon=(r.instances||[]).filter(function(i){ return String(i.status)==='closed_won' && String(i.closedAt||'').slice(0,7)===m; }).length;
-        renderDashboard(); } }).catch(function(){});
-    };
-    API.cachedProcesses().then(function(p){ if(p&&p.length) fw(p); });
-    API.listProcesses().then(function(r){ if(r&&r.ok) fw(r.processes); }).catch(function(){});
-  }
+  /* v307: the org-wide trainingStats fetch is gone. Its only consumer was the "Staff Training" tile on
+     the department board — with the board removed the call was a round trip whose result nothing read. */
 }
 function renderDashboard(){
   /* SCROLL STABILITY: this repaints as each background load resolves (tasks, cards, daily, training…).
@@ -687,7 +674,6 @@ function renderDashboard(){
   var myT=(DASH.tasks||[]).filter(function(t){return t.status!=='deleted';});
   var myToday=myT.filter(function(t){return t.status!=='done' && dd10(t.dueDate)===tdy;}).length;
   var myOver=myT.filter(function(t){var d=dd10(t.dueDate); return t.status!=='done' && d && d<tdy;}).length;
-  var myProcDue=myT.filter(function(t){var d=dd10(t.dueDate); return t.source==='process' && t.status!=='done' && d && d<=tdy;}).length;
   var calToday=(DASH.cal||[]).filter(function(c){return String(c.status)!=='deleted' && dd10(c.date)===tdy;}).sort(function(a,b){return (a.startTime||'')<(b.startTime||'')?-1:1;});
   var branch=$('dashBranch').value;
   /* Effective branch scope for the WHOLE dashboard (staff, cards, revenue, pipelines):
@@ -697,7 +683,6 @@ function renderDashboard(){
      This guarantees a branch-level user never sees org-wide numbers behind "Branch …" labels. */
   var effBranch=isManager?branch:((isBranchMgr||lvl==='BRANCH_VIEW')?String(u.Branch||''):'');
   var scopeBranch=effBranch;
-  var openLeads=(DASH.procs||[]).reduce(function(s,p){return s+procCounts(p,scopeBranch).open;},0);
   var emp=(DASH.emps||[]).filter(function(e){ return !effBranch || String(e.Branch)===String(effBranch); });
   var cards=(DASH.cards||[]).filter(function(c){ return !effBranch || String(c.branchId)===String(effBranch); });
   var now=new Date(), m0=new Date(now.getFullYear(),now.getMonth(),1), soon=new Date(now.getTime()+7*864e5);
@@ -725,65 +710,28 @@ function renderDashboard(){
   var _shiftM=Math.min(_depScoped, Math.max(0,cashMTD)); cashMTD-=_shiftM; bankMTD+=_shiftM;
   var bizMTD=cashMTD+bankMTD+otherMTD;
   var avgPat=patMTD>0?Math.round(bizMTD/patMTD):0;
-  /* consultant: franchise-only dashboard (approved design) — franchise KPIs, no business/cash/staff */
+  /* v307: the CRM lead KPIs are gone with the process engine. Every tile below is now derived from
+     data this build still owns — daily collections, cards, staff, tasks and the calendar. The
+     consultant's franchise-only dashboard went with it; a consultant now sees the standard staff view. */
   var isCons=isConsultantRole();
-  var frProcs=(DASH.procs||[]).filter(function(p){ return /franchis/i.test(p.name||''); });
-  var frO=0,frD=0,frV=0; frProcs.forEach(function(p){ var c=procCounts(p,scopeBranch); frO+=c.open; frD+=c.dueToday; frV+=c.overdue; });
-  var frPid=frProcs.length?String(frProcs[0].processId||''):'';
   var K=kpiC(myToday,'Tasks today','amber')+kpiC(myOver,'My overdue','red');
-  if(isCons){ K+=kpiC(frO,'Open franchise leads','violet')+kpiC(frD,'Leads due today','amber')+kpiC((DASH.frWon==null?'—':DASH.frWon),'Won this month','green'); }
-  else if(isManager){ K+=kpiC('₹'+fmtMoney(bizMTD),'Business (MTD)','green')+kpiC(openLeads,'Open CRM leads','violet')+kpiC('₹'+fmtMoney(revenue),'Card revenue','green')+kpiC(staffN,'Active staff','blue')+kpiC(Object.keys(brs).length,'Branches','blue'); }
-  else if(isBranchMgr){ K+=kpiC('₹'+fmtMoney(bizMTD),'Business (MTD)','green')+kpiC(openLeads,'Branch CRM leads','violet')+kpiC(staffN,'Branch staff','blue')+kpiC('₹'+fmtMoney(revenue),'Cards business','green'); }
-  else { K+=kpiC(myProcDue,'My CRM leads due','violet')+kpiC(calToday.length,'Today’s events','blue'); }
+  if(isManager){ K+=kpiC('₹'+fmtMoney(bizMTD),'Business (MTD)','green')+kpiC(patMTD,'Patients (MTD)','violet')+kpiC('₹'+fmtMoney(revenue),'Card revenue','green')+kpiC(staffN,'Active staff','blue')+kpiC(Object.keys(brs).length,'Branches','blue'); }
+  else if(isBranchMgr){ K+=kpiC('₹'+fmtMoney(bizMTD),'Business (MTD)','green')+kpiC(patMTD,'Patients (MTD)','violet')+kpiC(staffN,'Branch staff','blue')+kpiC('₹'+fmtMoney(revenue),'Cards business','green'); }
+  else { K+=kpiC(calToday.length,'Today’s events','blue'); }
   if(isMon){ K+=kpiC((DASH.chaseT||0)+(DASH.chaseC||0),'To chase','red'); }
   $('kpis').innerHTML=K;
   var att='', items='';
   function arow(color,txt,page){ return '<div class="dash-att" onclick="go(\''+page+'\')"><span class="dot" style="background:'+color+'"></span><span class="t">'+txt+'</span><span class="r">open ›</span></div>'; }
   if(myOver>0) items+=arow('#DA1017', myOver+' of your tasks are overdue','tasks');
   if(myToday>0) items+=arow('#c47f00', myToday+' task'+(myToday>1?'s':'')+' due today','tasks');
-  if(myProcDue>0) items+=arow('#7F77DD', myProcDue+' CRM lead'+(myProcDue>1?'s':'')+' due/overdue','crm');
-  if(isCons && frPid){
-    if(frV>0) items+='<div class="dash-att" onclick="openDept(\''+esc(frPid)+'\')"><span class="dot" style="background:#DA1017"></span><span class="t">'+frV+' franchise lead'+(frV>1?'s':'')+' overdue</span><span class="r">open ›</span></div>';
-    if(frD>0) items+='<div class="dash-att" onclick="openDept(\''+esc(frPid)+'\')"><span class="dot" style="background:#c47f00"></span><span class="t">'+frD+' follow-up'+(frD>1?'s':'')+' due today</span><span class="r">open ›</span></div>';
-  }
   if(isMon && (DASH.chaseT||DASH.chaseC)) items+=arow('#c47f00', (DASH.chaseT+DASH.chaseC)+' overdue across the team','taskmon');
   calToday.slice(0,5).forEach(function(c){ items+='<div class="dash-att" onclick="go(\'calendar\')"><span class="dot" style="background:'+(String(c.status)==='done'?'#1a7f37':'#7F77DD')+'"></span><span class="t">'+(c.startTime?esc(c.startTime)+' · ':'')+esc(c.title)+'</span><span class="r">calendar ›</span></div>'; });
   if(!items) items='<div class="dash-att muted"><span class="t">Nothing pending today. 🎉</span></div>';
   att+='<div class="section-label">Needs attention today</div>'+items;
   var html=att;
-  /* Department health board (role-wise) — replaces the old module launcher + CRM pipelines list.
-     Driven by the process pipelines the backend returns for this user's scope. Counts (open/due/overdue)
-     are live; on-time % is an approximation = (open-overdue)/open; ₹ shown only where derivable. */
-  var procs=(DASH.procs||[]);
-  if(procs.length){
-    /* ---- role-specific framing of the board ---- */
-    var boardProcs=procs, boardLabel='Department health';
-    if(isManager){ boardLabel='Department health · '+(branch?branchName(branch):'all branches'); }
-    else if(isBranchMgr){ boardLabel='Department health · '+branchName(u.Branch); }
-    else if(isMon){ boardLabel='Department health · operations'; }
-    else {
-      /* staff: show EVERY pipeline they're allowed to view (backend already scopes by role),
-         so every process box is visible and tappable — not just the ones with work. */
-      boardLabel='Department health';
-    }
-    html+='<div class="section-label">'+esc(boardLabel)+'</div>';
-    html+='<div class="dept-legend"><span><i class="ddot ok"></i>on track</span><span><i class="ddot warn"></i>watch</span><span><i class="ddot bad"></i>action needed</span></div>';
-    /* Staff Training tile (org-wide progress) — managers/monitor roles only */
-    var renderProcs=boardProcs.slice();
-    if((isManager||isBranchMgr||isMon) && DASH.training && (DASH.training.open>0||DASH.training.total>0)){
-      renderProcs.push({name:'Staff Training', processId:'', byBranch:DASH.training.byBranch, open:DASH.training.open, dueToday:DASH.training.dueToday, overdue:DASH.training.overdue});
-    }
-    html+='<div class="dept-board">'+renderProcs.map(function(p){ return deptCard(p,revenue,procCounts(p,scopeBranch)); }).join('')+'</div>';
-    /* monitor roles (SUPER / Ops Manager / Process Coordinator): surface the worst offenders to chase */
-    if(isMon){
-      var bn=procs.map(function(p){ return {p:p,over:procCounts(p,scopeBranch).overdue}; }).filter(function(x){ return x.over>0; }).sort(function(a,b){ return b.over-a.over; }).slice(0,3);
-      if(bn.length){
-        html+='<div class="section-label">Top bottlenecks to chase</div>'+bn.map(function(x){
-          return '<div class="dash-att" onclick="openDept(\''+esc(x.p.processId||'')+'\')"><span class="dot" style="background:#DA1017"></span><span class="t"><b>'+esc(x.p.name)+'</b> · '+x.over+' overdue</span><span class="r">work it ›</span></div>';
-        }).join('');
-      }
-    }
-  }
+  /* v307: the "Department health" tile board is gone. Every tile on it was a process pipeline, and the
+     pipelines went with the CRM/process engine. Nothing is put in its place — the branch business table,
+     the card snapshot and the finance blocks below already answer the questions it was standing in for. */
   if(isManager && !branch && Object.keys(brs).length>1){
     var rows=Object.keys(brs).map(function(bid){
       var be=emp.filter(function(e){return String(e.Branch)===bid;}).length;
@@ -837,16 +785,15 @@ function renderDashboard(){
       '<div class="card"><div class="table-wrap swipe"><table><thead><tr><th>Branch</th><th>Issued</th>'+typeList.map(function(t){return '<th>'+esc(t)+'</th>';}).join('')+'<th>Active total</th></tr></thead><tbody>'+bodyRows+totRow+'</tbody></table></div></div>';
   }
   /* v286: partner review sits directly under the finance table — same month, same branch scope. */
-  html+='<div id="finDash"></div><div id="stmtTable"></div><div id="partnerReview"></div><div id="mktDash"></div>';
+  html+='<div id="finDash"></div><div id="stmtTable"></div><div id="partnerReview"></div>';
   $('dashExtra').innerHTML=html;
   /* v277: the inline cardYm picker is gone — the header month drives this section (see bindApp). */
-  if(window.renderStarBlock){ try{ window.renderStarBlock(document.getElementById('starBlock')); }catch(_){} }
+  /* v307: Star performers board removed (it lived in staffperf.js, deleted with Staff Performance). */
   if(window.renderQuickLog){ try{ window.renderQuickLog(document.getElementById('quickLog')); }catch(_){} }
   var dashBr=(S.perms&&S.perms.canViewAll)?(($('dashBranch')||{}).value||''):'';
   if(window.renderFinDash){ try{ window.renderFinDash(document.getElementById('finDash'), dashBr); }catch(_){} }
   if(window.renderStatementTable){ try{ window.renderStatementTable(document.getElementById('stmtTable'), dashBr); }catch(_){} }
   if(window.renderPartnerReview){ try{ window.renderPartnerReview(document.getElementById('partnerReview'), dashBr); }catch(_){} }
-  if(!isCons && window.renderMktDash){ try{ window.renderMktDash(document.getElementById('mktDash'), dashBr); }catch(_){} }
   /* consultant: hide the business month picker and the "Recently added staff" block */
   var _rt=$('recentTable'), _rc=_rt&&_rt.closest?_rt.closest('.card'):null, _rl=_rc?_rc.previousElementSibling:null;
   if(_rc){ _rc.style.display=isCons?'none':''; } if(_rl && _rl.classList && _rl.classList.contains('section-label')){ _rl.style.display=isCons?'none':''; }
@@ -880,54 +827,7 @@ function heldBackStrip(){
       'It joins these figures as soon as it is verified in Accounts.</span></div>';
 }
 function kpiC(n,l,cls){ return '<div class="kpi k-'+(cls||'')+'"><div class="n">'+n+'</div><div class="l">'+esc(l)+'</div></div>'; }
-/* Open the CRM page straight to one pipeline (deep-link from the dashboard department cards).
-   go('crm') paints the pipeline list; openPipeline() then replaces it with that pipeline's board. */
-function openDept(pid){ go('crm'); if(pid && window.openPipeline) window.openPipeline(pid); }
-window.openDept=openDept;
-function deptIcon(n){ n=String(n||'').toLowerCase();
-  if(/sample|report|diagnos|\blab\b|test/.test(n)) return '🔬';
-  if(/home|collection|phlebo/.test(n)) return '🏠';
-  if(/member|card/.test(n)) return '🏷';
-  if(/vendor|payable|\bap\b/.test(n)) return '💳';
-  if(/account|receiv|invoice|billing/.test(n)) return '📊';
-  if(/train|learn|course|quiz/.test(n)) return '🎓';
-  if(/onboard|employee|\bhr\b|joining/.test(n)) return '🧑‍💼';
-  if(/procure|indent|purchase|supply/.test(n)) return '🛒';
-  if(/complaint|grievance|escalat/.test(n)) return '⚠️';
-  if(/asset|equip|mainten|amc/.test(n)) return '🛠';
-  if(/franchis/.test(n)) return '🏪';
-  return '📁';
-}
-/* Scope a pipeline's counts to a branch using the backend's byBranch breakdown.
-   branchId '' (or falsy) = org-wide totals. If a branch is chosen but the pipeline has no
-   instances there, returns zeros. */
-function procCounts(p,branchId){
-  if(branchId){
-    var b=(p.byBranch&&p.byBranch[branchId])||null;
-    return b?{open:Number(b.open)||0,dueToday:Number(b.dueToday)||0,overdue:Number(b.overdue)||0}:{open:0,dueToday:0,overdue:0};
-  }
-  return {open:Number(p.open)||0,dueToday:Number(p.dueToday)||0,overdue:Number(p.overdue)||0};
-}
-function deptCard(p,cardRev,sc){
-  sc=sc||procCounts(p,'');
-  var open=sc.open||0, due=sc.dueToday||0, over=sc.overdue||0;
-  var ot=open>0?Math.round((open-over)/open*100):100;
-  var cls=over===0?'ok':((over/Math.max(open,1))>=0.18?'bad':'warn');
-  var isCard=/member|card/i.test(p.name||'');
-  /* Clickable tile: process tiles deep-link to their pipeline board (CRM kanban);
-     the Staff Training tile opens the Training page. */
-  var click=p.processId ? ' onclick="openDept(\''+esc(p.processId)+'\')"'
-          : (/train/i.test(p.name||'') ? ' onclick="go(\'training\')"' : '');
-  var goHint=click?'<span class="go">open ›</span>':'';
-  var foot=(isCard&&cardRev)
-    ? '<div class="dept-foot"><span class="rev">₹'+fmtMoney(cardRev)+'</span><span class="ot">'+ot+'% on-time</span>'+goHint+'</div>'
-    : '<div class="dept-foot"><span class="ot">'+ot+'% on-time</span>'+goHint+'</div>';
-  return '<div class="dept-card'+(click?' clickable':'')+'"'+click+'>'+
-    '<div class="dept-top"><span class="dept-ic">'+deptIcon(p.name)+'</span><span class="dept-nm">'+esc(p.name)+'</span><span class="ddot '+cls+'"></span></div>'+
-    '<div class="dept-open"><b>'+open+'</b><span>open</span></div>'+
-    '<div class="dept-sub"><span class="due">'+due+' due</span><span class="over">'+over+' overdue</span></div>'+
-    foot+'</div>';
-}
+/* v307: openDept / deptIcon / procCounts / deptCard removed with the department health board. */
 
 /* employees */
 function loadEmployees(){
@@ -1232,7 +1132,7 @@ function loadProfile(){
           (e.PhotoURL?'<img src="'+esc(e.PhotoURL)+'" style="width:100%;height:100%;object-fit:cover;" alt="">':'<span style="font-size:26px;color:#bbb;">'+esc((e.FullName||'?').slice(0,1).toUpperCase())+'</span>')+
         '</div>'+
         '<div><input type="file" id="pPhotoFile" accept="image/*" style="display:none;"><button class="btn ghost sm" id="pPhotoBtn">📷 Upload photo</button>'+
-        '<div style="font-size:11px;color:var(--muted);margin-top:5px;">Appears on the Star performers board.</div></div>'+
+        '<div style="font-size:11px;color:var(--muted);margin-top:5px;">Shown beside your name across the app.</div></div>'+
       '</div>'+
       '<div class="grid2">'+
       '<div class="field"><label>Employee ID</label><div>'+esc(e.EmpID)+'</div></div>'+

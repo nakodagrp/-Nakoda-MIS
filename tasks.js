@@ -6,6 +6,11 @@
   function meId(){ return S.user&&S.user.EmpID; }
   function calToItem(e){ return { taskId:'CAL::'+e.entryId, calId:e.entryId, isCal:true, source:'calendar', title:e.title, dueDate:e.date, dueTime:e.startTime, endTime:e.endTime, priority:'', status:(String(e.status)==='done'?'done':'open'), checklist:(e.checklist||'[]'), notes:(e.notes||'') }; }
   function combined(){ return TASKS.concat(CALITEMS); }
+  /* v307: the CRM/process engine is gone, but its rows are still in the Tasks sheet — deliberately, so
+     the history survives. Nothing can open them any more (there is no stage board to open), so a
+     "CRM stage" row here would be a dead end: tappable, unresolvable, and permanently overdue. Filter
+     them out of every list on the way in. No row is modified or deleted; they simply stop being shown. */
+  function live(arr){ return (arr||[]).filter(function(t){ var s=String(t&&t.source); return s!=='process' && s!=='nrlead'; }); }
 
   function pc(t){ try{ return Array.isArray(t.checklist)?t.checklist:JSON.parse(t.checklist||'[]'); }catch(e){ return []; } }
   function todayStr(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
@@ -64,15 +69,15 @@
   function loadData(){
     var owner=curOwner(), self=isSelfView(); DELEG=[];
     if(self){
-      API.cachedTasks().then(function(t){ if(t&&t.length){ TASKS=t; paintList(); } else { var b=document.getElementById('taskList'); if(b) b.innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>'; } });
-      API.listMyTasks().then(function(r){ if(r.ok){ TASKS=r.tasks||[]; paintList(); } });
+      API.cachedTasks().then(function(t){ t=live(t); if(t&&t.length){ TASKS=t; paintList(); } else { var b=document.getElementById('taskList'); if(b) b.innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>'; } });
+      API.listMyTasks().then(function(r){ if(r.ok){ TASKS=live(r.tasks); paintList(); } });
       API.cachedCalendar(owner).then(function(e){ if(e){ CALITEMS=e.filter(function(x){return String(x.status)!=='deleted';}).map(calToItem); paintList(); } });
       API.listCalendar(owner).then(function(r){ if(r&&r.ok){ CALITEMS=(r.entries||[]).map(calToItem); paintList(); } });
       API.listAssignedByMe().then(function(r){ if(r&&r.ok){ DELEG=(r.tasks||[]).map(function(t){ t.isDeleg=true; return t; }); paintList(); } });
     } else {
       TASKS=[]; CALITEMS=[]; var b=document.getElementById('taskList'); if(b) b.innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>';
-      API.cachedTasksFor(owner).then(function(t){ if(t&&t.length){ TASKS=t; paintList(); } });
-      API.listTasksFor(owner).then(function(r){ if(r&&r.ok){ TASKS=r.tasks||[]; paintList(); } });
+      API.cachedTasksFor(owner).then(function(t){ t=live(t); if(t&&t.length){ TASKS=t; paintList(); } });
+      API.listTasksFor(owner).then(function(r){ if(r&&r.ok){ TASKS=live(r.tasks); paintList(); } });
       API.cachedCalendar(owner).then(function(e){ if(e){ CALITEMS=e.filter(function(x){return String(x.status)!=='deleted';}).map(calToItem); paintList(); } });
       API.listCalendar(owner).then(function(r){ if(r&&r.ok){ CALITEMS=(r.entries||[]).map(calToItem); paintList(); } });
     }
@@ -83,13 +88,12 @@
       if(key==='me') return t.source==='assigned'||t.source==='training';
       if(key==='recurring') return t.source==='recurring' && t.status!=='done';
       if(key==='calendar') return t.isCal;
-      if(key==='process') return t.source==='process' && t.status!=='done';
       return false; }).length;
   }
   function paintChips(){
     var ALL=dedupTasks(combined());
     var defs=[['today','Today'],['upcoming','Upcoming'],['overdue','Overdue'],['done','Done'],['all','All'],
-              ['me','Assigned to me'],['others','Assigned to others'],['recurring','Recurring'],['calendar','Calendar'],['process','Process']];
+              ['me','Assigned to me'],['others','Assigned to others'],['recurring','Recurring'],['calendar','Calendar']];
     document.getElementById('taskChips').innerHTML=defs.map(function(d){
       var on=FILTER===d[0], n;
       if(['today','upcoming','overdue','done'].indexOf(d[0])>=0) n=ALL.filter(function(t){return bucket(t)===d[0];}).length;
@@ -136,7 +140,6 @@
         case 'me': return t.source==='assigned'||t.source==='training';
         case 'recurring': return t.source==='recurring' && t.status!=='done';
         case 'calendar': return t.isCal;
-        case 'process': return t.source==='process' && t.status!=='done';
       }
       return true;
     }));
@@ -170,7 +173,7 @@
     }).join('');
     box.querySelectorAll('.tcard').forEach(function(el){ el.onclick=function(ev){ if(ev.target.getAttribute('data-tog')) return; var id=el.getAttribute('data-id'); var tk=byId(id);
       if(id.indexOf('CAL::')===0){ if(window.openCalendarEntryById && tk) window.openCalendarEntryById(tk.calId, function(){ if(window.renderMyTasks) window.renderMyTasks(); }); return; }
-      if(tk && (tk.source==='process'||tk.source==='nrlead') && tk.instanceId && window.openProcessInstance){ window.openProcessInstance(tk.instanceId, function(){ if(window.renderMyTasks) window.renderMyTasks(); }); return; }
+      /* v307: the branch that opened a CRM stage board from a task is gone with the board. */
       openTaskDetail(id); }; });
     box.querySelectorAll('[data-tog]').forEach(function(b){ b.onclick=function(ev){ ev.stopPropagation(); toggleDone(b.getAttribute('data-tog')); }; });
   }
@@ -182,7 +185,7 @@
       API.updateCalEntry(t.calId,{status:nc},curOwner()).then(function(){
         API.listCalendar(curOwner()).then(function(r){ if(r&&r.ok){ CALITEMS=(r.entries||[]).map(calToItem); paintList(); } }).catch(function(){});
       }); return; }
-    var ns=t.status==='done'?'open':'done'; t.status=ns; t._pending=true; paintList(); API.setTaskStatus(id,ns).then(function(){ return API.listMyTasks(); }).then(function(r){ if(r&&r.ok) TASKS=r.tasks||[]; paintList(); }); }
+    var ns=t.status==='done'?'open':'done'; t.status=ns; t._pending=true; paintList(); API.setTaskStatus(id,ns).then(function(){ return API.listMyTasks(); }).then(function(r){ if(r&&r.ok) TASKS=live(r.tasks); paintList(); }); }
 
   /* v262: inline attendance panel for the "Approve attendance" task. Before this the task carried only
      a sentence telling the approver to go and look the punch up in the Attendance screen, which meant
@@ -590,7 +593,7 @@
         vp.then(function(r){ if(r&&r.ok){ closeModal(); toast('Verified & completed'); if(window.renderMyTasks) window.renderMyTasks(); else paintList(); } else { toast((r&&r.error)||'Could not verify',true); btn.disabled=false; } });
         return;
       }
-      var ns=t.status==='done'?'open':'done'; t.status=ns; t._pending=true; closeModal(); paintList(); toast(ns==='done'?'Task completed':'Task reopened'); API.setTaskStatus(t.taskId,ns).then(function(){ return API.listMyTasks(); }).then(function(r){ if(r&&r.ok) TASKS=r.tasks||[]; paintList(); });
+      var ns=t.status==='done'?'open':'done'; t.status=ns; t._pending=true; closeModal(); paintList(); toast(ns==='done'?'Task completed':'Task reopened'); API.setTaskStatus(t.taskId,ns).then(function(){ return API.listMyTasks(); }).then(function(r){ if(r&&r.ok) TASKS=live(r.tasks); paintList(); });
     };
   }
 
@@ -623,7 +626,7 @@
       if(!data.title){ toast('Title is required.',true); return; }
       var btn=document.getElementById('tk_save'); btn.disabled=true; btn.innerHTML='<span class="loader"></span>';
       var p=editing?API.updateTask(t.taskId,data):API.createTask(data);
-      p.then(function(r){ if(!r.ok){ toast(r.error,true); btn.disabled=false; btn.textContent=editing?'Save':'Create task'; return; } closeModal(); toast(r.offline?'Saved on device — will sync':'Saved'); API.cachedTasks().then(function(c){ if(c){TASKS=c;} renderMyTasks(); }); });
+      p.then(function(r){ if(!r.ok){ toast(r.error,true); btn.disabled=false; btn.textContent=editing?'Save':'Create task'; return; } closeModal(); toast(r.offline?'Saved on device — will sync':'Saved'); API.cachedTasks().then(function(c){ if(c){TASKS=live(c);} renderMyTasks(); }); });
     };
   }
 
@@ -641,8 +644,7 @@
     var v=document.getElementById('page-taskmon'), ALLT=[], ALLC=[], FUP=[], FILT='all', EMP='';
     var canPick=S.perms&&S.perms.canViewAll, branches=(S.meta&&S.meta.branches)||[];
     var brOpts='<option value="">All branches</option>'+branches.map(function(b){return '<option value="'+esc(b.BranchID)+'">'+esc(b.BranchName)+'</option>';}).join('');
-    v.innerHTML='<div class="page-head"><h1>Process Flow Monitor</h1></div>'+
-      '<div class="seg tm-seg" id="tmSeg"><div data-v="tasks" class="on">Tasks &amp; Schedule</div><div data-v="proc">Processes (stage by stage)</div><div data-v="score">Activity scorecard</div></div>'+
+    v.innerHTML='<div class="page-head"><h1>Follow-ups</h1></div>'+
       '<div id="saOverdue"></div>'+
       '<div id="puOverdue"></div>'+
       '<div id="tmMain">'+
@@ -654,14 +656,10 @@
         '<div id="tmKpis" class="kpis"></div>'+
         '<div id="tmFilt" class="tmfilt"></div>'+
         '<div class="section-label">Overdue — follow up</div><div id="tmList"></div>'+
-      '</div>'+
-      '<div id="tmProc" class="hidden"></div>'+
-      '<div id="tmScore" class="hidden"></div>';
-    var procLoaded=false, scoreLoaded=false;
-    document.querySelectorAll('#tmSeg div').forEach(function(d){ d.onclick=function(){ document.querySelectorAll('#tmSeg div').forEach(function(z){z.classList.remove('on');}); d.classList.add('on'); var v=d.getAttribute('data-v');
-      document.getElementById('tmMain').classList.toggle('hidden',v!=='tasks'); document.getElementById('tmProc').classList.toggle('hidden',v!=='proc'); document.getElementById('tmScore').classList.toggle('hidden',v!=='score');
-      if(v==='proc' && !procLoaded && window.renderProcessGridInto){ procLoaded=true; window.renderProcessGridInto(document.getElementById('tmProc')); }
-      if(v==='score' && !scoreLoaded){ scoreLoaded=true; renderScorecard(document.getElementById('tmScore')); } }; });
+      '</div>';
+    /* v307: the segmented control is gone. Two of its three tabs — "Processes (stage by stage)" and
+       "Activity scorecard" — were views over the CRM/process engine and went with it. What is left is
+       the follow-up list, which was always the useful half and never touched processes at all. */
     if(canPick){ var sel=document.getElementById('tmBranch'); if(sel) sel.addEventListener('change',function(){ EMP=''; var e=document.getElementById('tmEmp'); if(e) e.value=''; paint(); }); }
     var esel=document.getElementById('tmEmp'); if(esel) esel.addEventListener('change',function(){ EMP=this.value; paint(); });
 
@@ -826,69 +824,15 @@
       }).join('');
       box.querySelectorAll('[data-di]').forEach(function(b){ b.onclick=function(){ openCompleteItem(list[parseInt(b.getAttribute('data-di'),10)]); }; });
     }
-    function renderScorecard(box){
-      var d0=new Date(); d0.setDate(d0.getDate()-30);
-      var from=d0.getFullYear()+'-'+String(d0.getMonth()+1).padStart(2,'0')+'-'+String(d0.getDate()).padStart(2,'0');
-      box.innerHTML='<div style="color:#888;font-size:13px;margin:10px 0 12px">Calls &amp; meetings each person logged across all CRM pipelines, in the chosen period.</div>'+
-        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">'+
-          '<label style="font-size:12px;color:#666">From <input type="date" id="scFrom" class="greet-select" value="'+from+'"></label>'+
-          '<label style="font-size:12px;color:#666">To <input type="date" id="scTo" class="greet-select" value="'+todayStr()+'"></label>'+
-          '<button class="btn ghost sm" id="scGo">Apply</button>'+
-        '</div><div id="scBody"><div class="center-load"><span class="loader dark"></span> Loading…</div></div>';
-      function load(){
-        var f=(document.getElementById('scFrom')||{}).value||'', t=(document.getElementById('scTo')||{}).value||'';
-        document.getElementById('scBody').innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>';
-        API.activityScorecard(f,t).then(function(r){
-          var b=document.getElementById('scBody'); if(!b) return;
-          if(!r||!r.ok){ b.innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; return; }
-          var rows=r.rows||[]; if(!rows.length){ b.innerHTML='<div class="empty">No activity logged in this period.</div>'; return; }
-          var tc=0,tm=0,tt=0; rows.forEach(function(x){ tc+=x.calls; tm+=x.meetings; tt+=x.total; });
-          b.innerHTML='<div class="kpis">'+
-              '<div class="kpi" style="background:#fdecec"><div class="n" style="color:#C0392B">'+tc+'</div><div class="l">Calls</div></div>'+
-              '<div class="kpi" style="background:#eef6ff"><div class="n" style="color:#2563c9">'+tm+'</div><div class="l">Meetings</div></div>'+
-              '<div class="kpi" style="background:#f1effc"><div class="n" style="color:#6f63d6">'+tt+'</div><div class="l">Total touches</div></div></div>'+
-            '<table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:13px">'+
-              '<thead><tr style="text-align:left;color:#888;border-bottom:1px solid #eee"><th style="padding:7px">Person</th><th>Branch</th><th style="text-align:center">Calls</th><th style="text-align:center">Meetings</th><th style="text-align:center">Other</th><th style="text-align:center">Total</th></tr></thead><tbody>'+
-              rows.map(function(x){ return '<tr style="border-bottom:1px solid #f3f3f3"><td style="padding:7px"><b>'+esc(x.name)+'</b><div style="font-size:11px;color:#999">'+esc(x.role)+'</div></td><td>'+esc(tbn(x.branch))+'</td><td style="text-align:center">'+x.calls+'</td><td style="text-align:center">'+x.meetings+'</td><td style="text-align:center">'+x.other+'</td><td style="text-align:center"><b>'+x.total+'</b></td></tr>'; }).join('')+
-              '</tbody></table>';
-        });
-      }
-      var g=document.getElementById('scGo'); if(g) g.onclick=load; load();
-    }
+    /* v307: renderScorecard removed — the Activity scorecard counted calls and meetings logged
+       across CRM pipelines, and those pipelines no longer exist. */
+    /* Cache-first paint, then refresh from the server — unchanged from v306. */
     Promise.all([API.cachedAllTasks(),API.cachedAllCalendar(),API.cachedFollowups()]).then(function(a){ if(a[0]) ALLT=a[0]; if(a[1]) ALLC=a[1]; if(a[2]) FUP=a[2]; if((a[0]&&a[0].length)||(a[1]&&a[1].length)||(a[2]&&a[2].length)) paint(); else document.getElementById('tmList').innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>'; });
     API.listAllTasks().then(function(r){ if(r.ok){ ALLT=r.tasks||[]; paint(); } });
     API.listAllCalendar().then(function(r){ if(r.ok){ ALLC=r.entries||[]; paint(); } });
     API.pcFollowups().then(function(r){ if(r.ok){ FUP=r.items||[]; paint(); } });
   }
 
-  window.renderMyTasks=renderMyTasks;
-  window.openTaskDetail=openTaskDetail;
-  /* ============================================================================
-     v262: the dashboard "My tasks" block reuses THIS file's logic rather than
-     reimplementing it. The first version had its own copy of the bucket rules and counted only
-     DASH.tasks, so the dashboard read Overdue 4 / Upcoming 0 / Done 152 while this page read
-     13 / 4 / 188 — because this page counts dedupTasks(tasks + calendar entries). Exporting the
-     real functions means the two can never disagree again.
-     ============================================================================ */
-  window.taskShared={
-    calToItem:calToItem,      // calendar entry -> task-shaped item
-    dedup:dedupTasks,         // same de-duplication (process/nrlead collapse by instance)
-    bucket:bucket,            // today | overdue | upcoming | done | nr
-    dueLabel:dueLabel,        // "Today 09:52" / "28 Jul"
-    pri:PRI,                  // priority dot colours
-    /* Open the same popup from the dashboard. TASKS/CALITEMS are empty until this page has been
-       visited, so byId() would find nothing — seed them from the dashboard's own copy first.
-       Harmless to overwrite: renderMyTasks() re-fetches whenever the page is opened. */
-    open:function(taskId, tasks, calEntries){
-      TASKS=(tasks||[]).slice();
-      CALITEMS=(calEntries||[]).filter(function(x){ return String(x.status)!=='deleted'; }).map(calToItem);
-      if(String(taskId).indexOf('CAL::')===0){
-        var it=byId(taskId);
-        if(it && window.openCalendarEntryById){ window.openCalendarEntryById(it.calId, function(){ if(window.renderDashTasks) window.renderDashTasks(); }); return; }
-      }
-      openTaskDetail(taskId);
-    }
-  };
   window.renderTaskMonitor=function(){ renderTaskMonitor(); try{ if(window.renderSAOverdue) window.renderSAOverdue(document.getElementById('saOverdue')); }catch(e){}
     try{ if(window.renderPUOverdue) window.renderPUOverdue(document.getElementById('puOverdue')); }catch(e){} };
 })();
