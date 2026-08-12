@@ -226,7 +226,7 @@
         }).catch(function(){ ap.disabled=false; ap.textContent='🚀 Send via Official API'; st.textContent='Network error — try again.'; toast('Network error — sending via API needs internet.',true); });
       };
       var ac=document.getElementById('cdActivate'); if(ac) ac.onclick=function(){ API.markCardActivated(c.cardNumber).then(function(rr){ if(rr.ok){ closeModal(); toast('Marked activated'); renderMembershipCards(); } else toast(rr.error,true); }); };
-      var rn=document.getElementById('cdRenew'); if(rn) rn.onclick=function(){ if(!confirm('Renew this card? A new card with a fresh '+(t?t.validityMonths:12)+'-month validity will be issued.')) return; API.renewCard(c.cardNumber).then(function(rr){ if(rr.ok){ closeModal(); toast('Renewed: '+rr.card.cardNumber); openCardDetail(rr.card.cardNumber, rr); } else toast(rr.error,true); }); };
+      var rn=document.getElementById('cdRenew'); if(rn) rn.onclick=function(){ if(!confirm('Renew this card? A new card with a fresh '+(t?t.validityMonths:12)+'-month validity will be issued.')) return; API.renewCard(c.cardNumber).then(function(rr){ if(rr.ok){ closeModal(); toast('Renewed: '+rr.card.cardNumber); renderMembershipCards(); } else toast(rr.error,true); }); };   /* v308e: back to the v306 behaviour — renew repaints the list and does not open the new card */
       var cn=document.getElementById('cdCancel'); if(cn) cn.onclick=function(){ var why=prompt('Reason for cancelling?',''); if(why===null) return; API.cancelCard(c.cardNumber,why).then(function(rr){ if(rr.ok){ closeModal(); toast('Card cancelled'); renderMembershipCards(); } else toast(rr.error,true); }); };
     });
   }
@@ -281,9 +281,14 @@
       if(!data.typeId){ toast('Select a card type.',true); return; }
       var btn=document.getElementById('ic_save'); btn.disabled=true; btn.innerHTML='<span class="loader"></span> Creating…';
       API.issueCard(data).then(function(r){
-        if(r.ok){ closeModal(); toast('Card issued: '+r.card.cardNumber); openCardDetail(r.card.cardNumber, r); return; }
+        /* v308e: renderMembershipCards() is back. I removed it in v308c thinking API.issueCard's
+           refreshCards() covered it — it does not. refreshCards only refills the IndexedDB CACHE; it
+           never repaints the table on screen. So the card was created correctly and was simply absent
+           from the list until the page was reopened. The `r` second argument still saves the extra
+           round trip for the detail panel, which was the part actually worth saving. */
+        if(r.ok){ closeModal(); toast('Card issued: '+r.card.cardNumber); openCardDetail(r.card.cardNumber, r); renderMembershipCards(); return; }
         if(String(r.error).indexOf('DUPLICATE')===0){
-          if(confirm(r.error.replace('DUPLICATE: ','')+'\n\nReplace the old card and issue this new one?')){ data.replaceExisting=true; return API.issueCard(data).then(function(r2){ if(r2.ok){ closeModal(); toast('Card issued: '+r2.card.cardNumber); openCardDetail(r2.card.cardNumber, r2); } else toast(r2.error,true); }); }
+          if(confirm(r.error.replace('DUPLICATE: ','')+'\n\nReplace the old card and issue this new one?')){ data.replaceExisting=true; return API.issueCard(data).then(function(r2){ if(r2.ok){ closeModal(); toast('Card issued: '+r2.card.cardNumber); openCardDetail(r2.card.cardNumber, r2); renderMembershipCards(); } else toast(r2.error,true); }); }
         } else { toast(r.error,true); }
         btn.disabled=false; btn.textContent='Create card';
       }).catch(function(){ toast('Issuing a card needs an internet connection.',true); btn.disabled=false; btn.textContent='Create card'; });
