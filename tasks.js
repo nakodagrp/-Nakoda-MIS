@@ -90,36 +90,14 @@
       if(key==='calendar') return t.isCal;
       return false; }).length;
   }
-  /* ============================================================================================
-     v312 — THE POPUP CAN BE OPENED FROM TWO PLACES, AND ONLY ONE OF THEM HAS THIS PAGE.
-
-     #taskChips and #taskList are created by renderMyTasks(). Open a task from the DASHBOARD and
-     neither exists — so paintChips() ran `document.getElementById('taskChips').innerHTML = …` on
-     null and threw "Cannot set properties of null". Tapping Complete on a task opened from the
-     dashboard therefore failed every time.
-
-     This has been latent since v306; it could not show itself while the dashboard route was dead
-     (see the v311 note about the deleted exports). Restoring that route exposed it immediately.
-
-     Both painters now no-op when their host is absent, and repaintAfterChange() below repaints
-     whichever screen the person is actually looking at.
-     ============================================================================================ */
-  function onTasksPage(){ return !!document.getElementById('taskList'); }
-  function repaintAfterChange(reload){
-    if(onTasksPage()){
-      if(reload && window.renderMyTasks) window.renderMyTasks(); else paintList();
-      return;
-    }
-    /* On the dashboard. The task objects here are the SAME objects the dashboard holds — taskShared
-       .open() seeds TASKS from DT_SRC.tasks by reference — so a status flipped in the popup is
-       already visible to renderDashTasks and it repaints correctly without a round trip. */
-    try{
-      if(reload && window.loadDashboard) window.loadDashboard();
-      else if(window.renderDashTasks) window.renderDashTasks();
-    }catch(e){}
-  }
-
   function paintChips(){
+    /* v312 — THIS WAS THE "Cannot set properties of null" CRASH.
+       #taskChips and #taskList only exist once renderMyTasks() has drawn the My Tasks page. Every
+       popup action button finishes by calling paintList(), and since v311 restored window.taskShared
+       those popups can be opened straight from the DASHBOARD — where that page has never been drawn.
+       So Complete wrote innerHTML onto null and threw, leaving the task ticked locally but the error
+       banner up. Guarding here rather than at each of the ~8 call sites, so no future caller can
+       reintroduce it. */
     var host=document.getElementById('taskChips'); if(!host) return;
     var ALL=dedupTasks(combined());
     var defs=[['today','Today'],['upcoming','Upcoming'],['overdue','Overdue'],['done','Done'],['all','All'],
@@ -161,7 +139,23 @@
   }
   function paintList(){
     paintChips();
-    var box=document.getElementById('taskList'); if(!box) return;
+    var box=document.getElementById('taskList');
+    /* Off the My Tasks page (i.e. the popup came from the dashboard) there is nothing here to paint.
+       Rather than silently do nothing, mirror the statuses this file now holds into the dashboard's
+       own copy and repaint that — otherwise you complete a task, the popup closes, and the card sits
+       there still looking open until the next full refresh. Same optimistic pattern as dtToggle. */
+    if(!box){
+      try{
+        if(window.DASH && window.renderDashTasks){
+          var mine={}; combined().forEach(function(t){ mine[String(t.taskId)]=String(t.status); });
+          (window.DASH.tasks||[]).forEach(function(x){
+            var st=mine[String(x.taskId)]; if(st) x.status=st;
+          });
+          window.renderDashTasks();
+        }
+      }catch(e){}
+      return;
+    }
     var src=(FILTER==='others')?DELEG:combined();
     var list=dedupTasks(src.filter(function(t){ if(t.status==='deleted') return false;
       switch(FILTER){
@@ -580,7 +574,7 @@
       var rp=isAtt?API.setAttendance(t.instanceId,{approvalStatus:'rejected',status:'absent',notes:note})
         :isLeave?API.setLeave(t.instanceId,'reject',note)
         :isDep?API.rejectDeposit(t.instanceId,note):API.rejectDaily(t.instanceId,note);
-      rp.then(function(r){ if(r&&r.ok){ closeModal(); toast(isAtt?'Attendance rejected':isDep?'Deposit rejected':isLeave?'Leave rejected — the applicant has been notified':'Entry rejected — the sender has been notified'); repaintAfterChange(true); } else { toast((r&&r.error)||'Could not reject',true); rj.disabled=false; } });
+      rp.then(function(r){ if(r&&r.ok){ closeModal(); toast(isAtt?'Attendance rejected':isDep?'Deposit rejected':isLeave?'Leave rejected — the applicant has been notified':'Entry rejected — the sender has been notified'); if(window.renderMyTasks) window.renderMyTasks(); else paintList(); } else { toast((r&&r.error)||'Could not reject',true); rj.disabled=false; } });
     };
     if(isDaily){
       API.getDaily(t.instanceId).then(function(r){ var box=document.getElementById('tdDaily'); if(!box) return;
@@ -616,7 +610,7 @@
         var sel=document.getElementById('tdAttStatus');
         if(sel && sel.value && sel.value!==String(sel.getAttribute('data-was')||'')) ap.status=sel.value;
         API.setAttendance(t.instanceId,ap).then(function(r){
-          if(r&&r.ok){ closeModal(); toast('Attendance approved'); repaintAfterChange(true); }
+          if(r&&r.ok){ closeModal(); toast('Attendance approved'); if(window.renderMyTasks) window.renderMyTasks(); else paintList(); }
           else { toast((r&&r.error)||'Could not approve',true); ab.disabled=false; }
         });
         return;
@@ -624,11 +618,10 @@
       if((isDaily||isDep) && t.status!=='done'){
         var btn=this; btn.disabled=true;
         var vp=isDep?API.verifyDeposit(t.instanceId):API.verifyDaily(t.instanceId);
-        vp.then(function(r){ if(r&&r.ok){ closeModal(); toast('Verified & completed'); repaintAfterChange(true); } else { toast((r&&r.error)||'Could not verify',true); btn.disabled=false; } });
+        vp.then(function(r){ if(r&&r.ok){ closeModal(); toast('Verified & completed'); if(window.renderMyTasks) window.renderMyTasks(); else paintList(); } else { toast((r&&r.error)||'Could not verify',true); btn.disabled=false; } });
         return;
       }
-      var ns=t.status==='done'?'open':'done'; t.status=ns; t._pending=true; closeModal(); repaintAfterChange(); toast(ns==='done'?'Task completed':'Task reopened');
-      API.setTaskStatus(t.taskId,ns).then(function(){ return API.listMyTasks(); }).then(function(r){ if(r&&r.ok) TASKS=live(r.tasks); repaintAfterChange(); });
+      var ns=t.status==='done'?'open':'done'; t.status=ns; t._pending=true; closeModal(); paintList(); toast(ns==='done'?'Task completed':'Task reopened'); API.setTaskStatus(t.taskId,ns).then(function(){ return API.listMyTasks(); }).then(function(r){ if(r&&r.ok) TASKS=live(r.tasks); paintList(); });
     };
   }
 
@@ -812,13 +805,14 @@
       var lv=all.filter(function(i){return i.kind==='lv';}), tr=all.filter(function(i){return i.kind==='tr';});
       var staff={}; all.forEach(function(i){ staff[i.name]=1; });
       var lateN=all.filter(function(i){ return i.late || (i.kind==='att' && i.state==='late'); }).length;
-      document.getElementById('tmKpis').innerHTML=
+      var _k=document.getElementById('tmKpis'); if(!_k) return;   /* v312: navigated away mid-load */
+      _k.innerHTML=
         '<div class="kpi" style="background:#fdecec"><div class="n" style="color:#C0392B">'+tasks.length+'</div><div class="l">Overdue tasks</div></div>'+
         '<div class="kpi" style="background:#f1effc"><div class="n" style="color:#6f63d6">'+sch.length+'</div><div class="l">Missed schedule</div></div>'+
         '<div class="kpi" style="background:#fdf0e9"><div class="n" style="color:#993C1D">'+lateN+'</div><div class="l">Late in</div></div>'+
         '<div class="kpi" style="background:#fff7e6"><div class="n" style="color:#b08900">'+Object.keys(staff).length+'</div><div class="l">People to chase</div></div>';
       var fdef=[['all','All ('+all.length+')'],['task','Tasks ('+tasks.length+')'],['sch','Schedule ('+sch.length+')'],['dc','Daily cash ('+dc.length+')'],['att','Attendance ('+att.length+')'],['lv','Leave ('+lv.length+')'],['tr','Training ('+tr.length+')']];
-      document.getElementById('tmFilt').innerHTML=fdef.map(function(f){ return '<button data-f="'+f[0]+'" class="'+(FILT===f[0]?'on':'')+'">'+f[1]+'</button>'; }).join('');
+      var _f=document.getElementById('tmFilt'); if(_f) _f.innerHTML=fdef.map(function(f){ return '<button data-f="'+f[0]+'" class="'+(FILT===f[0]?'on':'')+'">'+f[1]+'</button>'; }).join('');
       document.querySelectorAll('#tmFilt button').forEach(function(b){ b.onclick=function(){ FILT=b.getAttribute('data-f'); paint(); }; });
       var BUCK={task:tasks, sch:sch, dc:dc, att:att, lv:lv, tr:tr};
       var list = BUCK[FILT] || all;
@@ -862,7 +856,7 @@
     /* v307: renderScorecard removed — the Activity scorecard counted calls and meetings logged
        across CRM pipelines, and those pipelines no longer exist. */
     /* Cache-first paint, then refresh from the server — unchanged from v306. */
-    Promise.all([API.cachedAllTasks(),API.cachedAllCalendar(),API.cachedFollowups()]).then(function(a){ if(a[0]) ALLT=a[0]; if(a[1]) ALLC=a[1]; if(a[2]) FUP=a[2]; if((a[0]&&a[0].length)||(a[1]&&a[1].length)||(a[2]&&a[2].length)) paint(); else document.getElementById('tmList').innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>'; });
+    Promise.all([API.cachedAllTasks(),API.cachedAllCalendar(),API.cachedFollowups()]).then(function(a){ if(a[0]) ALLT=a[0]; if(a[1]) ALLC=a[1]; if(a[2]) FUP=a[2]; if((a[0]&&a[0].length)||(a[1]&&a[1].length)||(a[2]&&a[2].length)) paint(); else { var _l=document.getElementById('tmList'); if(_l) _l.innerHTML='<div class="center-load"><span class="loader dark"></span> Loading…</div>'; } });
     API.listAllTasks().then(function(r){ if(r.ok){ ALLT=r.tasks||[]; paint(); } });
     API.listAllCalendar().then(function(r){ if(r.ok){ ALLC=r.entries||[]; paint(); } });
     API.pcFollowups().then(function(r){ if(r.ok){ FUP=r.items||[]; paint(); } });
