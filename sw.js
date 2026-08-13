@@ -4,7 +4,8 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v308';  /* v308: expenses file as pending (no self-approval), reject needs a reason, duplicate expense/deposit writes made idempotent, card issuing halved its sheet reads. Includes all of v307. */
+var CACHE_VERSION = 'nakoda-mis-v309';  /* v309: Operations process 1 — sample collection to report sent. New ops.js module, Ops_Samples
+     sheet, Collect sample on the dashboard, and a Send report task that closes itself. Includes all of v308. */
 var SHELL = [
   './',
   './index.html',
@@ -35,6 +36,7 @@ var SHELL = [
   './statementtable.js',
   './partnerreview.js',
   './bankpreview.js',
+  './ops.js',
   './quicklog.js',
   './extras.js',
   './icons/login-logo.png',
