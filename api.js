@@ -56,7 +56,11 @@
     createPayRequest:1,setPayRequest:1,
     saveSection:1,deleteSection:1,saveVideo:1,deleteVideo:1,submitQuiz:1,saveAsset:1,deleteAsset:1,logRepeat:1,
     login:1,validate:1,logout:1,uploadFile:1,importOldCards:1,attachSelfie:1,waTest:1,waSendCard:1,saveWaTemplate:1,waTestTemplate:1,
-    submitSuggestion:1,replySuggestion:1,saveFixedAsset:1,deleteFixedAsset:1,completeFollowup:1};
+    submitSuggestion:1,replySuggestion:1,saveFixedAsset:1,deleteFixedAsset:1,completeFollowup:1,
+    /* v309 — operations. Both queue: a technician records a sample with no signal and it syncs
+       later, and a hand delivery can be recorded the same way. saveSample carries a clientId the
+       device minted first, so a replay updates its own row instead of creating a second sample. */
+    saveSample:1,sendSampleReport:1};
   /* Writes that already do their own optimistic queueing inside the method (don't double-queue here). */
   var SELF_QUEUE={createEmployee:1,updateEmployee:1,setStatus:1,issueCard:1,renewCard:1,cancelCard:1,markCardSent:1,markCardActivated:1,
     createTask:1,updateTask:1,setTaskStatus:1,deleteTask:1,createCalEntry:1,updateCalEntry:1,attachSelfie:1};
@@ -512,6 +516,12 @@
     listPayslips:function(m,b){ return call('listPayslips',{token:getToken(),month:m,branch:b}); },
     myPayslip:function(m){ return call('myPayslip',{token:getToken(),month:m}); },
     myPayHistory:function(n){ return call('myPayHistory',{token:getToken(),months:n||6}); },
+    /* v309 — operations: sample collection -> report sent */
+    saveSample:function(d){ return call('saveSample',{token:getToken(),data:d}); },
+    listSamples:function(b,ym,st){ return call('listSamples',{token:getToken(),branch:b||'',ym:ym||'',sampleStatus:st||''}); },
+    getSample:function(id){ return call('getSample',{token:getToken(),sampleId:id}); },
+    sendSampleReport:function(id,d){ return call('sendSampleReport',{token:getToken(),sampleId:id,data:d||{}}); },
+    opsSummary:function(b){ return call('opsSummary',{token:getToken(),branch:b||''}); },
     saveDaily:function(d){ return call('saveDaily',{token:getToken(),data:d}); },
     listDaily:function(b,ym){ return call('listDaily',{token:getToken(),branch:b,ym:ym}); },
     getDaily:function(id){ return call('getDaily',{token:getToken(),dayId:id}); },

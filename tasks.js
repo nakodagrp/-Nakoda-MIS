@@ -490,6 +490,10 @@
        id the Tasks sheet has never contained and came back "Task not found", and there was no way to
        delete from here at all. Hence "I open it and it does nothing". They get their own panel. */
     if(t.isCal){ openCalDetail(t); return; }
+    /* v309: a "Send report" task is not a tick-box either — open the sample, where the patient's
+       number, the prescription and the report all already are. Sending closes this task server-side
+       (opsCloseSendTask_), so there is no manual Complete for it. */
+    if(t.source==='sample' && t.instanceId && window.openSendReport){ window.openSendReport(t.instanceId, t.taskId); return; }
     var isDaily=(t.source==='accounts' && t.instanceId);
     var isDep=(t.source==='deposit' && t.instanceId);
     var isAtt=(t.source==='attendance' && t.instanceId);   /* instanceId holds the attId — see ensureAttApprovalTasks_ */

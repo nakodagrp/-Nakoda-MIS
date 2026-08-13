@@ -440,6 +440,7 @@ table.pm-grid{border-collapse:collapse;font-size:11px;min-width:560px}
 .py-status-saving{color:#5f5e5a}
 .py-status-saved{color:#0F6E56}
 .py-status-err{color:#A32D2D}
+.py-status-warn{color:#854F0B}
 input.py-edited{border-color:#BA7517!important;background:#FDF7EC!important;box-shadow:inset 2px 0 0 #BA7517}
 /* v295: the punch is in flight. A disabled button with a live spinner replaces the toast that used to
    fade away after two seconds and leave the screen looking untouched — which is what made staff tap
@@ -825,4 +826,88 @@ html,body{overflow-x:hidden}
 @media (max-width:560px){
   .nf-panel{position:fixed;top:62px;left:8px;right:8px;width:auto}
   .nf-list{max-height:calc(100vh - 190px)}
+}
+
+/* ============================================================
+   v309 — OPERATIONS, PROCESS 1: SAMPLE COLLECTION
+   Layout C: list on the left, the selected sample in a detail panel on the right.
+   The whole thing collapses to a single column under 860px, where the list becomes a short
+   horizontal strip above the detail — a phone should not have to scroll a two-pane layout.
+   ============================================================ */
+.ops-sub{font-size:12px;color:var(--muted);align-self:flex-end;padding-bottom:3px}
+
+.ops-chips{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+.ops-fchip{border:1px solid var(--line);background:#fff;color:var(--grey);border-radius:20px;padding:5px 13px;font-size:12.5px;font-weight:600;transition:.15s}
+.ops-fchip:hover{border-color:var(--red);color:var(--red)}
+.ops-fchip.on{background:var(--red);border-color:var(--red);color:#fff}
+
+.ops-chip{display:inline-block;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:600}
+.ops-chip.open{background:#e6f1fb;color:#0c447c}
+.ops-chip.sent{background:#eaf3de;color:#173404}
+.ops-chip.late{background:var(--red-soft);color:var(--red-dark)}
+
+.ops-split{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:0;background:var(--card);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+.ops-list{border-right:1px solid var(--line);max-height:70vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.ops-row{padding:11px 14px;border-bottom:1px solid var(--line);cursor:pointer;border-left:3px solid transparent;transition:.12s}
+.ops-row:hover{background:#fafbfc}
+.ops-row.on{background:#fafbfc;border-left-color:var(--red)}
+.ops-row.late.on{border-left-color:var(--red)}
+.ops-row-n{font-size:13.5px;font-weight:600;color:var(--ink)}
+.ops-row-s{font-size:11.5px;color:#185fa5;margin-top:2px}
+.ops-row-s.done{color:var(--muted);font-weight:400}
+.ops-row-s.late{color:var(--red-dark);font-weight:600}
+
+.ops-detail{padding:16px 18px;min-width:0}
+.ops-dh{font-size:16px;font-weight:600}
+.ops-sid{font-size:11.5px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);font-weight:400}
+.ops-dm{font-size:11.5px;color:var(--muted);margin-top:2px}
+
+.ops-stage{display:flex;align-items:center;gap:8px;margin:14px 0}
+.ops-st{font-size:11.5px;font-weight:600;border-radius:20px;padding:4px 13px;white-space:nowrap}
+.ops-st.done{background:#eaf3de;color:#173404}
+.ops-st.todo{border:1px dashed #cfd3da;color:var(--muted);font-weight:400}
+.ops-st-line{flex:1;height:1px;background:var(--line);min-width:14px}
+
+.ops-kv{width:100%;font-size:13px;border-collapse:collapse}
+.ops-kv td{padding:4px 0;vertical-align:top}
+.ops-kv td:first-child{color:var(--grey);width:42%}
+.ops-kv td:last-child{text-align:right;word-break:break-word}
+.ops-late-txt{color:var(--red-dark);font-weight:600}
+.ops-acts{display:flex;gap:9px;margin-top:16px;flex-wrap:wrap}
+
+/* popup extras */
+.ops-tsug{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
+.ops-tag{border:1px solid var(--line);background:#fafbfc;color:var(--grey);border-radius:20px;padding:4px 11px;font-size:11.5px;font-weight:600;transition:.15s}
+.ops-tag:hover{border-color:var(--red);color:var(--red)}
+.ops-tag.on{background:var(--red);border-color:var(--red);color:#fff}
+.ops-via{display:flex;gap:7px;flex-wrap:wrap}
+.ops-offnote{font-size:11.5px;color:var(--grey);background:#f6f7f9;border-radius:9px;padding:9px 11px;margin-top:12px;line-height:1.5}
+.ops-pcard{background:#f6f7f9;border-radius:10px;padding:10px 12px;margin-bottom:12px}
+
+/* dashboard card */
+.ops-dash{padding:14px 16px}
+.ops-dash-row{display:flex;align-items:center;gap:10px}
+.ops-dash-t{flex:1;text-align:center;border-radius:11px;padding:13px 6px;min-width:0}
+.ops-dash-t .n{font-size:26px;font-weight:700;line-height:1.1}
+.ops-dash-t .l{font-size:11.5px;margin-top:2px}
+.ops-dash-t.collected{background:#e6f1fb}
+.ops-dash-t.collected .n{color:#0c447c}
+.ops-dash-t.collected .l{color:#185fa5}
+.ops-dash-t.sent{background:#eaf3de}
+.ops-dash-t.sent .n{color:#173404}
+.ops-dash-t.sent .l{color:#3b6d11}
+.ops-dash-arrow{color:var(--muted);font-size:17px;flex:0 0 auto}
+.ops-dash-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;border-top:1px solid var(--line);margin-top:12px;padding-top:10px;font-size:11.5px;color:var(--grey)}
+
+.ql-ops{border-color:var(--red)!important;color:var(--red)!important}
+
+@media (max-width:860px){
+  .ops-split{grid-template-columns:1fr}
+  .ops-list{border-right:0;border-bottom:1px solid var(--line);max-height:210px}
+  .ops-detail{padding:14px}
+  .ops-kv td:first-child{width:46%}
+}
+@media (max-width:560px){
+  .ops-sub{display:none}
+  .ops-dash-t .n{font-size:22px}
 }

@@ -329,6 +329,12 @@ function applyPerms(){
      the + Daily entry button in accounts.js canEnter(), and the server gate in Code.gs accEnter_. */
   var canAcc=S.perms.canViewAll||S.perms.level==='BRANCH_MGR'||S.perms.level==='BRANCH_VIEW'||(S.user && ['CRM','Accounts','Senior Technician'].indexOf(S.user.Role)>=0);
   document.querySelectorAll('[data-page="accounts"]').forEach(function(n){ n.classList.toggle('hidden',!canAcc); });
+  /* v309 — Operations ▸ Sample Collection. Anyone who can record a collection gets it, plus the
+     roles that only WATCH it: branch managers, partners and head office see their branch's board
+     without being able to file. opsCanCollect() lives in ops.js and mirrors the server's list. */
+  var canOps=window.opsCanSee ? window.opsCanSee()
+    : ((S.perms.level==='SUPER')||S.perms.canViewAll||S.perms.level==='BRANCH_MGR'||S.perms.level==='BRANCH_VIEW');
+  document.querySelectorAll('[data-page="ops"]').forEach(function(n){ n.classList.toggle('hidden',!canOps); });
   var canMD=(S.perms.level==='SUPER')||(S.user && ['Director','Executive Assistant'].indexOf(S.user.Role)>=0);
   document.querySelectorAll('[data-page="mdinbox"]').forEach(function(n){ n.classList.toggle('hidden',!canMD); });
   /* v197: consultant — bare menu: Dashboard + My Profile ONLY (runs last so it overrides the grants
@@ -366,7 +372,7 @@ var currentPage='dashboard';
 function go(page){
   currentPage=page;
   document.querySelectorAll('.nav-item').forEach(function(n){ n.classList.toggle('active', n.getAttribute('data-page')===page); });
-  ['dashboard','tasks','calendar','attendance','leave','field','policy','training','assets','fixedassets','inventory','payreq','payroll','accounts','recurring','taskmon','employees','profile','branches','watemplates','cards','cardstatus','suggest','mdinbox'].forEach(function(p){ var el=$('page-'+p); if(el) el.classList.toggle('hidden',p!==page); });
+  ['dashboard','tasks','calendar','attendance','leave','field','policy','training','assets','fixedassets','inventory','payreq','payroll','accounts','recurring','taskmon','employees','profile','branches','watemplates','cards','cardstatus','suggest','mdinbox','ops'].forEach(function(p){ var el=$('page-'+p); if(el) el.classList.toggle('hidden',p!==page); });
   if(page==='dashboard') loadDashboard();
   if(page==='tasks' && window.renderMyTasks) window.renderMyTasks();
   if(page==='calendar' && window.renderCalendar) window.renderCalendar();
@@ -385,6 +391,7 @@ function go(page){
   if(page==='accounts' && window.renderAccounts) window.renderAccounts();
   if(page==='recurring' && window.renderRecurring) window.renderRecurring();
   if(page==='taskmon' && window.renderTaskMonitor) window.renderTaskMonitor();
+  if(page==='ops' && window.renderOps) window.renderOps();
   if(page==='employees') loadEmployees();
   if(page==='profile') loadProfile();
   if(page==='branches' && window.renderBranches) window.renderBranches();
@@ -395,7 +402,7 @@ function go(page){
 }
 
 /* ---------- mobile bottom navigation + "More" sheet ---------- */
-var NAVDEF=[['dashboard','▦','Home'],['tasks','✓','Tasks'],['calendar','📅','Calendar'],['attendance','🕒','Attend'],['recurring','🔁','Recurring'],['taskmon','📋','Follow-ups'],['employees','👥','Staff'],['leave','🌴','Leave'],['field','🚗','Field'],['policy','📋','Policy'],['training','🎓','Training'],['assets','🗂','Information'],['fixedassets','🛠','Asset Mgmt'],['inventory','📦','Inventory'],['payreq','🧾','Payments'],['payroll','💰','Payroll'],['accounts','📊','Accounts'],['cards','🏷','Cards'],['cardstatus','✅','Status'],['suggest','✉','Suggest'],['mdinbox','📨','MD Inbox'],['branches','🏢','Branches'],['watemplates','💬','WA Templates'],['profile','⚙','Profile']];
+var NAVDEF=[['dashboard','▦','Home'],['tasks','✓','Tasks'],['calendar','📅','Calendar'],['attendance','🕒','Attend'],['ops','🧪','Samples'],['recurring','🔁','Recurring'],['taskmon','📋','Follow-ups'],['employees','👥','Staff'],['leave','🌴','Leave'],['field','🚗','Field'],['policy','📋','Policy'],['training','🎓','Training'],['assets','🗂','Information'],['fixedassets','🛠','Asset Mgmt'],['inventory','📦','Inventory'],['payreq','🧾','Payments'],['payroll','💰','Payroll'],['accounts','📊','Accounts'],['cards','🏷','Cards'],['cardstatus','✅','Status'],['suggest','✉','Suggest'],['mdinbox','📨','MD Inbox'],['branches','🏢','Branches'],['watemplates','💬','WA Templates'],['profile','⚙','Profile']];
 function visibleNav(){ return NAVDEF.filter(function(d){ var el=document.querySelector('.nav-item[data-page="'+d[0]+'"]'); return el && !el.classList.contains('hidden'); }); }
 function navBtn(d){ return '<button data-page="'+d[0]+'"><span class="ic">'+d[1]+'</span><span>'+d[2]+'</span></button>'; }
 function buildMobileBottomNav(){
@@ -780,12 +787,15 @@ function renderDashboard(){
       '<div class="card"><div class="table-wrap swipe"><table><thead><tr><th>Branch</th><th>Issued</th>'+typeList.map(function(t){return '<th>'+esc(t)+'</th>';}).join('')+'<th>Active total</th></tr></thead><tbody>'+bodyRows+totRow+'</tbody></table></div></div>';
   }
   /* v286: partner review sits directly under the finance table — same month, same branch scope. */
-  html+='<div id="finDash"></div><div id="stmtTable"></div><div id="partnerReview"></div>';
+  /* v309: the two-stage sample-collection card sits directly under Quick log, above the finance
+     blocks — it is an operations number, not a money number, and it is the one a branch acts on. */
+  html+='<div id="opsDash"></div><div id="finDash"></div><div id="stmtTable"></div><div id="partnerReview"></div>';
   $('dashExtra').innerHTML=html;
   /* v277: the inline cardYm picker is gone — the header month drives this section (see bindApp). */
   /* v307: Star performers board removed (it lived in staffperf.js, deleted with Staff Performance). */
   if(window.renderQuickLog){ try{ window.renderQuickLog(document.getElementById('quickLog')); }catch(_){} }
   var dashBr=(S.perms&&S.perms.canViewAll)?(($('dashBranch')||{}).value||''):'';
+  if(window.opsDashCard){ try{ window.opsDashCard(document.getElementById('opsDash'), dashBr); }catch(_){} }
   if(window.renderFinDash){ try{ window.renderFinDash(document.getElementById('finDash'), dashBr); }catch(_){} }
   if(window.renderStatementTable){ try{ window.renderStatementTable(document.getElementById('stmtTable'), dashBr); }catch(_){} }
   if(window.renderPartnerReview){ try{ window.renderPartnerReview(document.getElementById('partnerReview'), dashBr); }catch(_){} }
