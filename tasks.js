@@ -837,6 +837,54 @@
     API.pcFollowups().then(function(r){ if(r.ok){ FUP=r.items||[]; paint(); } });
   }
 
+  /* ============================================================================================
+     v311 — RESTORING THE EXPORTS v307 DELETED.
+
+     THE BUG. v306 ended this file with three exports. v307 removed them and nothing put them back:
+
+         window.renderMyTasks = renderMyTasks;
+         window.openTaskDetail = openTaskDetail;
+         window.taskShared = { ... };
+
+     The functions themselves were never deleted — only the lines that published them. And because
+     every caller in app.js guards with `if(window.taskShared)` / `if(window.renderMyTasks)`, nothing
+     ever threw. It failed silently, which is why it survived four releases:
+
+       * app.js `go('tasks')` reads `if(page==='tasks' && window.renderMyTasks) window.renderMyTasks();`
+         — undefined, so opening My Tasks un-hid an EMPTY div. The page has been blank since v307.
+       * The dashboard task click reads `if(window.taskShared) taskShared.open(...) else go('tasks')`
+         — so tapping ANY task (leave, approval, daily collection, anything) fell through to the blank
+         page. "I click the task and it shows blank", for every task type.
+       * `dtItems()` reads `if(!S) return tasks;` and `renderDashTasks` falls back to
+         `String(t.status)==='done'?'done':'today'` — so the dashboard tiles put EVERY open task in
+         Today and showed Overdue 0, while the KPI strip underneath, which counts independently, said
+         "My overdue 12". Those two numbers disagreeing on the same screen was the visible symptom.
+
+     Restored verbatim from v306. Every symbol they reference still exists in this file untouched.
+     ============================================================================================ */
+  window.renderMyTasks=renderMyTasks;
+  window.openTaskDetail=openTaskDetail;
+  /* v262: the dashboard "My tasks" block reuses THIS file's logic rather than reimplementing it, so
+     the two can never disagree about what is overdue. */
+  window.taskShared={
+    calToItem:calToItem,      // calendar entry -> task-shaped item
+    dedup:dedupTasks,         // same de-duplication
+    bucket:bucket,            // today | overdue | upcoming | done | nr
+    dueLabel:dueLabel,        // "Today 09:52" / "28 Jul"
+    pri:PRI,                  // priority dot colours
+    /* Open the same popup from the dashboard. TASKS/CALITEMS are empty until this page has been
+       visited, so byId() would find nothing — seed them from the dashboard's own copy first.
+       Harmless to overwrite: renderMyTasks() re-fetches whenever the page is opened. */
+    open:function(taskId, tasks, calEntries){
+      TASKS=(tasks||[]).slice();
+      CALITEMS=(calEntries||[]).filter(function(x){ return String(x.status)!=='deleted'; }).map(calToItem);
+      if(String(taskId).indexOf('CAL::')===0){
+        var it=byId(taskId);
+        if(it && window.openCalendarEntryById){ window.openCalendarEntryById(it.calId, function(){ if(window.renderDashTasks) window.renderDashTasks(); }); return; }
+      }
+      openTaskDetail(taskId);
+    }
+  };
   window.renderTaskMonitor=function(){ renderTaskMonitor(); try{ if(window.renderSAOverdue) window.renderSAOverdue(document.getElementById('saOverdue')); }catch(e){}
     try{ if(window.renderPUOverdue) window.renderPUOverdue(document.getElementById('puOverdue')); }catch(e){} };
 })();

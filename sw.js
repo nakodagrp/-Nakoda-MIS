@@ -4,10 +4,10 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v310';  /* v310: the Send report task goes to the front desk (the
-     CRM at Udhna) instead of the collector; Collected by lists every technician at Udhna and Corporate
-     Office, fetched from the server rather than guessed from the client's cached directory; the Branch
-     row is gone from both panels. Includes all of v309 (operations process 1) and v308. */
+var CACHE_VERSION = 'nakoda-mis-v311';  /* v311: restores the three exports v307 deleted from
+     tasks.js — My Tasks has rendered blank, and every dashboard task click has led to that blank
+     page, since v307. Also fixes the report desk failing to resolve because the branch is spelled
+     UDHANA, not Udhna. Includes all of v310, v309 and v308. */
 var SHELL = [
   './',
   './index.html',
