@@ -354,27 +354,18 @@
       $id('srBox').outerHTML='<div>'+body+'</div>';
       return;
     }
-    body+='<div class="field" style="margin-top:12px"><label>Attach report</label>'+
+    /* v313: the "Send via" chips are gone and the report is optional, both at your request. The one
+       thing that went with them is the WhatsApp hand-off — there is no longer a mode to key it on, so
+       "Send and complete" now records the send rather than opening WhatsApp with the message written. */
+    body+='<div class="field" style="margin-top:12px"><label>Attach report <span class="muted">optional</span></label>'+
         '<label class="dl-file"><span id="srUpSt">&#128206; Attach report (PDF)</span><input id="srUp" type="file" accept="application/pdf,image/*" hidden></label></div>'+
-      '<div class="field"><label>Send via</label>'+
-        '<div class="ops-via">'+
-          '<button type="button" class="ops-tag on" data-v="WhatsApp">WhatsApp</button>'+
-          '<button type="button" class="ops-tag" data-v="Email">Email</button>'+
-          '<button type="button" class="ops-tag" data-v="Hand delivery">Hand delivery</button>'+
-        '</div></div>'+
       '<div id="srMsg"></div>';
 
     var box=$id('srBox'); box.outerHTML='<div id="srWrap">'+body+'</div>';
     var foot=document.querySelector('#modalRoot .modal-foot');
     if(foot) foot.innerHTML='<button class="btn ghost" onclick="closeModal()">Close</button><button class="btn" id="srSend">Send and complete</button>';
 
-    var state={ via:'WhatsApp', reportUrl:s.reportUrl||'' };
-    document.querySelectorAll('#srWrap .ops-via .ops-tag').forEach(function(b){
-      b.onclick=function(){
-        state.via=b.getAttribute('data-v');
-        document.querySelectorAll('#srWrap .ops-via .ops-tag').forEach(function(x){ x.classList.toggle('on',x===b); });
-      };
-    });
+    var state={ via:'', reportUrl:s.reportUrl||'' };
     var up=$id('srUp');
     if(up) up.onchange=function(){
       var f=this.files[0], input=this; if(!f) return; var st=$id('srUpSt');
@@ -387,18 +378,10 @@
     $id('srSend').onclick=function(){
       var btn=this;
       function bad(m){ $id('srMsg').innerHTML='<div class="msg error">'+esc(m)+'</div>'; btn.disabled=false; }
-      if(!state.reportUrl && !/hand/i.test(state.via)) return bad('Attach the report first, or choose Hand delivery.');
       btn.disabled=true; $id('srMsg').innerHTML='';
       API.sendSampleReport(s.sampleId,{via:state.via, reportUrl:state.reportUrl}).then(function(r){
         if(!(r&&r.ok)) return bad((r&&r.error)||'Could not send.');
         closeModal();
-        /* WhatsApp opens with the message and the report link already written, so the technician's
-           last act is one tap in WhatsApp. No API key, no template approval, works today. */
-        if(/whats/i.test(state.via) && s.waNumber){
-          var msg='Dear '+(s.patientName||'')+', your Nakoda Diagnostics report'+(s.tests?(' ('+s.tests+')'):'')+' is ready.'+
-                  (state.reportUrl?('\n\n'+state.reportUrl):'')+'\n\nThank you.';
-          try{ window.open('https://wa.me/'+s.waNumber+'?text='+encodeURIComponent(msg),'_blank','noopener'); }catch(e){}
-        }
         toast('Report sent — the task is closed.');
         if(window.renderMyTasks) try{ window.renderMyTasks(); }catch(e){}
         if(typeof after==='function') after(r);

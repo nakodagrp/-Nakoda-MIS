@@ -218,7 +218,11 @@
         if(!confirm('Send this membership card on WhatsApp to '+phone+' via the official API?')) return;
         var st=document.getElementById('cdApiStatus');
         ap.disabled=true; ap.innerHTML='<span class="loader"></span> Sending…'; st.textContent='Uploading card image & calling WhatsApp…';
-        var b64=cv.toDataURL('image/png').split(',')[1];
+        /* v313: JPEG, not PNG. The card is a gradient with text — PNG stores that almost losslessly
+           and large, JPEG stores it small, and it then goes up as base64 which adds a further third.
+           The Download button above still produces a PNG, because a file the branch keeps should not
+           be lossy; only the copy crossing the wire to WhatsApp changes. */
+        var b64=cv.toDataURL('image/jpeg',0.9).split(',')[1];
         API.waSendCard(c.cardNumber, b64, phone).then(function(rr){
           ap.disabled=false; ap.textContent='🚀 Send via Official API';
           if(rr.ok){ st.innerHTML='<span style="color:#1a7f37">✓ '+esc(rr.message||'Sent!')+'</span>'; toast('Card sent on WhatsApp ✓'); }

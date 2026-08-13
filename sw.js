@@ -4,10 +4,10 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v312';  /* v312: Complete on a task popup opened from the
-     dashboard threw "Cannot set properties of null" — paintChips wrote to #taskChips, which only
-     exists once the My Tasks page has been drawn. Guarded, and the dashboard card now repaints
-     instead of sitting stale. Includes all of v311, v310, v309, v308. */
+var CACHE_VERSION = 'nakoda-mis-v313';  /* v313: Send via removed and the report attachment
+     made optional; the daily collection task moved off every CRM onto the accountant; and the card
+     system stopped re-reading the whole sheet — with its stored images — on every write, which was
+     also silently wiping those images whenever a card expired. Includes v312 back to v308. */
 var SHELL = [
   './',
   './index.html',
