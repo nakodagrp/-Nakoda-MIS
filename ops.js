@@ -126,7 +126,8 @@
     var rows=[
       ['Tests', esc(s.tests)],
       ['Amount', '&#8377;'+money(s.amount)],
-      ['Branch', esc(s.branchName||s.branchId)],
+      /* v310: the Branch row is gone from both panels. One desk sends every branch's reports, so
+         the line was the same on every row and told the person reading it nothing. */
       ['Collected by', esc(s.collectedByName||'—')],
       ['Collected at', esc(s.collectedAt||'—')],
       (s.status==='sent'
@@ -217,25 +218,41 @@
 
     var st={rxUrl:'',photoUrl:''};
 
-    /* Who collected it. Branch staff who can physically take a sample, from the chosen branch.
-       Defaults to the signed-in person when they are one of them, which is the ordinary case. */
+    /* v310 — WHY THIS LIST WAS NEARLY EMPTY, AND WHY IT IS NOW FETCHED.
+       It used to filter the employee directory the client already had in memory, down to the branch
+       picked above. Two things broke it: a technician is not allowed to list employees at all, so
+       that directory is usually empty or partial; and scoping to the picked branch meant choosing
+       Corporate Office showed only head-office staff. The result was a dropdown with two names in it.
+       The server now answers the question directly — every collector-role member of the Udhna and
+       Corporate Office branches, grouped by branch, independent of the branch picked. */
     function fillWho(){
       var sel=$id('scWho'); if(!sel) return;
-      var bid=($id('scBranch')?$id('scBranch').value:'')||String(u().Branch||'');
-      var dir=(window.S&&S.employees&&S.employees.length?S.employees:null)
-            || (window.DASH&&DASH.emps&&DASH.emps.length?DASH.emps:null) || [];
-      var emps=dir.filter(function(e){
-        return String(e.Status)==='Active' && (!bid||String(e.Branch)===String(bid))
-          && COLLECT_ROLES.indexOf(String(e.Role||'').trim())>=0;
+      var me=String(u().EmpID||'');
+      sel.innerHTML='<option value="'+esc(me)+'">'+esc(u().FullName||'Me')+' (me)</option>';
+      API.opsCollectors().then(function(r){
+        var s2=$id('scWho'); if(!s2) return;
+        if(!(r&&r.ok&&r.collectors&&r.collectors.length)) return;   /* keep the "me" fallback */
+        var groups=[], byBr={};
+        r.collectors.forEach(function(c){
+          if(!byBr[c.branchId]){ byBr[c.branchId]={name:c.branchName,list:[]}; groups.push(c.branchId); }
+          byBr[c.branchId].list.push(c);
+        });
+        s2.innerHTML=groups.map(function(bid){
+          var g=byBr[bid];
+          return '<optgroup label="'+esc(g.name)+'">'+g.list.map(function(c){
+            return '<option value="'+esc(c.empId)+'"'+(c.empId===me?' selected':'')+'>'+
+              esc(c.name)+(c.role?(' \u00b7 '+esc(c.role)):'')+'</option>';
+          }).join('')+'</optgroup>';
+        }).join('');
+        /* combo.js mirrors every <select> into a visible input; refresh that mirror or it keeps
+           showing the single placeholder name this list has just replaced. */
+        try{
+          var wrap=s2.closest&&s2.closest('.cmb-wrap'), mir=wrap&&wrap.querySelector('.cmb-input');
+          if(mir){ var o=s2.options[s2.selectedIndex]; mir.value=o?o.textContent:''; }
+        }catch(e){}
       });
-      var me=String(u().EmpID||''), meIn=emps.some(function(e){ return String(e.EmpID)===me; });
-      if(!meIn && me) emps.unshift({EmpID:me, FullName:(u().FullName||'Me')+' (me)', Role:u().Role});
-      sel.innerHTML=emps.length
-        ? emps.map(function(e){ return '<option value="'+esc(e.EmpID)+'"'+(String(e.EmpID)===me?' selected':'')+'>'+esc(e.FullName)+'</option>'; }).join('')
-        : '<option value="'+esc(me)+'">'+esc(u().FullName||'Me')+'</option>';
     }
     fillWho();
-    var bsel=$id('scBranch'); if(bsel) bsel.onchange=fillWho;
 
     /* Test shortcuts — tapping one appends it, so the common panels are two taps not typing. */
     var COMMON=['CBC','TSH','LFT','KFT','Lipid profile','HbA1c','Urine routine','Vitamin D','Thyroid profile'];
@@ -291,7 +308,7 @@
         if(r&&r.ok){
           closeModal();
           toast(r.offline ? 'Saved on this device — it will sync automatically.'
-                          : 'Sample '+(r.sampleId||'')+' saved. "Send report" is now in My Tasks.');
+                          : 'Sample '+(r.sampleId||'')+' saved. The front desk has been given the report task.');
           /* the send task now exists server-side — pull it so it shows in My Tasks without a reload */
           if(API.refreshTasks) try{ API.refreshTasks(); }catch(e){}
           if(typeof after==='function') after(r);
@@ -317,7 +334,6 @@
       ['Tests', esc(s.tests)],
       ['Collected', esc(s.collectedAt||'')+(s.collectedByName?(' · '+esc(s.collectedByName)):'')],
       ['Amount', '&#8377;'+money(s.amount)],
-      ['Branch', esc(s.branchName||s.branchId)],
       ['Prescription', fileLink(s.rxUrl,'prescription')],
       ['Report', '<span id="srRep">'+(s.reportUrl?fileLink(s.reportUrl,'report'):'<span class="muted">not attached</span>')+'</span>']
     ];

@@ -4,8 +4,10 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v309';  /* v309: Operations process 1 — sample collection to report sent. New ops.js module, Ops_Samples
-     sheet, Collect sample on the dashboard, and a Send report task that closes itself. Includes all of v308. */
+var CACHE_VERSION = 'nakoda-mis-v310';  /* v310: the Send report task goes to the front desk (the
+     CRM at Udhna) instead of the collector; Collected by lists every technician at Udhna and Corporate
+     Office, fetched from the server rather than guessed from the client's cached directory; the Branch
+     row is gone from both panels. Includes all of v309 (operations process 1) and v308. */
 var SHELL = [
   './',
   './index.html',

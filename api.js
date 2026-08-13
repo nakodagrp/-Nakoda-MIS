@@ -522,6 +522,7 @@
     getSample:function(id){ return call('getSample',{token:getToken(),sampleId:id}); },
     sendSampleReport:function(id,d){ return call('sendSampleReport',{token:getToken(),sampleId:id,data:d||{}}); },
     opsSummary:function(b){ return call('opsSummary',{token:getToken(),branch:b||''}); },
+    opsCollectors:function(){ return call('opsCollectors',{token:getToken()}); },   /* v310 */
     saveDaily:function(d){ return call('saveDaily',{token:getToken(),data:d}); },
     listDaily:function(b,ym){ return call('listDaily',{token:getToken(),branch:b,ym:ym}); },
     getDaily:function(id){ return call('getDaily',{token:getToken(),dayId:id}); },
