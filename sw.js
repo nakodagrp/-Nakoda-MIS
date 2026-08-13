@@ -4,10 +4,11 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v311';  /* v311: restores the three exports v307 deleted from
-     tasks.js — My Tasks has rendered blank, and every dashboard task click has led to that blank
-     page, since v307. Also fixes the report desk failing to resolve because the branch is spelled
-     UDHANA, not Udhna. Includes all of v310, v309 and v308. */
+var CACHE_VERSION = 'nakoda-mis-v312';  /* v312: completing a task opened FROM THE DASHBOARD threw
+     "Cannot set properties of null" — paintChips/paintList write into #taskChips and #taskList, which
+     only exist once the My Tasks page has been rendered. Both now no-op when absent and the dashboard
+     repaints instead. Latent since v306; only reachable once v311 restored the dashboard route.
+     Includes all of v311, v310, v309 and v308. */
 var SHELL = [
   './',
   './index.html',
