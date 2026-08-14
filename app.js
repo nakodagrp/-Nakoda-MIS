@@ -795,7 +795,9 @@ function renderDashboard(){
   /* v307: Star performers board removed (it lived in staffperf.js, deleted with Staff Performance). */
   if(window.renderQuickLog){ try{ window.renderQuickLog(document.getElementById('quickLog')); }catch(_){} }
   var dashBr=(S.perms&&S.perms.canViewAll)?(($('dashBranch')||{}).value||''):'';
-  if(window.opsDashCard){ try{ window.opsDashCard(document.getElementById('opsDash'), dashBr); }catch(_){} }
+  /* v315: the main dashboard carries the lab-arrivals trend. The five-stage pipeline card moved to
+     the Sample Collection module, where the person acting on it already is. */
+  if(window.opsLabArrivalsCard){ try{ window.opsLabArrivalsCard(document.getElementById('opsDash'), dashBr); }catch(_){} }
   if(window.renderFinDash){ try{ window.renderFinDash(document.getElementById('finDash'), dashBr); }catch(_){} }
   if(window.renderStatementTable){ try{ window.renderStatementTable(document.getElementById('stmtTable'), dashBr); }catch(_){} }
   if(window.renderPartnerReview){ try{ window.renderPartnerReview(document.getElementById('partnerReview'), dashBr); }catch(_){} }

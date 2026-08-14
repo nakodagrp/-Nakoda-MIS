@@ -532,6 +532,9 @@
     submitResult:function(id,d){ return call('submitResult',{token:getToken(),sampleId:id,data:d||{}}); },
     verifyReport:function(id,d){ return call('verifyReport',{token:getToken(),sampleId:id,data:d||{}}); },
     opsPeople:function(b){ return call('opsPeople',{token:getToken(),branch:b||''}); },
+    /* v315 — the two summaries */
+    opsLabArrivals:function(b,n){ return call('opsLabArrivals',{token:getToken(),branch:b||'',months:n||6}); },
+    opsTurnaround:function(b,ym,emp){ return call('opsTurnaround',{token:getToken(),branch:b||'',ym:ym||'',empId:emp||''}); },
     saveDaily:function(d){ return call('saveDaily',{token:getToken(),data:d}); },
     listDaily:function(b,ym){ return call('listDaily',{token:getToken(),branch:b,ym:ym}); },
     getDaily:function(id){ return call('getDaily',{token:getToken(),dayId:id}); },

@@ -4,9 +4,9 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v314';  /* v314: processes 1 and 2 merged into one five-stage
-     pipeline — ordered, collected, result, verified, sent — with two ways in: Collect sample for a
-     walk-in and Order to delivery for a home visit. Includes v313 back to v308. */
+var CACHE_VERSION = 'nakoda-mis-v315';  /* v315: arrived-in-lab trend on the main dashboard,
+     home-visit turnaround log under the Sample Collection board, and the appointment time fixed —
+     it was being stored at Sheets' 1899 epoch, which broke every on-time figure. Includes v314. */
 var SHELL = [
   './',
   './index.html',

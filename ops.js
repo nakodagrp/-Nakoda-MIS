@@ -77,7 +77,10 @@
       '<div class="ops-sub">Operations · process 1 of 5</div><div class="spacer"></div>'+
       picker+'<input id="opsYm" type="month" class="in" style="max-width:150px" value="'+esc(OPS.ym)+'">'+
       '<button class="btn ghost sm" id="opsRefresh">&#8635;</button>'+btn+'</div>'+
-      '<div id="opsBody">'+inner+'</div>';
+      '<div id="opsBody">'+inner+'</div>'+
+      /* v315: the turnaround log sits BELOW the board — you come to this page to work the queue
+         first, and to read the numbers second. */
+      '<div id="opsTurn"></div>';
   }
   function bodyHtml(){
     var c=OPS.counts||{};
@@ -205,6 +208,7 @@
     var host=$id('opsBody'); if(!host) return;
     host.innerHTML=bodyHtml().replace(/^<div class="ops-chips">/,'<div class="ops-chips">');
     wireBody();
+    if(window.opsTurnaroundCard){ try{ window.opsTurnaroundCard($id('opsTurn'), OPS.branch); }catch(e){} }
   }
   function load(force){
     if(OPS.loading && !force) return;
@@ -559,7 +563,7 @@
       '<div class="field"><label>Appointment time *</label><input id="odWhen" class="in" type="time"></div>'+
       '<div class="field full"><label>Address *</label><input id="odAddr" class="in" placeholder="204 Sun Residency, Adajan, Surat"></div>'+
       (canPick?'<div class="field"><label>Branch</label><select id="odBranch" class="in">'+brs.map(function(b){ return '<option value="'+esc(b.BranchID)+'"'+(String(b.BranchID)===String(u().Branch)?' selected':'')+'>'+esc(b.BranchName)+'</option>'; }).join('')+'</select></div>':'')+
-      '<div class="field"><label>Phlebotomist *</label><select id="odWho" class="in"><option>Loading…</option></select></div>'+
+      '<div class="field"><label>Phlebotomist *</label><select id="odWho" class="in"><option>Loading…</option></select><div id="odWide" class="ops-hint"></div></div>'+
       '<div class="field"><label>Handed over at</label><div class="ops-stamp-ro" id="odNow">'+nowHHMM()+' · stamped automatically</div></div>'+
       '<div class="field"><label>Age / sex <span class="muted">optional</span></label><div class="row2"><input id="odAge" class="in" type="number" placeholder="32"><select id="odSex" class="in"><option value="">—</option><option>Female</option><option>Male</option><option>Other</option></select></div></div>'+
       '<div class="field full"><label>Notes <span class="muted">optional</span></label><input id="odNote" class="in" placeholder="Call before arriving"></div>'+
@@ -574,14 +578,36 @@
         if(have.indexOf(t.toLowerCase())>=0) return;
         i.value=have.length?(i.value.replace(/,\s*$/,'')+', '+t):t; }; }); }
 
+    /* v314a: grouped by branch, and never empty. Head office employs no phlebotomist, so scoping
+       this to the branch on the form made the whole order unsaveable from the desk most likely to be
+       answering the phone. The server prefers the chosen branch and widens to everyone if it has
+       nobody; the branch is shown against each name so a widened list is still an informed choice. */
     function loadPeople(){
       var sel=$id('odWho'); if(!sel) return;
+      sel.innerHTML='<option value="">Loading…</option>';
       API.opsPeople(($id('odBranch')||{}).value||'').then(function(r){
         var s2=$id('odWho'); if(!s2) return;
         var list=(r&&r.ok&&r.phlebotomists)||[];
-        s2.innerHTML=list.length
-          ? list.map(function(e){ return '<option value="'+esc(e.empId)+'">'+esc(e.name)+' · '+(e.today?(e.today+' today'):'free')+'</option>'; }).join('')
-          : '<option value="">No phlebotomist available</option>';
+        if(!list.length){
+          s2.innerHTML='<option value="">No Phlebotomist or Round Person in Employees</option>';
+          var msg=$id('odMsg');
+          if(msg) msg.innerHTML='<div class="msg error">Nobody in Employees has the role Phlebotomist or Round Person. Add one before taking home-visit orders.</div>';
+          return;
+        }
+        var groups=[], byBr={};
+        list.forEach(function(c){
+          var k=c.branchName||'—';
+          if(!byBr[k]){ byBr[k]=[]; groups.push(k); }
+          byBr[k].push(c);
+        });
+        s2.innerHTML=groups.map(function(g){
+          return '<optgroup label="'+esc(g)+'">'+byBr[g].map(function(e){
+            return '<option value="'+esc(e.empId)+'">'+esc(e.name)+' · '+(e.today?(e.today+' today'):'free')+'</option>';
+          }).join('')+'</optgroup>';
+        }).join('');
+        var note=$id('odWide');
+        if(note) note.innerHTML=(r.phlebotomistsWidened
+          ? '<span class="ops-late-txt">'+esc(r.branchName||'This branch')+' has none — showing every branch.</span>' : '');
         try{ var w=s2.closest&&s2.closest('.cmb-wrap'), m=w&&w.querySelector('.cmb-input');
           if(m){ var o=s2.options[s2.selectedIndex]; m.value=o?o.textContent:''; } }catch(e){}
       });
@@ -755,4 +781,111 @@
   }
   window.opsStageStrip=stageStrip;
   window.opsLateLabel=lateLabel;
+})();
+
+/* ============================================================================================
+ *  v315 — THE TWO SUMMARIES
+ *    Main dashboard      : arrived in lab, six months, per-branch run rate
+ *    Sample Collection   : home visit turnaround, one row per visit
+ * ============================================================================================ */
+(function(){
+  function $id(i){ return document.getElementById(i); }
+  function money(n){ return (Number(n)||0).toLocaleString('en-IN'); }
+
+  /* "38 min", "1 h 02 m" — never "62 min", which nobody reads as an hour. */
+  function mins(n){
+    n=Number(n)||0;
+    if(n<60) return n+' min';
+    var h=Math.floor(n/60), m=n%60;
+    if(h<24) return h+' h'+(m?(' '+('0'+m).slice(-2)+' m'):'');
+    var d=Math.floor(h/24); return d+' d'+((h%24)?(' '+(h%24)+' h'):'');
+  }
+  function band(n){ n=Number(n)||0; return n<20?'good':(n<45?'warn':'bad'); }
+
+  /* ---------------------------------------------------------------- screen 1 */
+  window.opsLabArrivalsCard=function(host, branch){
+    if(!host) return;
+    API.opsLabArrivals(branch||'',6).then(function(r){
+      if(!(r&&r.ok&&r.months)){ host.innerHTML=''; return; }
+      var ms=r.months, peak=Math.max.apply(null,ms.map(function(m){ return m.count; }))||1;
+      var bars=ms.map(function(m,i){
+        var last=(i===ms.length-1);
+        var h=Math.max(4,Math.round(m.count/peak*100));
+        return '<div class="la-col"><div class="la-bar'+(last?' partial':'')+'" style="height:'+h+'%"></div></div>';
+      }).join('');
+      var labels=ms.map(function(m,i){
+        var last=(i===ms.length-1);
+        return '<span class="la-lab'+(last?' now':'')+'">'+esc(m.label)+'<br>'+m.count+(last?'<br><span class="la-td">to date</span>':'')+'</span>';
+      }).join('');
+      var rows=(r.branches||[]).map(function(b){
+        var up=Number(b.runRate)>=0;
+        return '<tr><td>'+esc(b.branchName)+'</td><td>'+b.cur+'</td><td>'+b.prev+'</td>'+
+          '<td class="'+(up?'ops-up':'ops-down')+'">'+(up?'&#9650; ':'&#9660; ')+Math.abs(b.runRate)+'%</td></tr>';
+      }).join('')||'<tr><td colspan="4" class="muted">Nothing collected yet.</td></tr>';
+
+      host.innerHTML='<div class="section-label" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
+          'Arrived in lab'+
+          '<span style="font-size:11px;color:#888;font-weight:400">last 6 months</span>'+
+          '<span style="flex:1"></span>'+
+          '<button class="btn ghost sm" id="laGo">Open module &#8599;</button></div>'+
+        '<div class="card la-card">'+
+          '<div class="la-chart">'+bars+'</div><div class="la-labs">'+labels+'</div>'+
+          '<div class="la-tiles">'+
+            '<div class="la-t"><div class="l">Walk-in</div><div class="v">'+(r.walkin||0)+'</div></div>'+
+            '<div class="la-t"><div class="l">Home visit</div><div class="v">'+(r.homevisit||0)+'</div></div>'+
+            '<div class="la-t"><div class="l">This month</div><div class="v">'+(r.total||0)+'</div></div>'+
+          '</div>'+
+          '<table class="la-tb"><thead><tr><th>Branch</th><th>'+esc(String(r.current||'').slice(5))+' to date</th>'+
+            '<th>'+esc(String(r.previous||'').slice(5))+' full</th><th>Run rate</th></tr></thead><tbody>'+rows+'</tbody></table>'+
+          '<div class="la-foot">Counted when a sample reaches <b>collected</b>. '+
+            'The current month is drawn dashed and labelled <b>to date</b>; the last column compares '+
+            '<b>daily run rate</b>, not totals, because a half-finished month always looks like a collapse against a whole one.</div>'+
+        '</div>';
+      var g=$id('laGo'); if(g) g.onclick=function(){ if(window.go) window.go('ops'); };
+    }, function(){ host.innerHTML=''; });
+  };
+
+  /* ---------------------------------------------------------------- screen 2 */
+  var TA={ym:'', emp:''};
+  window.opsTurnaroundCard=function(host, branch){
+    if(!host) return;
+    if(!TA.ym){ var d=new Date(); TA.ym=d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2); }
+    API.opsTurnaround(branch||'', TA.ym, TA.emp).then(function(r){
+      if(!(r&&r.ok)){ host.innerHTML=''; return; }
+      var s=r.summary||{}, vs=r.visits||[];
+      var people='<select id="taWho" class="in" style="max-width:170px"><option value="">All phlebotomists</option>'+
+        (r.people||[]).map(function(p){ return '<option value="'+esc(p.empId)+'"'+(String(p.empId)===String(TA.emp)?' selected':'')+'>'+esc(p.name)+'</option>'; }).join('')+'</select>';
+
+      var body=vs.length
+        ? vs.map(function(v){
+            return '<tr><td>'+esc(v.patientName)+'</td><td>'+esc(v.tests)+'</td><td>'+esc(v.phlebotomist)+'</td>'+
+              '<td>'+esc(v.gotTask)+'</td><td>'+esc(v.reached)+'</td>'+
+              '<td class="ta-'+band(v.minutes)+'">'+esc(mins(v.minutes))+'</td></tr>';
+          }).join('')+
+          '<tr class="ta-tot"><td colspan="5"><b>'+s.visits+' visit'+(s.visits===1?'':'s')+' &middot; average</b></td>'+
+          '<td><b>'+esc(mins(s.avg))+'</b></td></tr>'
+        : '<tr><td colspan="6" class="muted" style="padding:18px;text-align:center">No home visits with both stamps this month.</td></tr>';
+
+      host.innerHTML='<div class="ta-card">'+
+        '<div class="ta-head">'+
+          '<div><div class="ta-h1">Home visit turnaround</div><div class="ta-h2">task given &#8594; reached the patient</div></div>'+
+          '<div class="ta-ctl"><input id="taYm" type="month" class="in" style="max-width:140px" value="'+esc(TA.ym)+'">'+people+'</div>'+
+        '</div>'+
+        '<div class="ta-tiles">'+
+          '<div class="la-t"><div class="l">Visits</div><div class="v">'+(s.visits||0)+'</div></div>'+
+          '<div class="la-t"><div class="l">Average</div><div class="v">'+(s.visits?esc(mins(s.avg)):'—')+'</div></div>'+
+          '<div class="la-t"><div class="l">Fastest</div><div class="v ta-good">'+(s.visits?esc(mins(s.best)):'—')+'</div></div>'+
+          '<div class="la-t"><div class="l">Slowest</div><div class="v ta-bad">'+(s.visits?esc(mins(s.worst)):'—')+'</div></div>'+
+        '</div>'+
+        '<div class="table-wrap"><table class="ta-tb"><thead><tr>'+
+          '<th>Patient</th><th>Test</th><th>Phlebotomist</th><th>Got task</th><th>Reached</th><th>Time taken</th>'+
+        '</tr></thead><tbody>'+body+'</tbody></table></div>'+
+        '<div class="la-foot">One row per home visit, newest first. <b>Time taken</b> is the gap between the two stamps beside it &mdash; nothing is estimated. '+
+          'Green under 20 minutes, amber under 45, red beyond. '+
+          'Walk-ins are not here: nobody hands them over and nobody travels, so there is no gap to measure.</div>'+
+      '</div>';
+      var ym=$id('taYm'); if(ym) ym.onchange=function(){ TA.ym=this.value||TA.ym; window.opsTurnaroundCard(host,branch); };
+      var wh=$id('taWho'); if(wh) wh.onchange=function(){ TA.emp=this.value; window.opsTurnaroundCard(host,branch); };
+    }, function(){ host.innerHTML=''; });
+  };
 })();
