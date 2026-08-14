@@ -517,7 +517,15 @@
     /* v309: a "Send report" task is not a tick-box either — open the sample, where the patient's
        number, the prescription and the report all already are. Sending closes this task server-side
        (opsCloseSendTask_), so there is no manual Complete for it. */
-    if(t.source==='sample' && t.instanceId && window.openSendReport){ window.openSendReport(t.instanceId, t.taskId); return; }
+    /* v314: one task source, five stages. stageId says which popup to open — the column was already
+       in the Tasks sheet and unused, so none of this needed a schema change. */
+    if(t.source==='sample' && t.instanceId){
+      var st=String(t.stageId||'');
+      if(st==='visit'  && window.openHomeVisit)   { window.openHomeVisit(t.instanceId); return; }
+      if(st==='result' && window.openSubmitResult){ window.openSubmitResult(t.instanceId); return; }
+      if(st==='verify' && window.openVerifyReport){ window.openVerifyReport(t.instanceId); return; }
+      if(window.openSendReport){ window.openSendReport(t.instanceId, t.taskId); return; }
+    }
     var isDaily=(t.source==='accounts' && t.instanceId);
     var isDep=(t.source==='deposit' && t.instanceId);
     var isAtt=(t.source==='attendance' && t.instanceId);   /* instanceId holds the attId — see ensureAttApprovalTasks_ */

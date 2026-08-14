@@ -911,3 +911,39 @@ html,body{overflow-x:hidden}
   .ops-sub{display:none}
   .ops-dash-t .n{font-size:22px}
 }
+
+/* ============================================================
+   v314 — the five-stage pipeline
+   ============================================================ */
+.ops-fchip.sm{font-size:11px;padding:3px 10px;font-weight:500}
+
+.ops-stage2{display:flex;align-items:center;gap:0;flex-wrap:wrap;margin:13px 0}
+.ops-st2{font-size:10.5px;font-weight:600;border-radius:20px;padding:3px 10px;white-space:nowrap}
+.ops-st2.done{background:#eaf3de;color:#173404}
+.ops-st2.now{background:var(--red);color:#fff}
+.ops-st2.todo{border:1px dashed #cfd3da;color:var(--muted);font-weight:400}
+.ops-st2-sep{flex:1;height:1px;background:var(--line);min-width:8px;margin:0 4px}
+
+.fld-lab{font-size:12px;font-weight:600;color:var(--grey);margin:14px 0 5px}
+.ops-hint{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.5}
+.ops-remark{background:#faf4e2;color:#633806;border-radius:9px;padding:9px 11px;margin-top:11px;font-size:12.5px;line-height:1.5}
+.ops-stamp-ro{border:1px solid var(--line);background:#eaf7ef;color:#0f6e56;border-radius:9px;padding:9px 10px;font-size:12.5px;font-weight:600}
+
+.ops-stamp{border:1.5px solid var(--red);background:var(--red-soft);border-radius:11px;padding:13px;text-align:center;cursor:pointer;transition:.15s}
+.ops-stamp:hover{background:var(--red-tint)}
+.ops-stamp .t{font-size:23px;font-weight:700;color:var(--red);line-height:1.1}
+.ops-stamp .s{font-size:11px;color:#854f0b;margin-top:3px}
+
+.ops-pay{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+.ops-pay .c{background:#f6f7f9;border-radius:9px;padding:8px;min-width:0}
+.ops-pay .c.on{border:1px solid var(--red);background:#fff}
+.ops-pay .c.due{background:var(--red-soft)}
+.ops-pay .l{font-size:10.5px;color:var(--muted)}
+.ops-pay .v{font-size:15px;font-weight:600;margin-top:1px}
+.ops-pay .c.due .v{color:var(--red-dark)}
+.ops-pay input.in{padding:5px 7px;font-size:15px;font-weight:600;margin-top:1px;border-radius:7px}
+
+@media (max-width:560px){
+  .ops-st2{font-size:9.5px;padding:3px 8px}
+  .ops-stamp .t{font-size:20px}
+}

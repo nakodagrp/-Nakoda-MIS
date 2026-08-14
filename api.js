@@ -60,7 +60,10 @@
     /* v309 — operations. Both queue: a technician records a sample with no signal and it syncs
        later, and a hand delivery can be recorded the same way. saveSample carries a clientId the
        device minted first, so a replay updates its own row instead of creating a second sample. */
-    saveSample:1,sendSampleReport:1};
+    saveSample:1,sendSampleReport:1,
+    /* All four stage moves queue like the rest: a phlebotomist in a stairwell can still complete a
+       visit, and it syncs when the signal comes back. */
+    saveOrder:1,completeVisit:1,submitResult:1,verifyReport:1};
   /* Writes that already do their own optimistic queueing inside the method (don't double-queue here). */
   var SELF_QUEUE={createEmployee:1,updateEmployee:1,setStatus:1,issueCard:1,renewCard:1,cancelCard:1,markCardSent:1,markCardActivated:1,
     createTask:1,updateTask:1,setTaskStatus:1,deleteTask:1,createCalEntry:1,updateCalEntry:1,attachSelfie:1};
@@ -518,11 +521,17 @@
     myPayHistory:function(n){ return call('myPayHistory',{token:getToken(),months:n||6}); },
     /* v309 — operations: sample collection -> report sent */
     saveSample:function(d){ return call('saveSample',{token:getToken(),data:d}); },
-    listSamples:function(b,ym,st){ return call('listSamples',{token:getToken(),branch:b||'',ym:ym||'',sampleStatus:st||''}); },
+    listSamples:function(b,ym,st,kind){ return call('listSamples',{token:getToken(),branch:b||'',ym:ym||'',sampleStatus:st||'',sampleType:kind||''}); },
     getSample:function(id){ return call('getSample',{token:getToken(),sampleId:id}); },
     sendSampleReport:function(id,d){ return call('sendSampleReport',{token:getToken(),sampleId:id,data:d||{}}); },
     opsSummary:function(b){ return call('opsSummary',{token:getToken(),branch:b||''}); },
     opsCollectors:function(){ return call('opsCollectors',{token:getToken()}); },   /* v310 */
+    /* v314 — the five-stage pipeline */
+    saveOrder:function(d){ return call('saveOrder',{token:getToken(),data:d}); },
+    completeVisit:function(id,d){ return call('completeVisit',{token:getToken(),sampleId:id,data:d||{}}); },
+    submitResult:function(id,d){ return call('submitResult',{token:getToken(),sampleId:id,data:d||{}}); },
+    verifyReport:function(id,d){ return call('verifyReport',{token:getToken(),sampleId:id,data:d||{}}); },
+    opsPeople:function(b){ return call('opsPeople',{token:getToken(),branch:b||''}); },
     saveDaily:function(d){ return call('saveDaily',{token:getToken(),data:d}); },
     listDaily:function(b,ym){ return call('listDaily',{token:getToken(),branch:b,ym:ym}); },
     getDaily:function(id){ return call('getDaily',{token:getToken(),dayId:id}); },

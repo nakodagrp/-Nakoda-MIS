@@ -4,10 +4,9 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v313';  /* v313: Send via removed and the report attachment
-     made optional; the daily collection task moved off every CRM onto the accountant; and the card
-     system stopped re-reading the whole sheet — with its stored images — on every write, which was
-     also silently wiping those images whenever a card expired. Includes v312 back to v308. */
+var CACHE_VERSION = 'nakoda-mis-v314';  /* v314: processes 1 and 2 merged into one five-stage
+     pipeline — ordered, collected, result, verified, sent — with two ways in: Collect sample for a
+     walk-in and Order to delivery for a home visit. Includes v313 back to v308. */
 var SHELL = [
   './',
   './index.html',
