@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Nakoda MIS</title>
+  <meta name="theme-color" content="#DA1017">
+  <!-- v188: open the TLS connection to the API server while the page is still loading -->
+  <link rel="preconnect" href="https://script.google.com" crossorigin>
+  <link rel="dns-prefetch" href="https://script.google.com">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/favicon.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- banners -->
+<div id="updateBar" class="banner update hidden">
+  <span><span class="dot"></span> A new version of Nakoda MIS is available.</span>
+  <button class="btn sm" id="updateBtn">Install update</button>
+</div>
+<div id="offlineBar" class="banner offline hidden">
+  <span><span class="dot"></span> You are offline — changes are saved on this device and will sync automatically.</span>
+</div>
+<div id="installBar" class="banner install hidden">
+  <span><span class="dot"></span> <span id="installText">Install Nakoda MIS on this device for faster, offline access.</span></span>
+  <button class="btn sm" id="installBtn">Install app</button>
+  <button class="iconbtn" id="installDismiss">Not now</button>
+</div>
+
+<!-- v189: in-app splash removed — the app goes straight to the dashboard/login after Android's own (unavoidable) launch flash -->
+
+
+
+<!-- LOGIN -->
+<div id="view-login" class="auth-wrap">
+  <div class="auth-card">
+    <img class="logo" src="icons/login-logo.png" alt="Nakoda Diagnostics">
+    <div class="auth-tagline">Management Information System</div>
+    <div id="loginMsg"></div>
+    <form id="loginForm">
+      <div class="field"><label>User ID</label><input id="loginId" autocomplete="username" placeholder="e.g. admin" required></div>
+      <div class="field"><label>Password</label>
+        <div class="pw-row"><input id="loginPw" type="password" autocomplete="current-password" required><span class="toggle" data-for="loginPw">show</span></div>
+      </div>
+      <button class="btn block" id="loginBtn" type="submit">Sign in</button>
+    </form>
+    <div class="foot">Nakoda Diagnostics &amp; Research Center</div>
+  </div>
+</div>
+
+<!-- FORCE PASSWORD CHANGE -->
+<div id="view-changepw" class="auth-wrap hidden">
+  <div class="auth-card">
+    <img class="logo" src="icons/login-logo.png" alt="Nakoda Diagnostics">
+    <div class="auth-title">Set a new password</div>
+    <div class="auth-sub">For your security, please change the password you were given.</div>
+    <div id="cpwMsg"></div>
+    <form id="cpwForm">
+      <div class="field" id="oldPwField"><label>Current password</label>
+        <div class="pw-row"><input id="oldPw" type="password"><span class="toggle" data-for="oldPw">show</span></div></div>
+      <div class="field"><label>New password (min 6 chars)</label>
+        <div class="pw-row"><input id="newPw" type="password" required><span class="toggle" data-for="newPw">show</span></div></div>
+      <div class="field"><label>Confirm new password</label>
+        <div class="pw-row"><input id="newPw2" type="password" required><span class="toggle" data-for="newPw2">show</span></div></div>
+      <button class="btn block" id="cpwBtn" type="submit">Update password</button>
+    </form>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="view-app" class="app hidden">
+  <div class="topbar">
+    <button class="iconbtn hamburger" id="menuBtn">&#9776;</button>
+    <img class="logo" src="icons/login-logo.png" alt="Nakoda">
+    <div class="spacer"></div>
+    <div class="syncchip" id="syncChip" title="Sync status"><span class="s"></span><span id="syncText">Online</span></div>
+    <button id="topInstallBtn" class="top-install-btn hidden" title="Install Nakoda MIS as an app">&#11015; Install app</button>
+    <div class="userchip">
+      <div class="avatar" id="meAvatar">N</div>
+      <div class="who"><b id="meName">—</b><span id="meRole">—</span></div>
+      <button class="iconbtn" id="logoutBtn">Logout</button>
+    </div>
+  </div>
+  <div class="body">
+    <div class="sidebar" id="sidebar">
+      <div class="nav-group">Home</div>
+      <div class="nav-item active" data-page="dashboard"><span class="ic">&#9638;</span> Dashboard</div>
+      <div class="nav-item" data-page="tasks"><span class="ic">&#10003;</span> My Tasks</div>
+      <div class="nav-item" data-page="calendar"><span class="ic">&#128197;</span> Calendar</div>
+      <div class="nav-item" data-page="attendance"><span class="ic">&#128338;</span> Attendance</div>
+      <div class="nav-item hidden" data-page="recurring"><span class="ic">&#128257;</span> Recurring Tasks</div>
+      <div class="nav-item hidden" data-page="taskmon"><span class="ic">&#128203;</span> Follow-ups</div>
+      <div class="nav-group">Operations</div>
+      <div class="nav-item hidden" data-page="ops"><span class="ic">&#129514;</span> Sample Collection</div>
+      <div class="nav-group">HR</div>
+      <div class="nav-item" data-page="employees"><span class="ic">&#128100;</span> Employees</div>
+      <div class="nav-item" data-page="leave"><span class="ic">&#127958;</span> Leave</div>
+      <div class="nav-item" data-page="field"><span class="ic">&#128663;</span> Field Work</div>
+      <div class="nav-item" data-page="policy"><span class="ic">&#128203;</span> Company Policy</div>
+      <div class="nav-item" data-page="training"><span class="ic">&#127891;</span> Training</div>
+      <div class="nav-item" data-page="assets"><span class="ic">&#128450;</span> Information</div>
+      <div class="nav-item" data-page="fixedassets"><span class="ic">&#128736;</span> Asset Management</div>
+      <div class="nav-item" data-page="inventory"><span class="ic">&#128230;</span> Inventory</div>
+      <div class="nav-item" data-page="payreq"><span class="ic">&#129534;</span> Payment Requests</div>
+      <div class="nav-item" data-page="payroll"><span class="ic">&#128176;</span> Payroll</div>
+      <div class="nav-item hidden" data-page="accounts"><span class="ic">&#128202;</span> Accounts</div>
+      <div class="nav-item" data-page="profile"><span class="ic">&#9881;</span> My Profile</div>
+      <div class="nav-group">MD Desk</div>
+      <div class="nav-item" data-page="suggest"><span class="ic">&#9993;</span> Suggestion / Complaint</div>
+      <div class="nav-item hidden" data-page="mdinbox"><span class="ic">&#128233;</span> MD Inbox</div>
+      <div class="nav-group">Members</div>
+      <div class="nav-item hidden" data-page="cards"><span class="ic">&#127991;</span> Membership Cards</div>
+      <div class="nav-item hidden" data-page="cardstatus"><span class="ic">&#9989;</span> Card Status</div>
+      <div class="nav-group">Setup</div>
+      <div class="nav-item hidden" data-page="branches"><span class="ic">&#127970;</span> Branches</div>
+      <div class="nav-item hidden" data-page="watemplates"><span class="ic">&#128172;</span> WhatsApp Templates</div>
+    </div>
+    <div class="content">
+      <div id="page-dashboard">
+        <div class="greet">
+          <div class="greet-text">
+            <div class="greet-eyebrow">Nakoda MIS</div>
+            <h1 id="greetHello">Welcome</h1>
+            <div class="greet-meta" id="greetMeta">—</div>
+          </div>
+          <div class="greet-actions">
+            <select id="dashBranch" class="greet-select"><option value="">All branches</option></select>
+            <input id="dashMonth" type="month" class="greet-select" style="min-width:150px">
+            <button class="btn ghost sm" id="dashRefresh">&#8635; Refresh</button>
+          </div>
+        </div>
+        <div id="dashTasks"></div>
+        <div id="quickLog"></div>
+        <div class="section-label">Overview</div>
+        <div class="kpis" id="kpis"></div>
+        <div id="dashExtra"></div>
+        <div class="section-label">Recently added staff</div>
+        <div class="card"><div class="table-wrap swipe"><table id="recentTable"><thead><tr><th>Name</th><th>Role</th><th>Office / Branch</th><th>Status</th></tr></thead><tbody></tbody></table></div></div>
+      </div>
+
+      <div id="page-tasks" class="hidden"></div>
+      <div id="page-calendar" class="hidden"></div>
+      <div id="page-attendance" class="hidden"></div>
+      <div id="page-leave" class="hidden"></div>
+      <div id="page-field" class="hidden"></div>
+      <div id="page-policy" class="hidden"></div>
+      <div id="page-payroll" class="hidden"></div>
+      <div id="page-accounts" class="hidden"></div>
+      <div id="page-training" class="hidden"></div>
+      <div id="page-assets" class="hidden"></div>
+      <div id="page-fixedassets" class="hidden"></div>
+      <div id="page-suggest" class="hidden"></div>
+      <div id="page-mdinbox" class="hidden"></div>
+      <div id="page-inventory" class="hidden"></div>
+      <div id="page-payreq" class="hidden"></div>
+      <div id="page-recurring" class="hidden"></div>
+      <div id="page-taskmon" class="hidden"></div>
+      <div id="page-ops" class="hidden"></div>
+
+      <div id="page-employees" class="hidden">
+        <div class="page-head"><h1>Employees</h1><div class="spacer"></div><button class="btn ghost" id="empFormPdfBtn">📄 Blank form PDF</button> <button class="btn" id="addEmpBtn">+ Add Staff</button></div>
+        <div class="card">
+          <div class="toolbar">
+            <input class="search" id="empSearch" placeholder="Search name, login, phone…">
+            <select id="filterBranch"><option value="">All branches</option></select>
+            <select id="filterStatus"><option value="">All status</option><option value="Active">Active</option><option value="Inactive">Inactive</option></select>
+          </div>
+          <div class="table-wrap"><table id="empTable">
+            <thead><tr><th>Emp ID</th><th>Name</th><th>Login ID</th><th>Role</th><th>Office / Branch</th><th>Phone</th><th>Status</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table></div>
+          <div id="empEmpty" class="empty hidden">No employees match your filters.</div>
+          <div id="empLoad" class="center-load"><span class="loader dark"></span> Loading…</div>
+        </div>
+      </div>
+
+      <div id="page-profile" class="hidden">
+        <div class="page-head"><h1>My Profile</h1></div>
+        <div class="card" style="padding:20px;max-width:680px" id="profileCard"></div>
+      </div>
+
+      <div id="page-cards" class="hidden"></div>
+      <div id="page-cardstatus" class="hidden"></div>
+      <div id="page-watemplates" class="hidden"></div>
+
+      <div id="page-branches" class="hidden">
+        <div class="page-head"><h1>Branches</h1><div class="spacer"></div><button class="btn" id="addBranchBtn">+ Add Branch</button></div>
+        <div class="card">
+          <div class="table-wrap"><table id="branchTable">
+            <thead><tr><th>Code</th><th>Name</th><th>City</th><th>Mobile</th><th>Bank A/C</th><th>IFSC</th><th>WhatsApp API</th><th>Status</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table></div>
+          <div id="branchEmpty" class="empty hidden">No branches yet.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <nav id="mobileBottomNav"></nav>
+  <div id="mobileMoreDrawer" onclick="if(event.target===this)closeMobileMore()">
+    <div class="sheet"><div class="sheet-handle"></div><h3>All sections</h3><div class="more-grid" id="moreGrid"></div></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<div id="modalRoot"></div>
+
+<!-- v188: xlsx library removed from startup (≈900KB!) — accounts.js now loads it on demand.
+     All scripts run with defer: the splash/login paints first, scripts parse without blocking,
+     execution order is preserved. -->
+<script defer src="config.js"></script>
+<script defer src="api.js"></script>
+<script defer src="app.js"></script>
+<script defer src="branches.js"></script>
+<script defer src="watemplates.js"></script>
+<script defer src="membership.js"></script>
+<script defer src="bulksend.js"></script>
+<script defer src="cardadmin.js"></script>
+<script defer src="tasks.js"></script>
+<script defer src="calendar.js"></script>
+<script defer src="attendance.js"></script>
+<script defer src="hrmodules.js"></script>
+<script defer src="leave.js"></script>
+<script defer src="accounts.js"></script>
+<script defer src="training.js"></script>
+<script defer src="assets.js"></script>
+<script defer src="inventory.js"></script>
+<script defer src="stockauto.js"></script>
+<script defer src="purchase.js"></script>
+<script defer src="payreq.js"></script>
+<script defer src="combo.js"></script>
+<script defer src="recurring.js"></script>
+<script defer src="finance.js"></script>
+<script defer src="statementtable.js"></script>
+<script defer src="partnerreview.js"></script>
+<script defer src="bankpreview.js"></script>
+<script defer src="ops.js"></script>
+<script defer src="quicklog.js"></script>
+<script defer src="extras.js"></script>
+</body>
+</html>
