@@ -55,7 +55,7 @@
     saveItem:1,deleteItem:1,saveVendor:1,deleteVendor:1,saveConsumption:1,saveManualConsumption:1,raiseIndent:1,advanceIndent:1,saveAudit:1,approveAudit:1,
     createPayRequest:1,setPayRequest:1,
     saveSection:1,deleteSection:1,saveVideo:1,deleteVideo:1,submitQuiz:1,saveAsset:1,deleteAsset:1,logRepeat:1,
-    login:1,validate:1,logout:1,uploadFile:1,importOldCards:1,attachSelfie:1,waTest:1,waSendCard:1,saveWaTemplate:1,waTestTemplate:1,
+    login:1,validate:1,logout:1,uploadFile:1,importOldCards:1,attachSelfie:1,waTest:1,waSendCard:1,waCardMedia:1,waBulkSend:1,saveWaTemplate:1,waTestTemplate:1,
     submitSuggestion:1,replySuggestion:1,saveFixedAsset:1,deleteFixedAsset:1,completeFollowup:1,
     /* v309 — operations. Both queue: a technician records a sample with no signal and it syncs
        later, and a hand delivery can be recorded the same way. saveSample carries a clientId the
@@ -68,7 +68,7 @@
   var SELF_QUEUE={createEmployee:1,updateEmployee:1,setStatus:1,issueCard:1,renewCard:1,cancelCard:1,markCardSent:1,markCardActivated:1,
     createTask:1,updateTask:1,setTaskStatus:1,deleteTask:1,createCalEntry:1,updateCalEntry:1,attachSelfie:1};
   /* Writes that MUST stay online (auth, server-computed, exact-time, bulk). */
-  var NOQUEUE={login:1,validate:1,logout:1,changePassword:1,resetPassword:1,checkIn:1,checkOut:1,runPayroll:1,approvePayroll:1,confirmAbsent:1,uploadFile:1,importOldCards:1,submitQuiz:1,waTest:1,waSendCard:1,saveWaTemplate:1,waTestTemplate:1};
+  var NOQUEUE={login:1,validate:1,logout:1,changePassword:1,resetPassword:1,checkIn:1,checkOut:1,runPayroll:1,approvePayroll:1,confirmAbsent:1,uploadFile:1,importOldCards:1,submitQuiz:1,waTest:1,waSendCard:1,waCardMedia:1,waBulkSend:1,saveWaTemplate:1,waTestTemplate:1};
   /* ---------------- ATTACHMENTS ----------------------------------------------------
      A phone photo of a report is 4-8 MB. Sent as base64 it grows by a third, so ~10 MB was
      going up a branch connection against a hard 60-second abort — the request was killed
@@ -387,6 +387,15 @@
       return call('waSendCard',{token:getToken(),cardNumber:cardNumber,imageBase64:imageBase64,phone:phone||''}, 180000).then(function(r){ if(r.ok) API.refreshCards(); return r; });
     },
     listWaTemplates:function(){ return call('listWaTemplates',{token:getToken()}); },
+    /* ---- v316 bulk membership-card send ---------------------------------- */
+    waBulkPreview:function(cardNumbers,allowResend){
+      return call('waBulkPreview',{token:getToken(),cardNumbers:cardNumbers||[],opts:{allowResend:!!allowResend}}, 60000); },
+    waCardMedia:function(cardNumber,imageBase64){
+      return call('waCardMedia',{token:getToken(),cardNumber:cardNumber,imageBase64:imageBase64||''}, 120000); },
+    waBulkSend:function(jobs,allowResend){
+      return call('waBulkSend',{token:getToken(),jobs:jobs||[],opts:{allowResend:!!allowResend}}, 300000)
+        .then(function(r){ if(r.ok && API.refreshCards) API.refreshCards(); return r; }); },
+    waBranchCheck:function(){ return call('waBranchCheck',{token:getToken()}, 60000); },
     saveWaTemplate:function(data){
       if(!navigator.onLine) return Promise.resolve({ok:false,error:'Saving templates needs an internet connection.'});
       return call('saveWaTemplate',{token:getToken(),data:data});

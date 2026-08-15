@@ -94,6 +94,8 @@
     var v=document.getElementById('page-cards');
     v.innerHTML=
       '<div class="page-head"><h1>Membership Cards</h1><div class="spacer"></div>'+
+        '<button class="btn ghost" id="wabModeBtn">☑ Select cards</button>'+
+        '<button class="btn ghost" id="wabUnsentBtn">📤 Send unsent</button>'+
         '<button class="btn ghost" id="cardPriceBtn">Pricing</button>'+
         '<button class="btn ghost" id="cardTypesBtn">Card types</button>'+
         '<button class="btn" id="issueCardBtn">+ Issue card</button></div>'+
@@ -103,6 +105,9 @@
         '<select id="cardStatus"><option value="">All status</option><option value="active">Active</option><option value="expired">Expired</option><option value="cancelled">Cancelled</option><option value="renewed">Renewed</option></select>'+
       '</div><div id="cardList" class="center-load"><span class="loader dark"></span> Loading…</div></div>';
     document.getElementById('issueCardBtn').onclick=function(){ openIssueCardModal(); };
+    /* v316: bulk WhatsApp send — logic lives in bulksend.js */
+    document.getElementById('wabModeBtn').onclick=function(){ if(window.WABulk) WABulk.toggleMode(); };
+    document.getElementById('wabUnsentBtn').onclick=function(){ if(window.WABulk) WABulk.sendAllUnsent(); };
     document.getElementById('cardTypesBtn').onclick=function(){ openCardTypes(); };
     document.getElementById('cardPriceBtn').onclick=function(){ if(window.openPricingModal) window.openPricingModal(); };
     API.listCardPrices().then(function(r){ if(r.ok){ PRICEMAP={}; (r.prices||[]).forEach(function(p){ PRICEMAP[p.typeId+'|'+p.branchId]=p.price; }); } });
@@ -118,6 +123,8 @@
       API.listCards({}).then(function(r){
         if(r.ok){ _canIssue=r.perms&&r.perms.canIssue;
           document.getElementById('issueCardBtn').style.display=_canIssue?'':'none';
+          document.getElementById('wabModeBtn').style.display=_canIssue?'':'none';
+          document.getElementById('wabUnsentBtn').style.display=_canIssue?'':'none';
           document.getElementById('cardTypesBtn').style.display=(r.perms&&r.perms.canManageTypes)?'':'none';
           document.getElementById('cardPriceBtn').style.display='';
           ALLCARDS=r.cards||[]; paint();
@@ -139,6 +146,7 @@
             '<td><b>'+esc(c.cardNumber)+'</b></td><td>'+esc(c.holderName)+'</td><td>'+esc(c.mobile||'—')+'</td><td>'+esc(t?t.name:c.typeId)+'</td><td>'+esc(bName(c.branchId))+'</td><td>'+esc(fmtExpiry(c.expiryDate))+'</td><td>'+cstatus(c.status)+'</td><td><button class="btn ghost sm">View</button></td></tr>';
         }).join('')+'</tbody></table></div>';
       box.querySelectorAll('.crow').forEach(function(el){ el.onclick=function(){ openCardDetail(el.getAttribute('data-cn')); }; });
+      if(window.WABulk) WABulk.attach(box, list, TYPEMAP, _canIssue);   /* v316 tick boxes */
     }
   }
   function cstatus(s){ var m={active:'#1a7f37',expired:'#9aa0a6',cancelled:'#C0392B',renewed:'#185fa5'}; return '<span class="badge" style="background:'+(m[s]||'#999')+'22;color:'+(m[s]||'#999')+'">'+esc(s||'active')+'</span>'; }
@@ -331,6 +339,9 @@
     };
   };
 
+  /* v316: bulksend.js draws cards offscreen with THIS drawing code. */
+  window.__nakodaCard={ drawCard:drawCard, newCardCanvas:newCardCanvas,
+                        typeFor:function(id){ return TYPEMAP[id]; } };
   window.renderMembershipCards=renderMembershipCards;
   window.openCardDetail=openCardDetail;
   window.openIssueCardModal=openIssueCardModal;
