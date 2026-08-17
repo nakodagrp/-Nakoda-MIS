@@ -91,8 +91,10 @@
     /* v314: five stages, plus a walk-in / home-visit filter. The counts come from the server so
        this and the dashboard card can never disagree. */
     var chips='<div class="ops-chips">'+
+      /* v320: Result and Verified removed. An old row still holding one of those statuses is counted
+         and filtered under Collected by the server, so it stays reachable from the board. */
       chip('all','All',c.all)+chip('ordered','Ordered',c.ordered)+chip('collected','Collected',c.collected)+
-      chip('result','Result',c.result)+chip('verified','Verified',c.verified)+chip('sent','Sent',c.sent)+
+      chip('sent','Sent',c.sent)+
       (c.overdue?'<span class="ops-chip late" style="margin-left:2px">'+c.overdue+' over 24 h</span>':'')+
       (c.pendingCash?'<span class="ops-chip late">&#8377;'+money(c.pendingCash)+' uncollected</span>':'')+
       '</div>'+
@@ -117,7 +119,9 @@
   function visible(){
     return OPS.samples.filter(function(s){ return FILTER==='all'||s.status===FILTER; });
   }
-  var STAGE_LABEL={ordered:'Ordered',collected:'Collected',result:'Result',verified:'Verified',sent:'Sent'};
+  /* v320: the two retired statuses read as Collected rather than as a word the board no longer has a
+     chip for — a row must never describe itself with a label the screen cannot explain. */
+  var STAGE_LABEL={ordered:'Ordered',collected:'Collected',result:'Collected',verified:'Collected',sent:'Sent'};
   function selected(){
     var list=visible(); if(!list.length) return null;
     var hit=list.filter(function(s){ return s.sampleId===OPS.sel; })[0];
@@ -156,7 +160,6 @@
         : ['Pending for', '<span class="'+(s.pendingHours>=24?'ops-late-txt':'')+'">'+esc(waitLabel(s.pendingHours)||'just now')+'</span>']),
       ['Prescription', fileLink(s.rxUrl,'prescription')],
       ['Sample photo', fileLink(s.photoUrl,'photo')],
-      ['Result', fileLink(s.resultUrl,'result')],
       ['Report', fileLink(s.reportUrl,'report')]
     ];
     if(isHome){
@@ -167,14 +170,19 @@
         ['Reached', s.reachedAt?(esc(s.reachedAt)+(s.lateMin!==''?(' · '+(window.opsLateLabel?window.opsLateLabel(s.lateMin):'')):'')):'<span class="muted">not yet</span>']);
     }
     if(s.pendingAmount) rows.push(['Payment','&#8377;'+money(s.receivedAmount||0)+' of &#8377;'+money(s.amount)+' · <span class="ops-late-txt">&#8377;'+money(s.pendingAmount)+' due</span>']);
-    if(s.resultAt)   rows.push(['Result submitted', esc(s.resultAt)+(s.resultByName?(' · '+esc(s.resultByName)):'')]);
-    if(s.verifiedAt) rows.push(['Verified', esc(s.verifiedAt)+(s.verifiedByName?(' · '+esc(s.verifiedByName)):'')]);
+    /* v320: the Result and Verified stamps are no longer produced. They are still SHOWN when an old
+       row carries them — hiding history that exists would make the record lie about itself. */
+    if(s.resultUrl)  rows.push(['Result (old record)', fileLink(s.resultUrl,'result')]);
+    if(s.resultAt)   rows.push(['Result submitted (old record)', esc(s.resultAt)+(s.resultByName?(' · '+esc(s.resultByName)):'')]);
+    if(s.verifiedAt) rows.push(['Verified (old record)', esc(s.verifiedAt)+(s.verifiedByName?(' · '+esc(s.verifiedByName)):'')]);
     if(s.labRemark)  rows.push(['Lab remark', esc(s.labRemark)]);
     if(s.remarks) rows.push(['Remarks', esc(s.remarks)]);
     /* Whatever the record needs next — the same popup the owner gets from their task list, so a
        manager can push a stuck record along without hunting for whose queue it is in. */
-    var NEXT={ordered:['opsGoVisit','Open visit'],collected:['opsGoResult','Submit result'],
-              result:['opsGoVerify','Verify report'],verified:['opsSend','Send report']};
+    /* v320: collected goes straight to Send report. The two legacy statuses map there too, so an old
+       row is not left with a button that opens a stage nobody works any more. */
+    var NEXT={ordered:['opsGoVisit','Open visit'],collected:['opsSend','Send report'],
+              result:['opsSend','Send report'],verified:['opsSend','Send report']};
     var n=NEXT[s.status];
     var act=(s.status==='sent')
       ? '<button class="btn ghost" disabled>Report sent</button>'
@@ -207,8 +215,6 @@
     function go(id,fn){ var b=$id(id); if(b) b.onclick=function(){ var s=selected(); if(s) fn(s.sampleId,function(){ load(true); }); }; }
     go('opsSend',   function(id,cb){ window.openSendReport(id,'',cb); });
     go('opsGoVisit',  window.openHomeVisit);
-    go('opsGoResult', window.openSubmitResult);
-    go('opsGoVerify', window.openVerifyReport);
   }
   function paint(){
     var host=$id('opsBody'); if(!host) return;
@@ -508,7 +514,7 @@
     return '<a href="'+esc(url)+'" target="_blank" rel="noopener">'+esc(label)+'</a>';
   }
   function stageStrip(s){
-    var STAGES=[['ordered','Ordered'],['collected','Collected'],['result','Result'],['verified','Verified'],['sent','Sent']];
+    var STAGES=[['ordered','Ordered'],['collected','Collected'],['sent','Sent']];   /* v320 */
     var at=Number(s.stageIdx||0), isWalk=(String(s.type||'walkin')==='walkin');
     return '<div class="ops-stage2">'+STAGES.map(function(x,i){
       if(i===0 && isWalk) return '';                       /* a walk-in never had an order */
