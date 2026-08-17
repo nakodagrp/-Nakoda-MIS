@@ -56,12 +56,31 @@
     createPayRequest:1,setPayRequest:1,
     saveSection:1,deleteSection:1,saveVideo:1,deleteVideo:1,submitQuiz:1,saveAsset:1,deleteAsset:1,logRepeat:1,
     login:1,validate:1,logout:1,uploadFile:1,importOldCards:1,attachSelfie:1,waTest:1,waSendCard:1,waCardMedia:1,waBulkSend:1,saveWaTemplate:1,waTestTemplate:1,
-    submitSuggestion:1,replySuggestion:1,saveFixedAsset:1,deleteFixedAsset:1,completeFollowup:1};
+    submitSuggestion:1,replySuggestion:1,saveFixedAsset:1,deleteFixedAsset:1,completeFollowup:1,
+    /* v309 — operations. Both queue: a technician records a sample with no signal and it syncs
+       later, and a hand delivery can be recorded the same way. saveSample carries a clientId the
+       device minted first, so a replay updates its own row instead of creating a second sample. */
+    saveSample:1,sendSampleReport:1,
+    /* All four stage moves queue like the rest: a phlebotomist in a stairwell can still complete a
+       visit, and it syncs when the signal comes back. */
+    saveOrder:1,completeVisit:1,submitResult:1,verifyReport:1,saveLabVisit:1,saveOutsource:1};
   /* Writes that already do their own optimistic queueing inside the method (don't double-queue here). */
   var SELF_QUEUE={createEmployee:1,updateEmployee:1,setStatus:1,issueCard:1,renewCard:1,cancelCard:1,markCardSent:1,markCardActivated:1,
     createTask:1,updateTask:1,setTaskStatus:1,deleteTask:1,createCalEntry:1,updateCalEntry:1,attachSelfie:1};
   /* Writes that MUST stay online (auth, server-computed, exact-time, bulk). */
-  var NOQUEUE={login:1,validate:1,logout:1,changePassword:1,resetPassword:1,checkIn:1,checkOut:1,runPayroll:1,approvePayroll:1,confirmAbsent:1,uploadFile:1,importOldCards:1,submitQuiz:1,waTest:1,waSendCard:1,waCardMedia:1,waBulkSend:1,saveWaTemplate:1,waTestTemplate:1};
+  /* v317 — saveOrder JOINS THIS LIST, and it is worth writing down why, because it is a
+     deliberate loss of an offline capability that v314 shipped.
+
+     A slot is an EXCLUSIVE claim on one person's half hour. Two devices offline can both pick 4:00 PM
+     and only one can win. That alone would be survivable — the server refuses the loser — except for
+     what syncOutbox does with a refusal: on `r.ok===false` it DELETES the queued item, deliberately,
+     so the queue can never jam. So the losing order would be thrown away with nobody told. An order
+     that vanishes silently is worse than an order that cannot be taken, so the booking now requires a
+     connection and says so in plain words.
+
+     The way back to offline booking is a failed-items tray the desk can see and retry, not a change
+     here. Until that exists, this is the honest setting. */
+  var NOQUEUE={login:1,validate:1,logout:1,changePassword:1,resetPassword:1,checkIn:1,checkOut:1,runPayroll:1,approvePayroll:1,confirmAbsent:1,uploadFile:1,importOldCards:1,submitQuiz:1,waTest:1,waSendCard:1,waCardMedia:1,waBulkSend:1,saveWaTemplate:1,waTestTemplate:1,saveOrder:1,saveLabVisit:1};   /* v319: a chair is exclusive too */
   /* ---------------- ATTACHMENTS ----------------------------------------------------
      A phone photo of a report is 4-8 MB. Sent as base64 it grows by a third, so ~10 MB was
      going up a branch connection against a hard 60-second abort — the request was killed
@@ -380,15 +399,7 @@
       return call('waSendCard',{token:getToken(),cardNumber:cardNumber,imageBase64:imageBase64,phone:phone||''}, 180000).then(function(r){ if(r.ok) API.refreshCards(); return r; });
     },
     listWaTemplates:function(){ return call('listWaTemplates',{token:getToken()}); },
-    /* ---- v316 bulk membership-card send ------------------------------------
-       waBulkPreview : tiny, no images — validates numbers, keys and templates.
-       waCardMedia   : ONE card image; bulksend.js calls several in parallel and
-                       the server caches the URL on the card row, so a second
-                       batch of the same cards uploads nothing at all.
-       waBulkSend    : one request; the server fans the WhatsApp calls out with
-                       UrlFetchApp.fetchAll, so ten sends take about two seconds.
-       All three stay ONLINE-only — a multi-megabyte batch has no business in
-       the offline outbox. */
+    /* ---- v316 bulk membership-card send ---------------------------------- */
     waBulkPreview:function(cardNumbers,allowResend){
       return call('waBulkPreview',{token:getToken(),cardNumbers:cardNumbers||[],opts:{allowResend:!!allowResend}}, 60000); },
     waCardMedia:function(cardNumber,imageBase64){
@@ -529,6 +540,34 @@
     listPayslips:function(m,b){ return call('listPayslips',{token:getToken(),month:m,branch:b}); },
     myPayslip:function(m){ return call('myPayslip',{token:getToken(),month:m}); },
     myPayHistory:function(n){ return call('myPayHistory',{token:getToken(),months:n||6}); },
+    /* v309 — operations: sample collection -> report sent */
+    saveSample:function(d){ return call('saveSample',{token:getToken(),data:d}); },
+    listSamples:function(b,ym,st,kind){ return call('listSamples',{token:getToken(),branch:b||'',ym:ym||'',sampleStatus:st||'',sampleType:kind||''}); },
+    getSample:function(id){ return call('getSample',{token:getToken(),sampleId:id}); },
+    sendSampleReport:function(id,d){ return call('sendSampleReport',{token:getToken(),sampleId:id,data:d||{}}); },
+    opsSummary:function(b){ return call('opsSummary',{token:getToken(),branch:b||''}); },
+    opsCollectors:function(){ return call('opsCollectors',{token:getToken()}); },   /* v310 */
+    /* v314 — the five-stage pipeline */
+    saveOrder:function(d){ return call('saveOrder',{token:getToken(),data:d}); },
+    completeVisit:function(id,d){ return call('completeVisit',{token:getToken(),sampleId:id,data:d||{}}); },
+    submitResult:function(id,d){ return call('submitResult',{token:getToken(),sampleId:id,data:d||{}}); },
+    verifyReport:function(id,d){ return call('verifyReport',{token:getToken(),sampleId:id,data:d||{}}); },
+    opsPeople:function(b){ return call('opsPeople',{token:getToken(),branch:b||''}); },
+    /* v317 — one call answers the whole picker: the week strip and every box for the chosen day.
+       Two calls would be tidier and twice as slow, and this runs while a patient waits on the phone. */
+    opsSlots:function(empId,date,month){ return call('opsSlots',{token:getToken(),empId:empId||'',date:date||'',month:month||''}); },
+    /* v317 — repeat patients. There is no patient master; this collapses Ops_Samples on mobile
+       number and returns the newest row, which carries the newest address. */
+    opsPatients:function(q){ return call('opsPatients',{token:getToken(),q:q||''}); },
+    /* v319 — the counter's diary and the 5-minute appointment. */
+    opsCounter:function(b,date,month){ return call('opsCounter',{token:getToken(),branch:b||'',date:date||'',month:month||''}); },
+    saveLabVisit:function(d){ return call('saveLabVisit',{token:getToken(),data:d}); },
+    /* v321 — process 3. */
+    saveOutsource:function(d){ return call('saveOutsource',{token:getToken(),data:d}); },
+    opsLabs:function(q){ return call('opsLabs',{token:getToken(),q:q||''}); },
+    /* v315 — the two summaries */
+    opsLabArrivals:function(b,n){ return call('opsLabArrivals',{token:getToken(),branch:b||'',months:n||6}); },
+    opsTurnaround:function(b,ym,emp){ return call('opsTurnaround',{token:getToken(),branch:b||'',ym:ym||'',empId:emp||''}); },
     saveDaily:function(d){ return call('saveDaily',{token:getToken(),data:d}); },
     listDaily:function(b,ym){ return call('listDaily',{token:getToken(),branch:b,ym:ym}); },
     getDaily:function(id){ return call('getDaily',{token:getToken(),dayId:id}); },
