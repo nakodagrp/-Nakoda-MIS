@@ -71,8 +71,12 @@
       ? '<select id="opsBranch" class="in" style="max-width:190px"><option value="">All branches</option>'+
         brs.map(function(b){ return '<option value="'+esc(b.BranchID)+'"'+(String(b.BranchID)===OPS.branch?' selected':'')+'>'+esc(b.BranchName)+'</option>'; }).join('')+'</select>'
       : '';
-    var btn=(canCollect()?'<button class="btn ghost" id="opsNew">+ Collect sample</button>':'')+
-            ((window.opsCanOrder&&window.opsCanOrder())?'<button class="btn" id="opsNewOrder">+ New order</button>':'');
+    /* v318: the primary button books a collection against a phlebotomist's diary. The old
+       counter form is still one click away as "Walk-in" — a patient standing at the desk has no
+       appointment to book and must not be forced through a calendar. */
+    var btn=((window.opsCanOrder&&window.opsCanOrder())?'<button class="btn" id="opsBook">+ Sample collection</button>':'')+
+            ((window.opsCanOrder&&window.opsCanOrder())?'<button class="btn ghost" id="opsCounter">+ Order to delivery</button>':'')+
+            (canCollect()?'<button class="btn ghost" id="opsNew">Walk-in</button>':'');
     return '<div class="page-head"><h1>Sample collection</h1>'+
       '<div class="ops-sub">Operations · process 1 of 5</div><div class="spacer"></div>'+
       picker+'<input id="opsYm" type="month" class="in" style="max-width:150px" value="'+esc(OPS.ym)+'">'+
@@ -182,6 +186,8 @@
   }
   function wirePage(){
     var b=$id('opsNew'); if(b) b.onclick=function(){ window.openCollectSample(function(){ load(true); }); };
+    var bb=$id('opsBook'); if(bb) bb.onclick=function(){ window.openBookCollection(function(){ load(true); }); };
+    var cc=$id('opsCounter'); if(cc) cc.onclick=function(){ window.openBookLabVisit(function(){ load(true); }); };
     var bo=$id('opsNewOrder'); if(bo) bo.onclick=function(){ window.openNewOrder(function(){ load(true); }); };
     var r=$id('opsRefresh'); if(r) r.onclick=function(){ load(true); };
     var bp=$id('opsBranch'); if(bp) bp.onchange=function(){ OPS.branch=this.value; OPS.sel=''; load(true); };
@@ -550,23 +556,165 @@
     };
   }
 
-  /* ------------------------------------------------------------------ B · new order */
+  /* ------------------------------------------------------------------ B · new order
+     v317 — THE APPOINTMENT STOPPED BEING TYPED.
+
+     It was an <input type="time">. Nothing on the screen or on the server knew whether that time had
+     already gone, so four orders could be written for one man at 4:00 PM and all four were accepted.
+     It is now a grid of what is actually free, and a booked box is gone.
+
+     The old box also could not express a DAY. Whatever the desk meant, the server stamped today —
+     so a visit for tomorrow morning quietly became this morning. The picker sends the date. */
+  var _slotState={ empId:'', date:'', slotMin:30, pick:null, days:[], slots:[], busy:false };
+
+  function slotLabel(hhmm){
+    var p=String(hhmm||'').split(':'), h=Number(p[0]||0), m=p[1]||'00';
+    var ap=h>=12?'PM':'AM', hh=h%12; if(hh===0) hh=12;
+    return hh+':'+m+' '+ap;
+  }
+  function slotEnd(min, size){
+    var e=min+size, h=Math.floor(e/60)%24, m=e%60;
+    return slotLabel(('0'+h).slice(-2)+':'+('0'+m).slice(-2));
+  }
+
+  /* ---- repeat patients ------------------------------------------------------------------
+     Typed into either box. Two characters minimum and a 300 ms pause, because every keystroke here
+     is a round trip to Apps Script and the sheet grows every day. */
+  function wirePatientSearch(){
+    var timer=null;
+    function box(inputId, dropId){
+      var inp=$id(inputId), dp=$id(dropId);
+      if(!inp||!dp) return;
+      inp.addEventListener('input', function(){
+        var q=(inp.value||'').trim();
+        if(timer) clearTimeout(timer);
+        if(q.length<2){ dp.innerHTML=''; dp.style.display='none'; return; }
+        timer=setTimeout(function(){
+          API.opsPatients(q).then(function(r){
+            var list=(r&&r.ok&&r.patients)||[];
+            if(!list.length){ dp.innerHTML='<div class="ops-pt-none">New patient — nothing on record.</div>'; }
+            else {
+              dp.innerHTML=list.map(function(p,i){
+                return '<div class="ops-pt-it" data-i="'+i+'"><b>'+esc(p.name)+'</b>'+
+                  '<span>'+esc(p.mobile)+(p.address?(' · '+esc(p.address)):'')+'</span>'+
+                  (p.last?('<span class="ops-pt-last">last visit '+esc(p.last)+'</span>'):'')+'</div>';
+              }).join('');
+              dp._list=list;
+            }
+            dp.style.display='block';
+          }, function(){ dp.style.display='none'; });
+        }, 300);
+      });
+      dp.addEventListener('mousedown', function(e){
+        var it=e.target.closest && e.target.closest('.ops-pt-it'); if(!it) return;
+        e.preventDefault();
+        var p=(dp._list||[])[Number(it.getAttribute('data-i'))]; if(!p) return;
+        if($id('odName')) $id('odName').value=p.name||'';
+        if($id('odMob'))  $id('odMob').value=p.mobile||'';
+        if($id('odAddr')) $id('odAddr').value=p.address||'';
+        /* $id() returns null for a field this popup does not have — guarded, so the same search
+           serves both the booking popup (no age) and the older order popup (which still has it). */
+        if(p.age && $id('odAge')) $id('odAge').value=p.age;
+        if(p.sex && $id('odSex')) $id('odSex').value=p.sex;
+        $id('odPtN').style.display='none'; $id('odPtM').style.display='none';
+      });
+      inp.addEventListener('blur', function(){ setTimeout(function(){ dp.style.display='none'; }, 150); });
+    }
+    box('odName','odPtN'); box('odMob','odPtM');
+  }
+
+  /* ---- the grid -------------------------------------------------------------------------- */
+  function paintSlots(){
+    var wrap=$id('odSlots'), strip=$id('odDays'); if(!wrap||!strip) return;
+    var s=_slotState;
+    if(s.busy){ wrap.innerHTML='<div class="ops-slot-msg">Loading…</div>'; return; }
+    if(!s.empId){ strip.innerHTML=''; wrap.innerHTML='<div class="ops-slot-msg">Pick a phlebotomist to see what is free.</div>'; return; }
+
+    strip.innerHTML=s.days.map(function(d){
+      var cls='ops-day'+(d.date===s.date?' on':'')+((d.free===0)?' full':'');
+      var note=d.onLeave?'leave':(d.free===0?'full':(d.free+' free'));
+      return '<button type="button" class="'+cls+'" data-d="'+esc(d.date)+'">'+
+        '<small>'+esc(d.dow)+'</small><b>'+d.day+'</b><em>'+note+'</em></button>';
+    }).join('');
+    strip.querySelectorAll('.ops-day').forEach(function(b){
+      b.onclick=function(){ if(b.classList.contains('full')) return;
+        s.date=b.getAttribute('data-d'); s.pick=null; loadSlots(); };
+    });
+
+    if(!s.slots.length){ wrap.innerHTML='<div class="ops-slot-msg">No duty hours on this day.</div>'; return; }
+    var mor='', eve='';
+    s.slots.forEach(function(sl){
+      var cls='ops-slot'+(sl.state!=='free'?(' '+sl.state):'')+((s.pick===sl.min)?' on':'');
+      var dis=(sl.state!=='free');
+      var sub=(sl.state==='taken')?esc(sl.patient||'booked')
+             :(sl.state==='past')?'gone'
+             :(sl.state==='leave')?'on leave'
+             :(sl.state==='gap')?'travel':'';
+      var cell='<button type="button" class="'+cls+'" data-m="'+sl.min+'"'+(dis?' disabled':'')+'>'+
+        slotLabel(sl.at)+(sub?('<small>'+sub+'</small>'):'')+'</button>';
+      if(sl.min<720) mor+=cell; else eve+=cell;
+    });
+    wrap.innerHTML=(mor?'<div class="ops-slot-grp">Morning</div><div class="ops-slot-grid">'+mor+'</div>':'')+
+                   (eve?'<div class="ops-slot-grp">Afternoon &amp; evening</div><div class="ops-slot-grid">'+eve+'</div>':'');
+    wrap.querySelectorAll('.ops-slot').forEach(function(b){
+      b.onclick=function(){ if(b.disabled) return; s.pick=Number(b.getAttribute('data-m')); paintSlots(); paintPicked(); };
+    });
+    paintPicked();
+  }
+  function paintPicked(){
+    var el=$id('odPicked'); if(!el) return;
+    var s=_slotState;
+    if(s.pick===null||s.pick===undefined){ el.className='ops-picked'; el.innerHTML='No slot chosen yet.'; return; }
+    var sl=null; for(var i=0;i<s.slots.length;i++){ if(s.slots[i].min===s.pick){ sl=s.slots[i]; break; } }
+    if(!sl){ el.innerHTML='No slot chosen yet.'; return; }
+    var nm=(($id('odWho')||{}).options||[])[($id('odWho')||{}).selectedIndex||0];
+    el.className='ops-picked on';
+    el.innerHTML='<b>'+esc((nm?nm.textContent:'').split(' · ')[0])+'</b> will reach between <b>'+
+      slotLabel(sl.at)+'</b> and <b>'+slotEnd(sl.min,s.slotMin)+'</b> on <b>'+esc(s.date)+'</b>.'+
+      '<div class="ops-hint">This '+s.slotMin+'-minute slot is held for this order once you save.</div>';
+  }
+  function loadSlots(){
+    var s=_slotState;
+    if(!s.empId){ paintSlots(); return; }
+    s.busy=true; paintSlots();
+    API.opsSlots(s.empId, s.date).then(function(r){
+      s.busy=false;
+      if(!r||!r.ok){ s.days=[]; s.slots=[];
+        var w=$id('odSlots'); if(w) w.innerHTML='<div class="ops-slot-msg err">'+esc((r&&r.error)||'Could not read the diary.')+'</div>';
+        return; }
+      s.days=r.days||[]; s.slots=r.slots||[]; s.date=r.date||s.date; s.slotMin=r.slotMin||30;
+      paintSlots();
+    }, function(){ s.busy=false; var w=$id('odSlots');
+      if(w) w.innerHTML='<div class="ops-slot-msg err">Could not reach the server. Booking a slot needs a connection.</div>'; });
+  }
+
   window.openNewOrder=function(after){
     if(!window.opsCanOrder()){ toast('Your role cannot take a home-visit order.',true); return; }
+    if(typeof navigator!=='undefined' && navigator.onLine===false){
+      toast('Booking a visit slot needs a connection — the diary cannot be read offline.',true); return;
+    }
     var brs=((window.S&&S.meta&&S.meta.branches)||[]);
     var canPick=!!(perms().canViewAll||perms().level==='SUPER');
+    _slotState={ empId:'', date:'', slotMin:30, pick:null, days:[], slots:[], busy:false };
+
     var body='<div class="grid2">'+
-      '<div class="field"><label>Patient name *</label><input id="odName" class="in" placeholder="Divya Patel"></div>'+
-      '<div class="field"><label>Mobile *</label><input id="odMob" class="in" type="tel" inputmode="numeric" maxlength="10" placeholder="9825011223"></div>'+
+      '<div class="field"><label>Patient name *</label><div class="ops-pt-wrap"><input id="odName" class="in" autocomplete="off" placeholder="Divya Patel"><div class="ops-pt-drop" id="odPtN"></div></div><div class="ops-hint">Type two letters — patients who came before appear below.</div></div>'+
+      '<div class="field"><label>Mobile *</label><div class="ops-pt-wrap"><input id="odMob" class="in" autocomplete="off" type="tel" inputmode="numeric" maxlength="10" placeholder="9825011223"><div class="ops-pt-drop" id="odPtM"></div></div><div class="ops-hint">Searching by number never mis-spells.</div></div>'+
+      '<div class="field full"><label>Address *</label><input id="odAddr" class="in" placeholder="204 Sun Residency, Adajan, Surat"><div class="ops-hint">Fills itself for a repeat patient. Edit it if they have moved — the newest one is kept.</div></div>'+
       '<div class="field full"><label>Tests *</label><input id="odTests" class="in" placeholder="CBC, LFT"><div class="ops-tsug" id="odSug"></div></div>'+
       '<div class="field"><label>Amount (&#8377;) *</label><input id="odAmt" class="in" type="number" inputmode="numeric" placeholder="850"></div>'+
-      '<div class="field"><label>Appointment time *</label><input id="odWhen" class="in" type="time"></div>'+
-      '<div class="field full"><label>Address *</label><input id="odAddr" class="in" placeholder="204 Sun Residency, Adajan, Surat"></div>'+
-      (canPick?'<div class="field"><label>Branch</label><select id="odBranch" class="in">'+brs.map(function(b){ return '<option value="'+esc(b.BranchID)+'"'+(String(b.BranchID)===String(u().Branch)?' selected':'')+'>'+esc(b.BranchName)+'</option>'; }).join('')+'</select></div>':'')+
-      '<div class="field"><label>Phlebotomist *</label><select id="odWho" class="in"><option>Loading…</option></select><div id="odWide" class="ops-hint"></div></div>'+
-      '<div class="field"><label>Handed over at</label><div class="ops-stamp-ro" id="odNow">'+nowHHMM()+' · stamped automatically</div></div>'+
+      (canPick?'<div class="field"><label>Branch</label><select id="odBranch" class="in">'+brs.map(function(b){ return '<option value="'+esc(b.BranchID)+'"'+(String(b.BranchID)===String(u().Branch)?' selected':'')+'>'+esc(b.BranchName)+'</option>'; }).join('')+'</select></div>'
+              :'<div class="field"><label>Branch</label><div class="ops-stamp-ro">'+esc(branchNameOf(u().Branch,brs))+' · from your login</div></div>')+
       '<div class="field"><label>Age / sex <span class="muted">optional</span></label><div class="row2"><input id="odAge" class="in" type="number" placeholder="32"><select id="odSex" class="in"><option value="">—</option><option>Female</option><option>Male</option><option>Other</option></select></div></div>'+
       '<div class="field full"><label>Notes <span class="muted">optional</span></label><input id="odNote" class="in" placeholder="Call before arriving"></div>'+
+      '<div class="field full"><label>Phlebotomist *</label><select id="odWho" class="in"><option>Loading…</option></select><div id="odWide" class="ops-hint"></div></div>'+
+      '<div class="field full"><label>Date *</label><div class="ops-days" id="odDays"></div></div>'+
+      '<div class="field full"><label>Time slot *</label><div id="odSlots"></div>'+
+        '<div class="ops-slot-key">'+
+          '<span><i class="k-free"></i>free</span><span><i class="k-on"></i>chosen</span>'+
+          '<span><i class="k-taken"></i>booked</span><span><i class="k-past"></i>gone / off duty</span>'+
+        '</div>'+
+        '<div class="ops-picked" id="odPicked">No slot chosen yet.</div></div>'+
     '</div><div class="ops-offnote">The clock starts at <b>handed over</b>. Everything measured about this visit counts from that stamp, which is why it is not typed.</div><div id="odMsg"></div>';
     openModal('New order', body, '<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="odSave">Save order</button>');
 
@@ -577,6 +725,8 @@
         var i=$id('odTests'), have=i.value.split(',').map(function(x){return x.trim().toLowerCase();}).filter(Boolean), t=b.getAttribute('data-t');
         if(have.indexOf(t.toLowerCase())>=0) return;
         i.value=have.length?(i.value.replace(/,\s*$/,'')+', '+t):t; }; }); }
+
+    wirePatientSearch();
 
     /* v314a: grouped by branch, and never empty. Head office employs no phlebotomist, so scoping
        this to the branch on the form made the whole order unsaveable from the desk most likely to be
@@ -610,39 +760,515 @@
           ? '<span class="ops-late-txt">'+esc(r.branchName||'This branch')+' has none — showing every branch.</span>' : '');
         try{ var w=s2.closest&&s2.closest('.cmb-wrap'), m=w&&w.querySelector('.cmb-input');
           if(m){ var o=s2.options[s2.selectedIndex]; m.value=o?o.textContent:''; } }catch(e){}
+        _slotState.empId=s2.value||''; _slotState.date=''; _slotState.pick=null; loadSlots();
       });
     }
     loadPeople();
     var bs=$id('odBranch'); if(bs) bs.onchange=loadPeople;
+    var who0=$id('odWho'); if(who0) who0.onchange=function(){
+      _slotState.empId=who0.value||''; _slotState.date=''; _slotState.pick=null; loadSlots(); };
 
     $id('odSave').onclick=function(){
       var btn=this;
       function bad(m){ $id('odMsg').innerHTML='<div class="msg error">'+esc(m)+'</div>'; btn.disabled=false; }
       var name=($id('odName').value||'').trim(), mob=($id('odMob').value||'').replace(/[^0-9]/g,'');
       var tests=($id('odTests').value||'').trim(), amt=$id('odAmt').value;
-      var when=($id('odWhen').value||'').trim(), addr=($id('odAddr').value||'').trim();
+      var addr=($id('odAddr').value||'').trim();
       if(!name) return bad('Enter the patient name.');
       if(mob.length!==10) return bad('Enter a 10-digit mobile number.');
+      if(!addr) return bad('Enter the address — somebody has to find this patient.');
       if(!tests) return bad('Add at least one test.');
       if(amt===''||isNaN(Number(amt))) return bad('Enter the amount.');
-      if(!when) return bad('Enter the appointment time you promised the patient.');
-      if(!addr) return bad('Enter the address — somebody has to find this patient.');
       var who=($id('odWho')||{}).value||'';
       if(!who) return bad('No phlebotomist available to assign this to.');
+      if(_slotState.pick===null||_slotState.pick===undefined) return bad('Pick a time slot on the grid.');
+      var sl=null; for(var i=0;i<_slotState.slots.length;i++){ if(_slotState.slots[i].min===_slotState.pick){ sl=_slotState.slots[i]; break; } }
+      if(!sl) return bad('Pick a time slot on the grid.');
       btn.disabled=true; $id('odMsg').innerHTML='';
       API.saveOrder({ clientId:cid(), branchId:($id('odBranch')||{}).value||'', patientName:name, mobile:mob,
-        tests:tests, amount:Number(amt), appointmentAt:when, address:addr, assignedToEmpId:who,
-        age:($id('odAge').value||'').trim(), sex:($id('odSex').value||''), remarks:($id('odNote').value||'').trim()
+        tests:tests, amount:Number(amt), appointmentAt:sl.at, appointmentDate:_slotState.date, address:addr,
+        assignedToEmpId:who, age:($id('odAge').value||'').trim(), sex:($id('odSex').value||''),
+        remarks:($id('odNote').value||'').trim()
       }).then(function(r){
         if(r&&r.ok){ closeModal();
-          toast(r.offline?'Saved on this device — it will sync automatically.':'Order '+(r.sampleId||'')+' saved. The phlebotomist has been given the visit.');
+          toast('Order '+(r.sampleId||'')+' saved for '+slotLabel(sl.at)+'. The phlebotomist has been given the visit.');
           if(API.refreshTasks) try{ API.refreshTasks(); }catch(e){}
           if(typeof after==='function') after(r);
-        } else { bad((r&&r.error)||'Could not save.'); }
+        } else {
+          /* The slot went while this popup was open. Redraw the grid so the desk can see what is
+             left instead of guessing a second time. */
+          bad((r&&r.error)||'Could not save.');
+          _slotState.pick=null; loadSlots();
+        }
       },function(e){ bad((e&&e.message)||'Could not save.'); });
     };
     setTimeout(function(){ var n=$id('odName'); if(n) n.focus(); },60);
   };
+
+  /* ------------------------------------------------------------------ B2 · book a collection
+     v318 — THE DIARY VIEW.
+
+     Same booking as openNewOrder, laid out the way the desk actually thinks: choose the person,
+     look at his month, look at his day, click a time. The month calendar answers "which day can he
+     come?" without clicking through seven strips, which is the question a patient asks first.
+
+     One popup, one saved row, one task. Nothing new is stored — this writes exactly what
+     openNewOrder writes, through the same endpoint and the same server-side clash guard. */
+  var _bk={ empId:'', month:'', date:'', slotMin:30, pick:null, days:[], slots:[], info:null, busy:false };
+
+  function bkMonthLabel(ym){
+    var M=['January','February','March','April','May','June','July','August','September','October','November','December'];
+    var p=String(ym||'').split('-');
+    return (M[Number(p[1])-1]||'')+' '+p[0];
+  }
+  function bkShiftMonth(ym, by){
+    var p=String(ym).split('-'), y=Number(p[0]), m=Number(p[1])-1+by;
+    y+=Math.floor(m/12); m=((m%12)+12)%12;
+    return y+'-'+('0'+(m+1)).slice(-2);
+  }
+
+  function bkPaint(){
+    var host=$id('bkDiary'); if(!host) return;
+    var s=_bk;
+    if(!s.empId){ host.innerHTML='<div class="ops-slot-msg">Choose a phlebotomist to see his diary.</div>'; return; }
+    if(s.busy && !s.days.length){ host.innerHTML='<div class="ops-slot-msg">Loading his diary…</div>'; return; }
+    var inf=s.info||{};
+
+    /* ---- who ---- */
+    var who='<div class="bk-who">'+
+      '<div class="bk-avatar">'+(inf.photo?('<img src="'+esc(inf.photo)+'" alt="">'):esc((inf.name||'?').slice(0,1)))+'</div>'+
+      '<div class="bk-whotx"><b>'+esc(inf.name||'')+'</b>'+
+        '<span>'+esc((inf.role||'').toUpperCase())+(inf.branchName?(' &middot; '+esc(inf.branchName)):'')+'</span>'+
+        '<span>On duty '+esc(slotLabel(inf.open||'')) +' to '+esc(slotLabel(inf.close||''))+
+          ' &middot; '+(inf.monthBooked||0)+' visit'+((inf.monthBooked===1)?'':'s')+' booked this month</span>'+
+        (inf.dutySet?'':'<span class="bk-warn">No duty hours on his Employees row — showing a default day.</span>')+
+      '</div></div>';
+
+    /* ---- calendar ---- */
+    var DW=['Su','Mo','Tu','We','Th','Fr','Sa'];
+    var cells='';
+    for(var i=0;i<(s.lead||0);i++) cells+='<div class="bk-c bk-blank"></div>';
+    s.days.forEach(function(d){
+      var cls='bk-c';
+      if(d.past||d.beyond) cls+=' bk-off';
+      else if(d.onLeave) cls+=' bk-leave';
+      else if(d.free===0) cls+=' bk-full';
+      else cls+=' bk-open';
+      if(d.date===s.date) cls+=' bk-on';
+      cells+='<div class="'+cls+'" data-d="'+esc(d.date)+'"><b>'+d.day+'</b>'+
+        ((!d.past && !d.beyond && !d.onLeave && d.free>0)?('<i>'+d.free+'</i>'):'')+'</div>';
+    });
+    var cal='<div class="bk-cal">'+
+      '<div class="bk-calhd"><button type="button" class="bk-nav" id="bkPrev">&#8249;</button>'+
+        '<span>'+esc(bkMonthLabel(s.month))+'</span>'+
+        '<button type="button" class="bk-nav" id="bkNext">&#8250;</button></div>'+
+      '<div class="bk-grid">'+DW.map(function(d){ return '<div class="bk-dw">'+d+'</div>'; }).join('')+cells+'</div>'+
+      '<div class="bk-callegend"><span><i class="l-open"></i>free</span><span><i class="l-full"></i>full</span>'+
+        '<span><i class="l-leave"></i>leave</span><span><i class="l-off"></i>closed</span></div>'+
+    '</div>';
+
+    /* ---- times ---- */
+    var times;
+    if(!s.date){ times='<div class="ops-slot-msg">Pick a day on the calendar.</div>'; }
+    else if(!s.slots.length){ times='<div class="ops-slot-msg">No duty hours on this day.</div>'; }
+    else {
+      var mor='', eve='';
+      s.slots.forEach(function(sl){
+        var cls='bk-t'+((sl.state!=='free')?(' '+sl.state):'')+((s.pick===sl.min)?' on':'');
+        var cell='<button type="button" class="'+cls+'" data-m="'+sl.min+'"'+((sl.state!=='free')?' disabled title="'+esc(sl.patient||'not available')+'"':'')+'>'+
+          slotLabel(sl.at)+'</button>';
+        if(sl.min<720) mor+=cell; else eve+=cell;
+      });
+      times='<div class="bk-times">'+
+        (mor?'<div class="bk-trow"><span class="bk-tlab">Morning</span><div class="bk-tgrid">'+mor+'</div></div>':'')+
+        (eve?'<div class="bk-trow"><span class="bk-tlab">Evening</span><div class="bk-tgrid">'+eve+'</div></div>':'')+
+      '</div>';
+    }
+
+    host.innerHTML='<div class="bk-panel">'+who+'<div class="bk-split">'+
+      '<div class="bk-left">'+times+'</div>'+cal+'</div></div>'+
+      '<div class="ops-picked'+((s.pick!==null&&s.pick!==undefined)?' on':'')+'" id="bkPicked"></div>';
+
+    var pv=$id('bkPrev'), nx=$id('bkNext');
+    if(pv) pv.onclick=function(){ s.month=bkShiftMonth(s.month,-1); s.date=''; s.pick=null; bkLoad(); };
+    if(nx) nx.onclick=function(){ s.month=bkShiftMonth(s.month, 1); s.date=''; s.pick=null; bkLoad(); };
+    host.querySelectorAll('.bk-c[data-d]').forEach(function(c){
+      c.onclick=function(){
+        if(c.classList.contains('bk-off')||c.classList.contains('bk-full')||c.classList.contains('bk-leave')) return;
+        s.date=c.getAttribute('data-d'); s.pick=null; bkLoad();
+      };
+    });
+    host.querySelectorAll('.bk-t').forEach(function(b){
+      b.onclick=function(){ if(b.disabled) return; s.pick=Number(b.getAttribute('data-m')); bkPaint(); };
+    });
+    bkPicked();
+  }
+  function bkPicked(){
+    var el=$id('bkPicked'); if(!el) return;
+    var s=_bk;
+    if(s.pick===null||s.pick===undefined){ el.className='ops-picked'; el.innerHTML='Pick a time above.'; return; }
+    var sl=null; for(var i=0;i<s.slots.length;i++){ if(s.slots[i].min===s.pick){ sl=s.slots[i]; break; } }
+    if(!sl){ el.innerHTML='Pick a time above.'; return; }
+    el.className='ops-picked on';
+    el.innerHTML='<b>'+esc((s.info&&s.info.name)||'')+'</b> will reach the patient between <b>'+
+      slotLabel(sl.at)+'</b> and <b>'+slotEnd(sl.min,s.slotMin)+'</b> on <b>'+esc(s.date)+'</b>.'+
+      '<div class="ops-hint">Saving holds this '+s.slotMin+'-minute slot and puts the blood-collection task in his list.</div>';
+  }
+  function bkLoad(){
+    var s=_bk;
+    if(!s.empId){ bkPaint(); return; }
+    s.busy=true; bkPaint();
+    API.opsSlots(s.empId, s.date, s.month).then(function(r){
+      s.busy=false;
+      if(!r||!r.ok){ var h=$id('bkDiary');
+        if(h) h.innerHTML='<div class="ops-slot-msg err">'+esc((r&&r.error)||'Could not read his diary.')+'</div>';
+        return; }
+      s.days=r.days||[]; s.lead=r.lead||0; s.month=r.month||s.month; s.date=r.date||'';
+      s.slots=r.slots||[]; s.slotMin=r.slotMin||30; s.info=r;
+      bkPaint();
+    }, function(){ s.busy=false; var h=$id('bkDiary');
+      if(h) h.innerHTML='<div class="ops-slot-msg err">Could not reach the server. Booking needs a connection.</div>'; });
+  }
+
+  window.openBookCollection=function(after){
+    if(!window.opsCanOrder()){ toast('Your role cannot book a collection.',true); return; }
+    if(typeof navigator!=='undefined' && navigator.onLine===false){
+      toast('Booking needs a connection — his diary cannot be read offline.',true); return;
+    }
+    var brs=((window.S&&S.meta&&S.meta.branches)||[]);
+    var canPick=!!(perms().canViewAll||perms().level==='SUPER');
+    _bk={ empId:'', month:'', date:'', slotMin:30, pick:null, days:[], slots:[], info:null, busy:false, lead:0 };
+
+    var body=
+      '<div class="bk-top">'+
+        (canPick?'<div class="field"><label>Branch</label><select id="bkBranch" class="in">'+brs.map(function(b){ return '<option value="'+esc(b.BranchID)+'"'+(String(b.BranchID)===String(u().Branch)?' selected':'')+'>'+esc(b.BranchName)+'</option>'; }).join('')+'</select></div>'
+                :'<div class="field"><label>Branch</label><div class="ops-stamp-ro">'+esc(branchNameOf(u().Branch,brs))+' &middot; from your login</div></div>')+
+        '<div class="field"><label>Phlebotomist *</label><select id="bkWho" class="in"><option>Loading…</option></select><div id="bkWide" class="ops-hint"></div></div>'+
+      '</div>'+
+      '<div id="bkDiary"><div class="ops-slot-msg">Choose a phlebotomist to see his diary.</div></div>'+
+      '<div class="bk-sep">Patient</div>'+
+      '<div class="grid2">'+
+        '<div class="field"><label>Patient name *</label><div class="ops-pt-wrap"><input id="odName" class="in" autocomplete="off" placeholder="Divya Patel"><div class="ops-pt-drop" id="odPtN"></div></div><div class="ops-hint">Two letters &mdash; past patients appear below.</div></div>'+
+        '<div class="field"><label>Mobile *</label><div class="ops-pt-wrap"><input id="odMob" class="in" autocomplete="off" type="tel" inputmode="numeric" maxlength="10" placeholder="9825011223"><div class="ops-pt-drop" id="odPtM"></div></div></div>'+
+        '<div class="field full"><label>Address *</label><input id="odAddr" class="in" placeholder="204 Sun Residency, Adajan, Surat"><div class="ops-hint">Fills itself for a repeat patient.</div></div>'+
+        /* v318a: Tests and Age removed at your instruction. Tests are decided at the door with the
+           prescription in hand; age was being left blank anyway. Both columns still exist and are
+           still written by the walk-in form, so nothing on the board or in the sheet moved. */
+        '<div class="field"><label>Amount (&#8377;) *</label><input id="odAmt" class="in" type="number" inputmode="numeric" placeholder="850"></div>'+
+        '<div class="field"><label>Sex <span class="muted">optional</span></label><select id="odSex" class="in"><option value="">&mdash;</option><option>Female</option><option>Male</option><option>Other</option></select></div>'+
+        '<div class="field full"><label>Remark <span class="muted">optional</span></label><input id="odNote" class="in" placeholder="Call before arriving"></div>'+
+      '</div><div id="odMsg"></div>';
+
+    openModal('Sample collection — book a visit', body,
+      '<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="bkSave">Book collection</button>');
+
+    wirePatientSearch();
+
+    function loadPeople(){
+      var sel=$id('bkWho'); if(!sel) return;
+      sel.innerHTML='<option value="">Loading…</option>';
+      API.opsPeople(($id('bkBranch')||{}).value||'').then(function(r){
+        var s2=$id('bkWho'); if(!s2) return;
+        var list=(r&&r.ok&&r.phlebotomists)||[];
+        if(!list.length){
+          s2.innerHTML='<option value="">No Phlebotomist or Round Person in Employees</option>';
+          var msg=$id('odMsg');
+          if(msg) msg.innerHTML='<div class="msg error">Nobody in Employees has the role Phlebotomist or Round Person. Add one before booking a collection.</div>';
+          return;
+        }
+        var groups=[], byBr={};
+        list.forEach(function(c){ var k=c.branchName||'—'; if(!byBr[k]){ byBr[k]=[]; groups.push(k); } byBr[k].push(c); });
+        s2.innerHTML=groups.map(function(g){
+          return '<optgroup label="'+esc(g)+'">'+byBr[g].map(function(e){
+            return '<option value="'+esc(e.empId)+'">'+esc(e.name)+'</option>'; }).join('')+'</optgroup>';
+        }).join('');
+        var note=$id('bkWide');
+        if(note) note.innerHTML=(r.phlebotomistsWidened
+          ? '<span class="ops-late-txt">'+esc(r.branchName||'This branch')+' has none — showing every branch.</span>' : '');
+        try{ var w=s2.closest&&s2.closest('.cmb-wrap'), m=w&&w.querySelector('.cmb-input');
+          if(m){ var o=s2.options[s2.selectedIndex]; m.value=o?o.textContent:''; } }catch(e){}
+        _bk.empId=s2.value||''; _bk.month=''; _bk.date=''; _bk.pick=null; bkLoad();
+      });
+    }
+    loadPeople();
+    var bb=$id('bkBranch'); if(bb) bb.onchange=loadPeople;
+    var bw=$id('bkWho'); if(bw) bw.onchange=function(){
+      _bk.empId=bw.value||''; _bk.date=''; _bk.pick=null; bkLoad(); };
+
+    $id('bkSave').onclick=function(){
+      var btn=this;
+      function bad(m){ $id('odMsg').innerHTML='<div class="msg error">'+esc(m)+'</div>'; btn.disabled=false;
+        try{ $id('odMsg').scrollIntoView({block:'nearest'}); }catch(e){} }
+      var name=($id('odName').value||'').trim(), mob=($id('odMob').value||'').replace(/[^0-9]/g,'');
+      var amt=$id('odAmt').value;
+      var addr=($id('odAddr').value||'').trim();
+      if(!_bk.empId) return bad('Choose a phlebotomist.');
+      if(_bk.pick===null||_bk.pick===undefined) return bad('Pick a day and a time on his diary.');
+      if(!name) return bad('Enter the patient name.');
+      if(mob.length!==10) return bad('Enter a 10-digit mobile number.');
+      if(!addr) return bad('Enter the address — somebody has to find this patient.');
+      if(amt===''||isNaN(Number(amt))) return bad('Enter the amount.');
+      var sl=null; for(var i=0;i<_bk.slots.length;i++){ if(_bk.slots[i].min===_bk.pick){ sl=_bk.slots[i]; break; } }
+      if(!sl) return bad('Pick a time on his diary.');
+      btn.disabled=true; $id('odMsg').innerHTML='';
+      API.saveOrder({ clientId:cid(), branchId:($id('bkBranch')||{}).value||'', patientName:name, mobile:mob,
+        tests:'', amount:Number(amt), appointmentAt:sl.at, appointmentDate:_bk.date, address:addr,
+        assignedToEmpId:_bk.empId, sex:($id('odSex').value||''),
+        remarks:($id('odNote').value||'').trim()
+      }).then(function(r){
+        if(r&&r.ok){ closeModal();
+          toast((r.sampleId||'Collection')+' booked for '+slotLabel(sl.at)+'. '+((_bk.info&&_bk.info.name)||'The phlebotomist')+' has the blood-collection task.');
+          if(API.refreshTasks) try{ API.refreshTasks(); }catch(e){}
+          if(typeof after==='function') after(r);
+        } else { bad((r&&r.error)||'Could not save.'); _bk.pick=null; bkLoad(); }
+      },function(e){ bad((e&&e.message)||'Could not save.'); });
+    };
+    setTimeout(function(){ var n=$id('bkWho'); if(n) try{ n.focus(); }catch(e){} },60);
+  };
+
+  /* ------------------------------------------------------------------ B3 · counter appointment
+     v319 — POPUP 2. The patient comes to us, so nobody travels and five minutes is honest.
+
+     THE DIFFERENCE FROM B2, AND IT IS NOT THE NUMBER. A phlebotomist's box holds ONE booking — he
+     cannot be in two houses. A counter's box holds as many bookings as there are chairs. Drawn the
+     way B2 draws a person, a three-chair branch would show FULL with two chairs empty and turn
+     paying patients away on a wrong number. So every box here carries "used / chairs" on its face,
+     and the header states the chair count it is working from — a wrong setting is visible in one
+     glance instead of quietly costing you patients. */
+  var _ct={ branch:'', month:'', date:'', hour:null, slotMin:5, pick:null, days:[], hours:[], slots:[],
+            info:null, rx:'', busy:false, lead:0 };
+
+  function ctPaint(){
+    var host=$id('ctDiary'); if(!host) return;
+    var s=_ct;
+    if(s.busy && !s.days.length){ host.innerHTML='<div class="ops-slot-msg">Loading the counter…</div>'; return; }
+    var inf=s.info||{};
+
+    var who='<div class="bk-who">'+
+      '<div class="bk-avatar">'+esc(String(inf.branchName||'?').slice(0,1))+'</div>'+
+      '<div class="bk-whotx"><b>'+esc(inf.branchName||'')+' &mdash; collection counter</b>'+
+        '<span>OPEN '+esc(slotLabel(inf.open||''))+' to '+esc(slotLabel(inf.close||''))+
+          ' &middot; <b>'+(inf.chairs||1)+' collection chair'+((inf.chairs===1)?'':'s')+'</b></span>'+
+        '<span>'+(inf.monthBooked||0)+' appointment'+((inf.monthBooked===1)?'':'s')+' booked this month'+
+          (inf.walkinHold?(' &middot; 1 box in '+inf.walkinHold+' held for people who walk in'):'')+'</span>'+
+        (inf.chairsSet?'':'<span class="bk-warn">Chairs not set for this branch — using 1. Ask head office to set OPS_CHAIRS.</span>')+
+      '</div></div>';
+
+    var DW=['Su','Mo','Tu','We','Th','Fr','Sa'];
+    var cells='';
+    for(var i=0;i<(s.lead||0);i++) cells+='<div class="bk-c bk-blank"></div>';
+    s.days.forEach(function(d){
+      var cls='bk-c';
+      if(d.past||d.beyond) cls+=' bk-off';
+      else if(d.free===0) cls+=' bk-full';
+      else cls+=' bk-open';
+      if(d.date===s.date) cls+=' bk-on';
+      cells+='<div class="'+cls+'" data-d="'+esc(d.date)+'"><b>'+d.day+'</b>'+
+        ((!d.past && !d.beyond && d.free>0)?('<i>'+d.free+'</i>'):'')+'</div>';
+    });
+    var cal='<div class="bk-cal">'+
+      '<div class="bk-calhd"><button type="button" class="bk-nav" id="ctPrev">&#8249;</button>'+
+        '<span>'+esc(bkMonthLabel(s.month))+'</span>'+
+        '<button type="button" class="bk-nav" id="ctNext">&#8250;</button></div>'+
+      '<div class="bk-grid">'+DW.map(function(d){ return '<div class="bk-dw">'+d+'</div>'; }).join('')+cells+'</div>'+
+      '<div class="bk-callegend"><span><i class="l-open"></i>free</span><span><i class="l-full"></i>full</span>'+
+        '<span><i class="l-off"></i>closed</span></div>'+
+    '</div>';
+
+    var left;
+    if(!s.date){ left='<div class="ops-slot-msg">Pick a day on the calendar.</div>'; }
+    else {
+      /* The hour first. A whole day at five minutes is over 150 boxes and nobody reads 150 boxes. */
+      var hs=(s.hours||[]).map(function(h){
+        var cls='bk-h'+((h.hour===s.hour)?' on':'')+((h.free===0)?' full':'');
+        return '<button type="button" class="'+cls+'" data-h="'+h.hour+'"'+((h.free===0)?' disabled':'')+'>'+
+          slotLabel(h.at)+'<small>'+(h.free===0?'full':h.free)+'</small></button>';
+      }).join('');
+      var inHour=(s.slots||[]).filter(function(sl){ return sl.hour===s.hour; });
+      var boxes=inHour.map(function(sl){
+        var cls='bk-t'+((sl.state!=='free')?(' '+sl.state):'')+((s.pick===sl.min)?' on':'');
+        var note=(sl.state==='walkin')?'walk-in'
+                :(sl.state==='past')?'gone'
+                :(sl.state==='taken')?'full'
+                :((sl.chairs-sl.used)+'/'+sl.chairs);
+        return '<button type="button" class="'+cls+'" data-m="'+sl.min+'"'+((sl.state!=='free')?' disabled':'')+'>'+
+          slotLabel(sl.at)+'<small>'+note+'</small></button>';
+      }).join('');
+      left='<div style="font-size:12px;font-weight:700;opacity:.6;margin-bottom:7px">HOUR</div>'+
+        '<div class="bk-hours">'+hs+'</div>'+
+        (s.hour===null||s.hour===undefined
+          ? '<div class="ops-slot-msg">Pick an hour.</div>'
+          : (boxes?('<div class="bk-trow"><span class="bk-tlab">'+esc(slotLabel(('0'+s.hour).slice(-2)+':00'))+
+              '</span><div class="bk-tgrid">'+boxes+'</div></div>')
+             :'<div class="ops-slot-msg">The counter is closed in this hour.</div>'))+
+        '<div class="ops-hint" style="margin-top:10px">Each box shows how many of the '+(inf.chairs||1)+
+        ' chair'+((inf.chairs===1)?'':'s')+' are still free at that minute.</div>';
+    }
+
+    host.innerHTML='<div class="bk-panel">'+who+'<div class="bk-split">'+
+      '<div class="bk-left">'+left+'</div>'+cal+'</div></div>'+
+      '<div class="ops-picked" id="ctPicked"></div>';
+
+    var pv=$id('ctPrev'), nx=$id('ctNext');
+    if(pv) pv.onclick=function(){ s.month=bkShiftMonth(s.month,-1); s.date=''; s.hour=null; s.pick=null; ctLoad(); };
+    if(nx) nx.onclick=function(){ s.month=bkShiftMonth(s.month, 1); s.date=''; s.hour=null; s.pick=null; ctLoad(); };
+    host.querySelectorAll('.bk-c[data-d]').forEach(function(c){
+      c.onclick=function(){
+        if(c.classList.contains('bk-off')||c.classList.contains('bk-full')) return;
+        s.date=c.getAttribute('data-d'); s.hour=null; s.pick=null; ctLoad();
+      };
+    });
+    host.querySelectorAll('.bk-h[data-h]').forEach(function(b){
+      b.onclick=function(){ if(b.disabled) return; s.hour=Number(b.getAttribute('data-h')); s.pick=null; ctPaint(); };
+    });
+    host.querySelectorAll('.bk-t').forEach(function(b){
+      b.onclick=function(){ if(b.disabled) return; s.pick=Number(b.getAttribute('data-m')); ctPaint(); };
+    });
+    ctPicked();
+  }
+  function ctPicked(){
+    var el=$id('ctPicked'); if(!el) return;
+    var s=_ct;
+    if(s.pick===null||s.pick===undefined){ el.className='ops-picked'; el.innerHTML='Pick a day, an hour, then a time.'; return; }
+    var sl=null; for(var i=0;i<s.slots.length;i++){ if(s.slots[i].min===s.pick){ sl=s.slots[i]; break; } }
+    if(!sl){ el.innerHTML='Pick a time.'; return; }
+    var nm=($id('ctName')&&$id('ctName').value.trim())||'The patient';
+    el.className='ops-picked on';
+    el.innerHTML='<b>'+esc(nm)+'</b> should reach the <b>'+esc((s.info&&s.info.branchName)||'')+
+      '</b> counter at <b>'+slotLabel(sl.at)+'</b> on <b>'+esc(s.date)+'</b>.'+
+      '<div class="ops-hint">One of the '+sl.chairs+' chair'+((sl.chairs===1)?'':'s')+
+      ' is held for '+s.slotMin+' minutes.</div>';
+  }
+  function ctLoad(){
+    var s=_ct;
+    s.busy=true; ctPaint();
+    API.opsCounter(s.branch, s.date, s.month).then(function(r){
+      s.busy=false;
+      if(!r||!r.ok){ var h=$id('ctDiary');
+        if(h) h.innerHTML='<div class="ops-slot-msg err">'+esc((r&&r.error)||'Could not read the counter.')+'</div>';
+        return; }
+      s.days=r.days||[]; s.lead=r.lead||0; s.month=r.month||s.month; s.date=r.date||'';
+      s.hours=r.hours||[]; s.slots=r.slots||[]; s.slotMin=r.slotMin||5; s.info=r; s.branch=r.branchId||s.branch;
+      if(s.date && (s.hour===null||s.hour===undefined)){
+        for(var i=0;i<s.hours.length;i++){ if(s.hours[i].free>0){ s.hour=s.hours[i].hour; break; } }
+      }
+      ctPaint();
+    }, function(){ s.busy=false; var h=$id('ctDiary');
+      if(h) h.innerHTML='<div class="ops-slot-msg err">Could not reach the server. Booking needs a connection.</div>'; });
+  }
+
+  window.openBookLabVisit=function(after){
+    if(!window.opsCanOrder() && !window.opsCanCollect()){ toast('Your role cannot book an appointment.',true); return; }
+    if(typeof navigator!=='undefined' && navigator.onLine===false){
+      toast('Booking needs a connection — the counter cannot be read offline.',true); return;
+    }
+    var brs=((window.S&&S.meta&&S.meta.branches)||[]);
+    var canPick=!!(perms().canViewAll||perms().level==='SUPER');
+    _ct={ branch:'', month:'', date:'', hour:null, slotMin:5, pick:null, days:[], hours:[], slots:[],
+          info:null, rx:'', busy:false, lead:0 };
+
+    var body=
+      '<div class="bk-top">'+
+        (canPick?'<div class="field"><label>Branch</label><select id="ctBranch" class="in">'+brs.map(function(b){ return '<option value="'+esc(b.BranchID)+'"'+(String(b.BranchID)===String(u().Branch)?' selected':'')+'>'+esc(b.BranchName)+'</option>'; }).join('')+'</select></div>'
+                :'<div class="field"><label>Branch</label><div class="ops-stamp-ro">'+esc(branchNameOf(u().Branch,brs))+' &middot; from your login</div></div>')+
+        '<div class="field"><label>Appointment</label><div class="ops-stamp-ro">5-minute slot at the counter</div></div>'+
+      '</div>'+
+      '<div id="ctDiary"><div class="ops-slot-msg">Loading the counter…</div></div>'+
+      '<div class="bk-sep">Patient</div>'+
+      '<div class="grid2">'+
+        '<div class="field"><label>Patient name *</label><div class="ops-pt-wrap"><input id="ctName" class="in" autocomplete="off" placeholder="Divya Patel"><div class="ops-pt-drop" id="ctPtN"></div></div><div class="ops-hint">Two letters &mdash; past patients appear below.</div></div>'+
+        '<div class="field"><label>Mobile *</label><div class="ops-pt-wrap"><input id="ctMob" class="in" autocomplete="off" type="tel" inputmode="numeric" maxlength="10" placeholder="9825011223"><div class="ops-pt-drop" id="ctPtM"></div></div></div>'+
+        '<div class="field"><label>Amount (&#8377;) *</label><input id="ctAmt" class="in" type="number" inputmode="numeric" placeholder="850"></div>'+
+        '<div class="field"><label>Sex <span class="muted">optional</span></label><select id="ctSex" class="in"><option value="">&mdash;</option><option>Female</option><option>Male</option><option>Other</option></select></div>'+
+        '<div class="field full"><label>Prescription *</label>'+
+          '<label class="ops-file" for="ctRx"><span id="ctRxSt">Tap to attach the doctor\'s prescription</span></label>'+
+          '<input id="ctRx" type="file" accept="image/*,.pdf" style="display:none">'+
+          '<div class="ops-hint">The patient brings the paper &mdash; scan or photograph it here.</div></div>'+
+        '<div class="field full"><label>Remark <span class="muted">optional</span></label><input id="ctNote" class="in" placeholder="Fasting since 9 PM"></div>'+
+      '</div><div id="ctMsg"></div>';
+
+    openModal('Order to delivery — counter appointment', body,
+      '<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="ctSave">Book appointment</button>');
+
+    /* the same repeat-patient search, pointed at this popup's two boxes */
+    ctWireSearch();
+    upload('ctRx','ctRxSt','prescriptions',function(url){ _ct.rx=url; });
+
+    var cb=$id('ctBranch');
+    _ct.branch=(cb&&cb.value)||String(u().Branch||'');
+    if(cb) cb.onchange=function(){ _ct.branch=cb.value||''; _ct.month=''; _ct.date=''; _ct.hour=null; _ct.pick=null; ctLoad(); };
+    ctLoad();
+
+    $id('ctSave').onclick=function(){
+      var btn=this;
+      function bad(m){ $id('ctMsg').innerHTML='<div class="msg error">'+esc(m)+'</div>'; btn.disabled=false; }
+      var name=($id('ctName').value||'').trim(), mob=($id('ctMob').value||'').replace(/[^0-9]/g,'');
+      var amt=$id('ctAmt').value;
+      if(_ct.pick===null||_ct.pick===undefined) return bad('Pick a day, an hour and a time at the counter.');
+      if(!name) return bad('Enter the patient name.');
+      if(mob.length!==10) return bad('Enter a 10-digit mobile number.');
+      if(amt===''||isNaN(Number(amt))) return bad('Enter the amount.');
+      if(!_ct.rx) return bad('Attach the prescription.');
+      var sl=null; for(var i=0;i<_ct.slots.length;i++){ if(_ct.slots[i].min===_ct.pick){ sl=_ct.slots[i]; break; } }
+      if(!sl) return bad('Pick a time at the counter.');
+      btn.disabled=true; $id('ctMsg').innerHTML='';
+      API.saveLabVisit({ clientId:cid(), branchId:_ct.branch, patientName:name, mobile:mob,
+        amount:Number(amt), appointmentAt:sl.at, appointmentDate:_ct.date, rxUrl:_ct.rx,
+        sex:($id('ctSex').value||''), remarks:($id('ctNote').value||'').trim()
+      }).then(function(r){
+        if(r&&r.ok){ closeModal();
+          toast((r.sampleId||'Appointment')+' booked at '+slotLabel(sl.at)+'. The counter has the task.');
+          if(API.refreshTasks) try{ API.refreshTasks(); }catch(e){}
+          if(typeof after==='function') after(r);
+        } else { bad((r&&r.error)||'Could not save.'); _ct.pick=null; ctLoad(); }
+      },function(e){ bad((e&&e.message)||'Could not save.'); });
+    };
+    setTimeout(function(){ var n=$id('ctName'); if(n) n.focus(); },60);
+  };
+
+  /* The repeat-patient dropdown, bound to this popup's boxes. Address is deliberately ignored here —
+     nobody is travelling to it, and showing an address on a counter appointment would invite somebody
+     to think a visit was booked. */
+  function ctWireSearch(){
+    var timer=null;
+    function box(inputId, dropId){
+      var inp=$id(inputId), dp=$id(dropId);
+      if(!inp||!dp) return;
+      inp.addEventListener('input', function(){
+        var q=(inp.value||'').trim();
+        if(timer) clearTimeout(timer);
+        if(q.length<2){ dp.innerHTML=''; dp.style.display='none'; ctPicked(); return; }
+        timer=setTimeout(function(){
+          API.opsPatients(q).then(function(r){
+            var list=(r&&r.ok&&r.patients)||[];
+            dp.innerHTML=list.length
+              ? list.map(function(p,i){ return '<div class="ops-pt-it" data-i="'+i+'"><b>'+esc(p.name)+'</b>'+
+                  '<span>'+esc(p.mobile)+'</span>'+(p.last?('<span class="ops-pt-last">last visit '+esc(p.last)+'</span>'):'')+'</div>'; }).join('')
+              : '<div class="ops-pt-none">New patient — nothing on record.</div>';
+            dp._list=list; dp.style.display='block';
+          }, function(){ dp.style.display='none'; });
+        }, 300);
+      });
+      dp.addEventListener('mousedown', function(e){
+        var it=e.target.closest && e.target.closest('.ops-pt-it'); if(!it) return;
+        e.preventDefault();
+        var p=(dp._list||[])[Number(it.getAttribute('data-i'))]; if(!p) return;
+        if($id('ctName')) $id('ctName').value=p.name||'';
+        if($id('ctMob'))  $id('ctMob').value=p.mobile||'';
+        if(p.sex && $id('ctSex')) $id('ctSex').value=p.sex;
+        $id('ctPtN').style.display='none'; $id('ctPtM').style.display='none';
+        ctPicked();
+      });
+      inp.addEventListener('blur', function(){ setTimeout(function(){ dp.style.display='none'; }, 150); });
+    }
+    box('ctName','ctPtN'); box('ctMob','ctPtM');
+    var n=$id('ctName'); if(n) n.addEventListener('input', ctPicked);
+  }
+
+  function branchNameOf(id, brs){
+    for(var i=0;i<(brs||[]).length;i++){ if(String(brs[i].BranchID)===String(id)) return String(brs[i].BranchName||id); }
+    return String(id||'—');
+  }
 
   /* ------------------------------------------------------------------ C · the visit */
   window.openHomeVisit=function(sampleId, after){

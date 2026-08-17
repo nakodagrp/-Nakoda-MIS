@@ -63,12 +63,24 @@
     saveSample:1,sendSampleReport:1,
     /* All four stage moves queue like the rest: a phlebotomist in a stairwell can still complete a
        visit, and it syncs when the signal comes back. */
-    saveOrder:1,completeVisit:1,submitResult:1,verifyReport:1};
+    saveOrder:1,completeVisit:1,submitResult:1,verifyReport:1,saveLabVisit:1};
   /* Writes that already do their own optimistic queueing inside the method (don't double-queue here). */
   var SELF_QUEUE={createEmployee:1,updateEmployee:1,setStatus:1,issueCard:1,renewCard:1,cancelCard:1,markCardSent:1,markCardActivated:1,
     createTask:1,updateTask:1,setTaskStatus:1,deleteTask:1,createCalEntry:1,updateCalEntry:1,attachSelfie:1};
   /* Writes that MUST stay online (auth, server-computed, exact-time, bulk). */
-  var NOQUEUE={login:1,validate:1,logout:1,changePassword:1,resetPassword:1,checkIn:1,checkOut:1,runPayroll:1,approvePayroll:1,confirmAbsent:1,uploadFile:1,importOldCards:1,submitQuiz:1,waTest:1,waSendCard:1,waCardMedia:1,waBulkSend:1,saveWaTemplate:1,waTestTemplate:1};
+  /* v317 — saveOrder JOINS THIS LIST, and it is worth writing down why, because it is a
+     deliberate loss of an offline capability that v314 shipped.
+
+     A slot is an EXCLUSIVE claim on one person's half hour. Two devices offline can both pick 4:00 PM
+     and only one can win. That alone would be survivable — the server refuses the loser — except for
+     what syncOutbox does with a refusal: on `r.ok===false` it DELETES the queued item, deliberately,
+     so the queue can never jam. So the losing order would be thrown away with nobody told. An order
+     that vanishes silently is worse than an order that cannot be taken, so the booking now requires a
+     connection and says so in plain words.
+
+     The way back to offline booking is a failed-items tray the desk can see and retry, not a change
+     here. Until that exists, this is the honest setting. */
+  var NOQUEUE={login:1,validate:1,logout:1,changePassword:1,resetPassword:1,checkIn:1,checkOut:1,runPayroll:1,approvePayroll:1,confirmAbsent:1,uploadFile:1,importOldCards:1,submitQuiz:1,waTest:1,waSendCard:1,waCardMedia:1,waBulkSend:1,saveWaTemplate:1,waTestTemplate:1,saveOrder:1,saveLabVisit:1};   /* v319: a chair is exclusive too */
   /* ---------------- ATTACHMENTS ----------------------------------------------------
      A phone photo of a report is 4-8 MB. Sent as base64 it grows by a third, so ~10 MB was
      going up a branch connection against a hard 60-second abort — the request was killed
@@ -541,6 +553,15 @@
     submitResult:function(id,d){ return call('submitResult',{token:getToken(),sampleId:id,data:d||{}}); },
     verifyReport:function(id,d){ return call('verifyReport',{token:getToken(),sampleId:id,data:d||{}}); },
     opsPeople:function(b){ return call('opsPeople',{token:getToken(),branch:b||''}); },
+    /* v317 — one call answers the whole picker: the week strip and every box for the chosen day.
+       Two calls would be tidier and twice as slow, and this runs while a patient waits on the phone. */
+    opsSlots:function(empId,date,month){ return call('opsSlots',{token:getToken(),empId:empId||'',date:date||'',month:month||''}); },
+    /* v317 — repeat patients. There is no patient master; this collapses Ops_Samples on mobile
+       number and returns the newest row, which carries the newest address. */
+    opsPatients:function(q){ return call('opsPatients',{token:getToken(),q:q||''}); },
+    /* v319 — the counter's diary and the 5-minute appointment. */
+    opsCounter:function(b,date,month){ return call('opsCounter',{token:getToken(),branch:b||'',date:date||'',month:month||''}); },
+    saveLabVisit:function(d){ return call('saveLabVisit',{token:getToken(),data:d}); },
     /* v315 — the two summaries */
     opsLabArrivals:function(b,n){ return call('opsLabArrivals',{token:getToken(),branch:b||'',months:n||6}); },
     opsTurnaround:function(b,ym,emp){ return call('opsTurnaround',{token:getToken(),branch:b||'',ym:ym||'',empId:emp||''}); },

@@ -994,3 +994,151 @@ html,body{overflow-x:hidden}
   .la-chart{height:72px}
   .ta-tb{font-size:11.5px}
 }
+
+/* ============================================================ v317 — visit slot picker */
+.ops-days{display:flex;gap:7px;overflow-x:auto;padding:2px 0 6px;-webkit-overflow-scrolling:touch}
+.ops-day{flex:0 0 auto;width:60px;padding:7px 0;border:1px solid var(--line,#e2e6ea);border-radius:10px;
+  background:#fff;cursor:pointer;text-align:center;font:inherit;color:inherit}
+.ops-day small{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;opacity:.65}
+.ops-day b{display:block;font-size:18px;line-height:1.25}
+.ops-day em{display:block;font-size:10px;font-style:normal;font-weight:700;color:#1e7f4f}
+.ops-day.on{background:#2f5bd0;border-color:#2f5bd0;color:#fff}
+.ops-day.on small,.ops-day.on em{color:#dbe5fb}
+.ops-day.full{opacity:.45;background:#f2f3f5;cursor:not-allowed}
+.ops-day.full em{color:#a32d2d}
+
+.ops-slot-grp{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
+  opacity:.6;margin:12px 0 7px}
+.ops-slot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:7px}
+.ops-slot{padding:8px 4px;border:1px solid var(--line,#e2e6ea);border-radius:9px;background:#fff;
+  cursor:pointer;font:inherit;font-size:13.5px;font-weight:600;color:inherit;text-align:center}
+.ops-slot small{display:block;font-size:10px;font-weight:600;opacity:.7;margin-top:1px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ops-slot:hover:not([disabled]){border-color:#1e7f4f;background:#e8f5ee}
+.ops-slot.on{background:#1e7f4f;border-color:#1e7f4f;color:#fff}
+.ops-slot.on small{color:#cfe9db;opacity:1}
+.ops-slot.taken{background:#eceef1;color:#98a0aa;border-color:#e6e9ec;cursor:not-allowed;font-weight:500}
+.ops-slot.past,.ops-slot.leave,.ops-slot.gap{background:#f7f8f9;color:#c2c7ce;border-style:dashed;
+  cursor:not-allowed;font-weight:500}
+
+.ops-slot-msg{padding:14px;border:1px dashed var(--line,#e2e6ea);border-radius:9px;opacity:.7;
+  font-size:13px;text-align:center}
+.ops-slot-msg.err{border-color:#e3b1b1;color:#a32d2d;opacity:1}
+.ops-slot-key{display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;opacity:.7;margin-top:10px}
+.ops-slot-key i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+.ops-slot-key .k-free{background:#fff;border:1px solid #ccd2da}
+.ops-slot-key .k-on{background:#1e7f4f}
+.ops-slot-key .k-taken{background:#eceef1;border:1px solid #e6e9ec}
+.ops-slot-key .k-past{background:#f7f8f9;border:1px dashed #ccd2da}
+
+.ops-picked{margin-top:11px;padding:10px 13px;border-radius:9px;border:1px dashed var(--line,#e2e6ea);
+  font-size:13px;opacity:.7}
+.ops-picked.on{background:#e8f5ee;border:1px solid #bfe0cd;color:#14563a;opacity:1}
+.ops-picked.on .ops-hint{color:#2c6b4c}
+
+/* The dropdown hangs off the INPUT, not off .field — .field is used all over the app and giving
+   it position:relative would quietly move things on screens nobody was looking at. */
+.ops-pt-wrap{position:relative}
+.ops-pt-drop{display:none;position:absolute;top:100%;left:0;right:0;z-index:60;background:#fff;
+  border:1px solid #ccd2da;border-radius:9px;box-shadow:0 10px 26px rgba(20,25,40,.16);margin-top:3px;
+  overflow:hidden;max-height:260px;overflow-y:auto}
+.ops-pt-it{padding:9px 12px;cursor:pointer;border-bottom:1px solid #f1f3f5}
+.ops-pt-it:last-child{border-bottom:none}
+.ops-pt-it:hover{background:#eaf0fd}
+.ops-pt-it b{display:block;font-size:13.5px}
+.ops-pt-it span{display:block;font-size:11.5px;opacity:.7}
+.ops-pt-it .ops-pt-last{opacity:.5}
+.ops-pt-none{padding:9px 12px;font-size:12.5px;opacity:.6}
+
+@media (max-width:560px){
+  .ops-slot-grid{grid-template-columns:repeat(auto-fill,minmax(84px,1fr))}
+  .ops-day{width:54px}
+}
+
+/* ============================================================ v318 — the diary popup */
+.bk-top{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.bk-sep{font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:800;opacity:.55;
+  margin:20px 0 11px;padding-bottom:7px;border-bottom:1px solid var(--line,#e2e6ea)}
+
+.bk-panel{border:1px solid var(--line,#e2e6ea);border-radius:12px;overflow:hidden;background:#fff}
+.bk-who{display:flex;gap:13px;align-items:center;padding:13px 15px;background:#f7f8fa;
+  border-bottom:1px solid var(--line,#e2e6ea)}
+.bk-avatar{width:52px;height:52px;border-radius:10px;background:#dfe4ea;color:#5a626e;flex:0 0 auto;
+  display:flex;align-items:center;justify-content:center;font-size:21px;font-weight:800;overflow:hidden}
+.bk-avatar img{width:100%;height:100%;object-fit:cover}
+.bk-whotx b{display:block;font-size:16.5px;color:#2f5bd0;line-height:1.3}
+.bk-whotx span{display:block;font-size:11.5px;opacity:.7;line-height:1.5}
+.bk-whotx .bk-warn{color:#a32d2d;opacity:1;font-weight:600}
+
+.bk-split{display:grid;grid-template-columns:1fr 292px;gap:0}
+.bk-left{padding:14px 15px;border-right:1px solid var(--line,#e2e6ea);min-width:0}
+.bk-trow{display:flex;gap:11px;align-items:flex-start;margin-bottom:12px}
+.bk-trow:last-child{margin-bottom:0}
+.bk-tlab{flex:0 0 62px;font-size:12px;font-weight:700;opacity:.6;padding-top:7px}
+.bk-tgrid{flex:1;display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:6px;min-width:0}
+.bk-t{padding:7px 3px;border:1px solid #ccd2da;border-radius:7px;background:#fff;cursor:pointer;
+  font:inherit;font-size:12.5px;font-weight:600;color:inherit;text-align:center;white-space:nowrap}
+.bk-t:hover:not([disabled]){border-color:#1e7f4f;background:#e8f5ee}
+.bk-t.on{background:#1e7f4f;border-color:#1e7f4f;color:#fff}
+.bk-t.taken{background:#eceef1;border-color:#e6e9ec;color:#a8aeb7;cursor:not-allowed;font-weight:500}
+.bk-t.past,.bk-t.leave,.bk-t.gap{background:#f7f8f9;border:1px dashed #ccd2da;color:#c5cad0;
+  cursor:not-allowed;font-weight:500}
+
+.bk-cal{padding:14px 15px;background:#fcfcfd}
+.bk-calhd{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
+.bk-calhd span{font-size:14.5px;font-weight:700}
+.bk-nav{width:28px;height:28px;border:1px solid #ccd2da;border-radius:7px;background:#fff;cursor:pointer;
+  font:inherit;font-size:17px;line-height:1;color:inherit}
+.bk-nav:hover{border-color:#2f5bd0;color:#2f5bd0}
+.bk-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.bk-dw{text-align:center;font-size:10.5px;font-weight:800;opacity:.5;padding:3px 0;text-transform:uppercase}
+.bk-c{aspect-ratio:1/1;border-radius:6px;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;font-size:12.5px;font-weight:600;cursor:pointer;border:1px solid transparent}
+.bk-c b{font-weight:700;line-height:1}
+.bk-c i{font-style:normal;font-size:8.5px;font-weight:800;opacity:.85;margin-top:1px}
+.bk-blank{cursor:default}
+.bk-open{background:#e8f5ee;color:#14563a;border-color:#cbe6d7}
+.bk-open:hover{background:#1e7f4f;color:#fff;border-color:#1e7f4f}
+.bk-full{background:#eceef1;color:#9aa1ab;cursor:not-allowed}
+.bk-leave{background:#fbeced;color:#b06a6a;cursor:not-allowed}
+.bk-off{background:transparent;color:#c8ccd2;cursor:not-allowed}
+.bk-on{outline:2px solid #2f5bd0;outline-offset:-2px;background:#2f5bd0;color:#fff;border-color:#2f5bd0}
+.bk-on i{opacity:.9}
+.bk-callegend{display:flex;gap:10px;flex-wrap:wrap;font-size:10.5px;opacity:.7;margin-top:10px}
+.bk-callegend i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+.bk-callegend .l-open{background:#cbe6d7}
+.bk-callegend .l-full{background:#eceef1}
+.bk-callegend .l-leave{background:#fbeced}
+.bk-callegend .l-off{background:#e9ebee}
+
+@media (max-width:720px){
+  .bk-top{grid-template-columns:1fr}
+  .bk-split{grid-template-columns:1fr}
+  .bk-left{border-right:none;border-bottom:1px solid var(--line,#e2e6ea);order:2}
+  .bk-cal{order:1}
+  .bk-trow{flex-direction:column;gap:5px}
+  .bk-tlab{flex:none;padding-top:0}
+  .bk-tgrid{grid-template-columns:repeat(auto-fill,minmax(76px,1fr));width:100%}
+}
+
+/* ============================================================ v319 — the counter popup */
+.bk-hours{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:13px}
+.bk-h{padding:7px 12px;border:1px solid #ccd2da;border-radius:8px;background:#fff;cursor:pointer;
+  font:inherit;font-size:12.5px;font-weight:700;text-align:center;min-width:66px;color:inherit}
+.bk-h small{display:block;font-size:9.5px;font-weight:800;color:#1e7f4f}
+.bk-h:hover:not([disabled]){border-color:#2f5bd0}
+.bk-h.on{background:#2f5bd0;border-color:#2f5bd0;color:#fff}
+.bk-h.on small{color:#dbe5fb}
+.bk-h.full{opacity:.45;background:#f0f1f3;cursor:not-allowed}
+.bk-h.full small{color:#a32d2d}
+
+/* the chair count on the face of every box — the whole difference between a counter and a person */
+.bk-t small{display:block;font-size:9px;font-weight:700;color:#1e7f4f;margin-top:1px}
+.bk-t.on small{color:#cfe9db}
+.bk-t.taken small{color:#a8aeb7}
+.bk-t.walkin{background:#f8f1de;border-color:#e0cd9a;color:#8a6a1f;cursor:not-allowed;font-weight:500}
+.bk-t.walkin small{color:#8a6a1f}
+
+.ops-file{display:block;border:1px dashed #ccd2da;border-radius:8px;padding:13px;text-align:center;
+  font-size:13px;opacity:.75;cursor:pointer;background:#fafbfc}
+.ops-file:hover{border-color:#2f5bd0;opacity:1}

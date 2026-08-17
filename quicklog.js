@@ -32,11 +32,14 @@
        activity-log tile — it opens the real collection form, so it is rendered separately and never
        reaches openLog(). Technicians live on the dashboard, which is why it sits here as well as in
        the sidebar. */
-    var opsTile=(window.opsCanCollect && window.opsCanCollect() && window.openCollectSample)
+    /* v318: the Collect sample tile now opens the diary popup — choose the phlebotomist, see his
+       month, click a free time. The old counter form is on the Sample collection page as "Walk-in". */
+    var opsTile=(window.opsCanOrder && window.opsCanOrder() && window.openBookCollection)
       ? '<button class="btn ghost ql-tile ql-ops" id="qlCollect" style="flex:0 0 auto;display:flex;flex-direction:column;gap:4px;padding:11px 14px;height:auto;min-width:84px;align-items:center;"><span style="font-size:20px">\uD83E\uDDEA</span><span style="font-size:11px">Collect sample</span></button>'
       : '';
     /* v314: the home-visit door, beside the walk-in one. Same record, different entry. */
-    var ordTile=(window.opsCanOrder && window.opsCanOrder() && window.openNewOrder)
+    /* v319: the Order to delivery tile opens the counter's 5-minute diary. */
+    var ordTile=(window.opsCanOrder && window.opsCanOrder() && window.openBookLabVisit)
       ? '<button class="btn ghost ql-tile ql-ops" id="qlOrder" style="flex:0 0 auto;display:flex;flex-direction:column;gap:4px;padding:11px 14px;height:auto;min-width:84px;align-items:center;"><span style="font-size:20px">\uD83C\uDFE0</span><span style="font-size:11px">Order to delivery</span></button>'
       : '';
     host.innerHTML='<div class="section-label">Quick log <span class="muted" style="font-weight:400;font-size:11px">· counts to your score</span></div>'+
@@ -45,9 +48,9 @@
       '</div>';
     host.querySelectorAll('.ql-tile[data-t]').forEach(function(b){ b.onclick=function(){ openLog(b.getAttribute('data-t'),b.getAttribute('data-l')); }; });
     var qc=document.getElementById('qlCollect');
-    if(qc) qc.onclick=function(){ window.openCollectSample(function(){ if(window.renderDashboard) try{ window.renderDashboard(); }catch(e){} }); };
+    if(qc) qc.onclick=function(){ window.openBookCollection(function(){ if(window.renderDashboard) try{ window.renderDashboard(); }catch(e){} }); };
     var qo=document.getElementById('qlOrder');
-    if(qo) qo.onclick=function(){ window.openNewOrder(function(){ if(window.renderDashboard) try{ window.renderDashboard(); }catch(e){} }); };
+    if(qo) qo.onclick=function(){ window.openBookLabVisit(function(){ if(window.renderDashboard) try{ window.renderDashboard(); }catch(e){} }); };
   };
   function openLog(type,label){
     var isCM=/call|meeting|visit|followup/i.test(type);
