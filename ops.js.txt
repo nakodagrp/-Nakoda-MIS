@@ -75,9 +75,12 @@
        counter form is still one click away as "Walk-in" — a patient standing at the desk has no
        appointment to book and must not be forced through a calendar. */
     var can=(window.opsCanOrder&&window.opsCanOrder());
+    /* v323: same order as the dashboard tiles — Outsource beside Sample collection, Order to
+       delivery behind them. Two different orders in the two places a person reaches for the same
+       three buttons is its own small tax, paid every time. */
     var btn=(can?'<button class="btn" id="opsBook">+ Sample collection</button>':'')+
-            (can?'<button class="btn ghost" id="opsCounter">+ Order to delivery</button>':'')+
             (can?'<button class="btn ghost" id="opsOut">+ Outsource</button>':'')+
+            (can?'<button class="btn ghost" id="opsCounter">+ Order to delivery</button>':'')+
             (canCollect()?'<button class="btn ghost" id="opsNew">Walk-in</button>':'');
     return '<div class="page-head"><h1>Sample collection</h1>'+
       '<div class="ops-sub">Operations · process 1 of 5</div><div class="spacer"></div>'+
@@ -109,8 +112,17 @@
       return chips+'<div class="card"><div class="empty" style="padding:26px">No samples for this month yet.'+
         (canCollect()?' Tap <b>+ Collect sample</b> to record one.':'')+'</div></div>';
     var sel=selected();
+    /* v322 — THE ROWS THAT VANISHED. The list used to be drawn from OPS.samples with rowHtml doing
+       its own filtering on the RAW status, while the chip counts and selected() both folded
+       outsourced/result/verified into Collected. So the Collected chip said 7 and drew 4: every
+       outsource row returned an empty string, and selected() could hand the detail panel a sample
+       with no row beside it. One function decides what is visible now, and the list is drawn from
+       exactly that. */
+    var list=visible();
     return chips+'<div class="ops-split">'+
-      '<div class="ops-list">'+OPS.samples.map(rowHtml).join('')+'</div>'+
+      '<div class="ops-list">'+(list.length
+        ? list.map(rowHtml).join('')
+        : '<div class="empty" style="padding:22px">Nothing in this filter.</div>')+'</div>'+
       '<div class="ops-detail" id="opsDetail">'+(sel?detailHtml(sel):'<div class="empty" style="padding:26px">Pick a sample from the list.</div>')+'</div>'+
     '</div>';
   }
@@ -140,16 +152,28 @@
     if(!hit){ hit=list[0]; OPS.sel=hit.sampleId; }
     return hit;
   }
+  /* v322: four kinds now, so the list says which one it is looking at. Before this, a counter
+     appointment and an outsource both drew as a bare name — indistinguishable from a walk-in under
+     "All kinds", which is the filter everybody actually works in. */
+  var KIND_BADGE={ homevisit:['&#127968;','Home visit'], labvisit:['&#127970;','Counter appointment'],
+                   outsource:['&#128300;','Outsourced'] };
+  var TYPE_LABEL={ walkin:'Walk-in', homevisit:'Home visit', labvisit:'Counter appointment',
+                   outsource:'Outsource' };
   function rowHtml(s){
-    if(FILTER!=='all' && s.status!==FILTER) return '';
     var on=(s.sampleId===OPS.sel);
+    /* v322: an outsource carries no amount — printing "₹0" on every one of them reads as a billing
+       error rather than as a field that was never asked for. It shows the lab instead. */
+    var isOut=(String(s.type||'')==='outsource');
     var sub=(s.status==='sent')
       ? ('Sent'+(s.sentAt?(' · '+esc(s.sentAt.slice(5,10))):''))
-      : ((STAGE_LABEL[s.status]||s.status)+' · &#8377;'+money(s.amount)+
-         (s.pendingAmount?(' · &#8377;'+money(s.pendingAmount)+' due'):'')+
+      : ((STAGE_LABEL[s.status]||s.status)+
+         (isOut ? (s.labRemark?(' · '+esc(s.labRemark)):'')
+                : (' · &#8377;'+money(s.amount)+
+                   (s.pendingAmount?(' · &#8377;'+money(s.pendingAmount)+' due'):'')))+
          (s.pendingHours>=24?(' · waiting '+waitLabel(s.pendingHours)):''));
     var cls='ops-row'+(on?' on':'')+(s.status!=='sent'&&s.pendingHours>=24?' late':'');
-    var badge=(String(s.type||'walkin')==='homevisit')?'<i class="ti-home" title="Home visit">&#127968;</i> ':'';
+    var kb=KIND_BADGE[String(s.type||'walkin')];
+    var badge=kb?('<i class="ti-home" title="'+esc(kb[1])+'">'+kb[0]+'</i> '):'';
     return '<div class="'+cls+'" data-sid="'+esc(s.sampleId)+'">'+
       '<div class="ops-row-n">'+badge+esc(s.patientName)+'</div>'+
       '<div class="ops-row-s'+(s.status==='sent'?' done':(s.pendingHours>=24?' late':''))+'">'+sub+'</div></div>';
@@ -159,21 +183,30 @@
     var who=[s.age,s.sex].filter(Boolean).join(' ');
     var meta=[who,s.mobile,s.address].filter(Boolean).join(' · ');
     var isHome=(String(s.type||'walkin')==='homevisit');
+    /* v322 — IT WAS CALLING AN OUTSOURCE A WALK-IN. This row was written when there were two kinds
+       and read "home visit, or else walk-in". There are four now, so a counter appointment and an
+       outsource both introduced themselves as walk-ins — on the one line whose entire job is to say
+       which kind of record you are looking at. */
+    var isOut=(String(s.type||'')==='outsource');
     var rows=[
-      ['Type', isHome?'Home visit':'Walk-in'],
-      ['Tests', esc(s.tests)],
-      ['Amount', '&#8377;'+money(s.amount)],
+      ['Type', esc(TYPE_LABEL[String(s.type||'walkin')]||'Walk-in')],
+      /* v322: an outsource has no tests and no amount — the form never asks for them. Printing an
+         empty Tests row and ₹0 beside it invites somebody to "fix" a number that was never wrong.
+         The lab it went to takes their place, at the top, where the kind of record is established. */
+      (isOut ? ['Outsourced to', '<b>'+esc(s.labRemark||'—')+'</b>']
+             : ['Tests', esc(s.tests)]),
+      (isOut ? null : ['Amount', '&#8377;'+money(s.amount)]),
       /* v310: the Branch row is gone from both panels. One desk sends every branch's reports, so
          the line was the same on every row and told the person reading it nothing. */
-      ['Collected by', esc(s.collectedByName||'—')],
-      ['Collected at', esc(s.collectedAt||'—')],
+      [isOut?'Sent out by':'Collected by', esc(s.collectedByName||'—')],
+      [isOut?'Sent out at':'Collected at', esc(s.collectedAt||'—')],
       (s.status==='sent'
         ? ['Sent', esc(s.sentVia||'')+(s.sentAt?(' · '+esc(s.sentAt)):'')+(s.sentByName?(' · '+esc(s.sentByName)):'')]
         : ['Pending for', '<span class="'+(s.pendingHours>=24?'ops-late-txt':'')+'">'+esc(waitLabel(s.pendingHours)||'just now')+'</span>']),
-      ['Prescription', fileLink(s.rxUrl,'prescription')],
-      ['Sample photo', fileLink(s.photoUrl,'photo')],
+      (isOut ? null : ['Prescription', fileLink(s.rxUrl,'prescription')]),
+      (isOut ? null : ['Sample photo', fileLink(s.photoUrl,'photo')]),
       ['Report', fileLink(s.reportUrl,'report')]
-    ];
+    ].filter(Boolean);
     if(isHome){
       rows.splice(2,0,
         ['Phlebotomist', esc(s.assignedToName||'—')],
@@ -187,8 +220,9 @@
     if(s.resultUrl)  rows.push(['Result (old record)', fileLink(s.resultUrl,'result')]);
     if(s.resultAt)   rows.push(['Result submitted (old record)', esc(s.resultAt)+(s.resultByName?(' · '+esc(s.resultByName)):'')]);
     if(s.verifiedAt) rows.push(['Verified (old record)', esc(s.verifiedAt)+(s.verifiedByName?(' · '+esc(s.verifiedByName)):'')]);
-    /* v321: on an outsource row this column IS the lab, so it must not be labelled "lab remark". */
-    if(s.labRemark)  rows.push([(String(s.type||'')==='outsource')?'Outsourced to':'Lab remark', esc(s.labRemark)]);
+    /* v321: on an outsource row this column IS the lab, so it must not be labelled "lab remark".
+       v322: and on that row it has already been printed at the top, so it is not printed twice. */
+    if(s.labRemark && !isOut) rows.push(['Lab remark', esc(s.labRemark)]);
     if(s.remarks) rows.push(['Remarks', esc(s.remarks)]);
     /* Whatever the record needs next — the same popup the owner gets from their task list, so a
        manager can push a stuck record along without hunting for whose queue it is in. */
@@ -399,13 +433,25 @@
   };
   function paintSend(s, canSend, taskId, after){
     var sent=(s.status==='sent');
-    var kv=[
+    /* v322 — THE DESK COULD NOT SEE WHICH LAB IT WAS. On an outsource this popup listed Tests,
+       Amount and Prescription, which are blank, blank and ₹0 because the outsource form never asks
+       for them — and it never named the lab, which is the one fact the person sending the report
+       needs to match the PDF in their inbox to the row on their screen. */
+    var isOut=(String(s.type||'')==='outsource');
+    var kv=isOut
+    ? [
+      ['Outsourced to', '<b>'+esc(s.labRemark||'—')+'</b>'],
+      ['Sent out', esc(s.collectedAt||'')+(s.collectedByName?(' · '+esc(s.collectedByName)):'')],
+      ['Report', '<span id="srRep">'+(s.reportUrl?fileLink(s.reportUrl,'report'):'<span class="muted">not attached</span>')+'</span>']
+    ]
+    : [
       ['Tests', esc(s.tests)],
       ['Collected', esc(s.collectedAt||'')+(s.collectedByName?(' · '+esc(s.collectedByName)):'')],
       ['Amount', '&#8377;'+money(s.amount)],
       ['Prescription', fileLink(s.rxUrl,'prescription')],
       ['Report', '<span id="srRep">'+(s.reportUrl?fileLink(s.reportUrl,'report'):'<span class="muted">not attached</span>')+'</span>']
     ];
+    if(isOut && s.remarks) kv.splice(2,0,['Remark', esc(s.remarks)]);
     if(!sent && s.pendingHours) kv.push(['Waiting', '<span class="'+(s.pendingHours>=24?'ops-late-txt':'')+'">'+esc(waitLabel(s.pendingHours))+'</span>']);
     if(sent) kv.push(['Sent', esc(s.sentVia||'')+(s.sentAt?(' · '+esc(s.sentAt)):'')+(s.sentByName?(' · '+esc(s.sentByName)):'')]);
 
@@ -493,7 +539,9 @@
       var late=(r.overdue>0);
       host.innerHTML='<div class="section-label" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
           'Samples and reports'+
-          '<span style="font-size:11px;color:#888;font-weight:400">collected &#8594; result &#8594; verified &#8594; sent</span>'+
+          /* v322: this caption still described the five-stage pipeline v320 cut down to three. It
+             is the first thing read on the card, and it was naming two stages that no longer exist. */
+          '<span style="font-size:11px;color:#888;font-weight:400">ordered &#8594; collected &#8594; sent</span>'+
           '<span class="spacer" style="flex:1"></span>'+
           '<button class="btn ghost sm" id="opsGo">Open module &#8599;</button></div>'+
         '<div class="card ops-dash">'+
