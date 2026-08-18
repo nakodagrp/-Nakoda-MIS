@@ -63,7 +63,7 @@
     saveSample:1,sendSampleReport:1,
     /* All four stage moves queue like the rest: a phlebotomist in a stairwell can still complete a
        visit, and it syncs when the signal comes back. */
-    saveOrder:1,completeVisit:1,submitResult:1,verifyReport:1,saveLabVisit:1};
+    saveOrder:1,completeVisit:1,submitResult:1,verifyReport:1,saveLabVisit:1,saveOutsource:1};
   /* Writes that already do their own optimistic queueing inside the method (don't double-queue here). */
   var SELF_QUEUE={createEmployee:1,updateEmployee:1,setStatus:1,issueCard:1,renewCard:1,cancelCard:1,markCardSent:1,markCardActivated:1,
     createTask:1,updateTask:1,setTaskStatus:1,deleteTask:1,createCalEntry:1,updateCalEntry:1,attachSelfie:1};
@@ -562,6 +562,9 @@
     /* v319 — the counter's diary and the 5-minute appointment. */
     opsCounter:function(b,date,month){ return call('opsCounter',{token:getToken(),branch:b||'',date:date||'',month:month||''}); },
     saveLabVisit:function(d){ return call('saveLabVisit',{token:getToken(),data:d}); },
+    /* v321 — process 3. */
+    saveOutsource:function(d){ return call('saveOutsource',{token:getToken(),data:d}); },
+    opsLabs:function(q){ return call('opsLabs',{token:getToken(),q:q||''}); },
     /* v315 — the two summaries */
     opsLabArrivals:function(b,n){ return call('opsLabArrivals',{token:getToken(),branch:b||'',months:n||6}); },
     opsTurnaround:function(b,ym,emp){ return call('opsTurnaround',{token:getToken(),branch:b||'',ym:ym||'',empId:emp||''}); },
