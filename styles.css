@@ -1142,3 +1142,10 @@ html,body{overflow-x:hidden}
 .ops-file{display:block;border:1px dashed #ccd2da;border-radius:8px;padding:13px;text-align:center;
   font-size:13px;opacity:.75;cursor:pointer;background:#fafbfc}
 .ops-file:hover{border-color:#2f5bd0;opacity:1}
+
+/* ============================================================ v321 — the outsource popup */
+.os-form{display:grid;grid-template-columns:1fr;gap:16px;max-width:520px}
+.os-form .field{position:relative}
+.ops-pt-add{padding:10px 12px;font-size:12.5px;font-weight:700;color:#1e7f4f;background:#f4faf6;
+  border-top:1px solid #e3ece6;cursor:pointer}
+.ops-pt-add:hover{background:#e8f5ee}
