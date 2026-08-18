@@ -74,8 +74,13 @@
     /* v318: the primary button books a collection against a phlebotomist's diary. The old
        counter form is still one click away as "Walk-in" — a patient standing at the desk has no
        appointment to book and must not be forced through a calendar. */
-    var btn=((window.opsCanOrder&&window.opsCanOrder())?'<button class="btn" id="opsBook">+ Sample collection</button>':'')+
-            ((window.opsCanOrder&&window.opsCanOrder())?'<button class="btn ghost" id="opsCounter">+ Order to delivery</button>':'')+
+    var can=(window.opsCanOrder&&window.opsCanOrder());
+    /* v323: same order as the dashboard tiles — Outsource beside Sample collection, Order to
+       delivery behind them. Two different orders in the two places a person reaches for the same
+       three buttons is its own small tax, paid every time. */
+    var btn=(can?'<button class="btn" id="opsBook">+ Sample collection</button>':'')+
+            (can?'<button class="btn ghost" id="opsOut">+ Outsource</button>':'')+
+            (can?'<button class="btn ghost" id="opsCounter">+ Order to delivery</button>':'')+
             (canCollect()?'<button class="btn ghost" id="opsNew">Walk-in</button>':'');
     return '<div class="page-head"><h1>Sample collection</h1>'+
       '<div class="ops-sub">Operations · process 1 of 5</div><div class="spacer"></div>'+
@@ -99,13 +104,25 @@
       (c.pendingCash?'<span class="ops-chip late">&#8377;'+money(c.pendingCash)+' uncollected</span>':'')+
       '</div>'+
       '<div class="ops-chips" style="margin-top:-4px">'+
-        tchip('','Both')+tchip('walkin','Walk-in')+tchip('homevisit','Home visit')+'</div>';
+        /* v321: Outsource joins the kind filter, and so does the counter appointment v319 added
+           without one — a row you cannot filter to is a row nobody finds. */
+        tchip('','All kinds')+tchip('walkin','Walk-in')+tchip('homevisit','Home visit')+
+        tchip('labvisit','Counter')+tchip('outsource','Outsource')+'</div>';
     if(!OPS.samples.length)
       return chips+'<div class="card"><div class="empty" style="padding:26px">No samples for this month yet.'+
         (canCollect()?' Tap <b>+ Collect sample</b> to record one.':'')+'</div></div>';
     var sel=selected();
+    /* v322 — THE ROWS THAT VANISHED. The list used to be drawn from OPS.samples with rowHtml doing
+       its own filtering on the RAW status, while the chip counts and selected() both folded
+       outsourced/result/verified into Collected. So the Collected chip said 7 and drew 4: every
+       outsource row returned an empty string, and selected() could hand the detail panel a sample
+       with no row beside it. One function decides what is visible now, and the list is drawn from
+       exactly that. */
+    var list=visible();
     return chips+'<div class="ops-split">'+
-      '<div class="ops-list">'+OPS.samples.map(rowHtml).join('')+'</div>'+
+      '<div class="ops-list">'+(list.length
+        ? list.map(rowHtml).join('')
+        : '<div class="empty" style="padding:22px">Nothing in this filter.</div>')+'</div>'+
       '<div class="ops-detail" id="opsDetail">'+(sel?detailHtml(sel):'<div class="empty" style="padding:26px">Pick a sample from the list.</div>')+'</div>'+
     '</div>';
   }
@@ -117,27 +134,46 @@
     return '<button class="ops-fchip sm'+(KIND===k?' on':'')+'" data-k="'+k+'">'+esc(label)+'</button>';
   }
   function visible(){
-    return OPS.samples.filter(function(s){ return FILTER==='all'||s.status===FILTER; });
+    return OPS.samples.filter(function(s){ return FILTER==='all'||foldStatus(s.status)===FILTER; });
   }
   /* v320: the two retired statuses read as Collected rather than as a word the board no longer has a
      chip for — a row must never describe itself with a label the screen cannot explain. */
-  var STAGE_LABEL={ordered:'Ordered',collected:'Collected',result:'Collected',verified:'Collected',sent:'Sent'};
+  var STAGE_LABEL={ordered:'Ordered',collected:'Collected',result:'Collected',verified:'Collected',
+                   outsourced:'At the lab',sent:'Sent'};
+  /* The chips filter client-side, so the same folding the server does must happen here or a legacy
+     row — or an outsourced one — answers no chip at all and vanishes from the board. */
+  function foldStatus(st){
+    st=String(st||'collected');
+    return (st==='result'||st==='verified'||st==='outsourced') ? 'collected' : st;
+  }
   function selected(){
     var list=visible(); if(!list.length) return null;
     var hit=list.filter(function(s){ return s.sampleId===OPS.sel; })[0];
     if(!hit){ hit=list[0]; OPS.sel=hit.sampleId; }
     return hit;
   }
+  /* v322: four kinds now, so the list says which one it is looking at. Before this, a counter
+     appointment and an outsource both drew as a bare name — indistinguishable from a walk-in under
+     "All kinds", which is the filter everybody actually works in. */
+  var KIND_BADGE={ homevisit:['&#127968;','Home visit'], labvisit:['&#127970;','Counter appointment'],
+                   outsource:['&#128300;','Outsourced'] };
+  var TYPE_LABEL={ walkin:'Walk-in', homevisit:'Home visit', labvisit:'Counter appointment',
+                   outsource:'Outsource' };
   function rowHtml(s){
-    if(FILTER!=='all' && s.status!==FILTER) return '';
     var on=(s.sampleId===OPS.sel);
+    /* v322: an outsource carries no amount — printing "₹0" on every one of them reads as a billing
+       error rather than as a field that was never asked for. It shows the lab instead. */
+    var isOut=(String(s.type||'')==='outsource');
     var sub=(s.status==='sent')
       ? ('Sent'+(s.sentAt?(' · '+esc(s.sentAt.slice(5,10))):''))
-      : ((STAGE_LABEL[s.status]||s.status)+' · &#8377;'+money(s.amount)+
-         (s.pendingAmount?(' · &#8377;'+money(s.pendingAmount)+' due'):'')+
+      : ((STAGE_LABEL[s.status]||s.status)+
+         (isOut ? (s.labRemark?(' · '+esc(s.labRemark)):'')
+                : (' · &#8377;'+money(s.amount)+
+                   (s.pendingAmount?(' · &#8377;'+money(s.pendingAmount)+' due'):'')))+
          (s.pendingHours>=24?(' · waiting '+waitLabel(s.pendingHours)):''));
     var cls='ops-row'+(on?' on':'')+(s.status!=='sent'&&s.pendingHours>=24?' late':'');
-    var badge=(String(s.type||'walkin')==='homevisit')?'<i class="ti-home" title="Home visit">&#127968;</i> ':'';
+    var kb=KIND_BADGE[String(s.type||'walkin')];
+    var badge=kb?('<i class="ti-home" title="'+esc(kb[1])+'">'+kb[0]+'</i> '):'';
     return '<div class="'+cls+'" data-sid="'+esc(s.sampleId)+'">'+
       '<div class="ops-row-n">'+badge+esc(s.patientName)+'</div>'+
       '<div class="ops-row-s'+(s.status==='sent'?' done':(s.pendingHours>=24?' late':''))+'">'+sub+'</div></div>';
@@ -147,21 +183,30 @@
     var who=[s.age,s.sex].filter(Boolean).join(' ');
     var meta=[who,s.mobile,s.address].filter(Boolean).join(' · ');
     var isHome=(String(s.type||'walkin')==='homevisit');
+    /* v322 — IT WAS CALLING AN OUTSOURCE A WALK-IN. This row was written when there were two kinds
+       and read "home visit, or else walk-in". There are four now, so a counter appointment and an
+       outsource both introduced themselves as walk-ins — on the one line whose entire job is to say
+       which kind of record you are looking at. */
+    var isOut=(String(s.type||'')==='outsource');
     var rows=[
-      ['Type', isHome?'Home visit':'Walk-in'],
-      ['Tests', esc(s.tests)],
-      ['Amount', '&#8377;'+money(s.amount)],
+      ['Type', esc(TYPE_LABEL[String(s.type||'walkin')]||'Walk-in')],
+      /* v322: an outsource has no tests and no amount — the form never asks for them. Printing an
+         empty Tests row and ₹0 beside it invites somebody to "fix" a number that was never wrong.
+         The lab it went to takes their place, at the top, where the kind of record is established. */
+      (isOut ? ['Outsourced to', '<b>'+esc(s.labRemark||'—')+'</b>']
+             : ['Tests', esc(s.tests)]),
+      (isOut ? null : ['Amount', '&#8377;'+money(s.amount)]),
       /* v310: the Branch row is gone from both panels. One desk sends every branch's reports, so
          the line was the same on every row and told the person reading it nothing. */
-      ['Collected by', esc(s.collectedByName||'—')],
-      ['Collected at', esc(s.collectedAt||'—')],
+      [isOut?'Sent out by':'Collected by', esc(s.collectedByName||'—')],
+      [isOut?'Sent out at':'Collected at', esc(s.collectedAt||'—')],
       (s.status==='sent'
         ? ['Sent', esc(s.sentVia||'')+(s.sentAt?(' · '+esc(s.sentAt)):'')+(s.sentByName?(' · '+esc(s.sentByName)):'')]
         : ['Pending for', '<span class="'+(s.pendingHours>=24?'ops-late-txt':'')+'">'+esc(waitLabel(s.pendingHours)||'just now')+'</span>']),
-      ['Prescription', fileLink(s.rxUrl,'prescription')],
-      ['Sample photo', fileLink(s.photoUrl,'photo')],
+      (isOut ? null : ['Prescription', fileLink(s.rxUrl,'prescription')]),
+      (isOut ? null : ['Sample photo', fileLink(s.photoUrl,'photo')]),
       ['Report', fileLink(s.reportUrl,'report')]
-    ];
+    ].filter(Boolean);
     if(isHome){
       rows.splice(2,0,
         ['Phlebotomist', esc(s.assignedToName||'—')],
@@ -175,14 +220,17 @@
     if(s.resultUrl)  rows.push(['Result (old record)', fileLink(s.resultUrl,'result')]);
     if(s.resultAt)   rows.push(['Result submitted (old record)', esc(s.resultAt)+(s.resultByName?(' · '+esc(s.resultByName)):'')]);
     if(s.verifiedAt) rows.push(['Verified (old record)', esc(s.verifiedAt)+(s.verifiedByName?(' · '+esc(s.verifiedByName)):'')]);
-    if(s.labRemark)  rows.push(['Lab remark', esc(s.labRemark)]);
+    /* v321: on an outsource row this column IS the lab, so it must not be labelled "lab remark".
+       v322: and on that row it has already been printed at the top, so it is not printed twice. */
+    if(s.labRemark && !isOut) rows.push(['Lab remark', esc(s.labRemark)]);
     if(s.remarks) rows.push(['Remarks', esc(s.remarks)]);
     /* Whatever the record needs next — the same popup the owner gets from their task list, so a
        manager can push a stuck record along without hunting for whose queue it is in. */
     /* v320: collected goes straight to Send report. The two legacy statuses map there too, so an old
        row is not left with a button that opens a stage nobody works any more. */
     var NEXT={ordered:['opsGoVisit','Open visit'],collected:['opsSend','Send report'],
-              result:['opsSend','Send report'],verified:['opsSend','Send report']};
+              result:['opsSend','Send report'],verified:['opsSend','Send report'],
+              outsourced:['opsSend','Send report']};   /* v321 */
     var n=NEXT[s.status];
     var act=(s.status==='sent')
       ? '<button class="btn ghost" disabled>Report sent</button>'
@@ -196,6 +244,7 @@
     var b=$id('opsNew'); if(b) b.onclick=function(){ window.openCollectSample(function(){ load(true); }); };
     var bb=$id('opsBook'); if(bb) bb.onclick=function(){ window.openBookCollection(function(){ load(true); }); };
     var cc=$id('opsCounter'); if(cc) cc.onclick=function(){ window.openBookLabVisit(function(){ load(true); }); };
+    var oo=$id('opsOut'); if(oo) oo.onclick=function(){ window.openOutsource(function(){ load(true); }); };
     var bo=$id('opsNewOrder'); if(bo) bo.onclick=function(){ window.openNewOrder(function(){ load(true); }); };
     var r=$id('opsRefresh'); if(r) r.onclick=function(){ load(true); };
     var bp=$id('opsBranch'); if(bp) bp.onchange=function(){ OPS.branch=this.value; OPS.sel=''; load(true); };
@@ -384,13 +433,25 @@
   };
   function paintSend(s, canSend, taskId, after){
     var sent=(s.status==='sent');
-    var kv=[
+    /* v322 — THE DESK COULD NOT SEE WHICH LAB IT WAS. On an outsource this popup listed Tests,
+       Amount and Prescription, which are blank, blank and ₹0 because the outsource form never asks
+       for them — and it never named the lab, which is the one fact the person sending the report
+       needs to match the PDF in their inbox to the row on their screen. */
+    var isOut=(String(s.type||'')==='outsource');
+    var kv=isOut
+    ? [
+      ['Outsourced to', '<b>'+esc(s.labRemark||'—')+'</b>'],
+      ['Sent out', esc(s.collectedAt||'')+(s.collectedByName?(' · '+esc(s.collectedByName)):'')],
+      ['Report', '<span id="srRep">'+(s.reportUrl?fileLink(s.reportUrl,'report'):'<span class="muted">not attached</span>')+'</span>']
+    ]
+    : [
       ['Tests', esc(s.tests)],
       ['Collected', esc(s.collectedAt||'')+(s.collectedByName?(' · '+esc(s.collectedByName)):'')],
       ['Amount', '&#8377;'+money(s.amount)],
       ['Prescription', fileLink(s.rxUrl,'prescription')],
       ['Report', '<span id="srRep">'+(s.reportUrl?fileLink(s.reportUrl,'report'):'<span class="muted">not attached</span>')+'</span>']
     ];
+    if(isOut && s.remarks) kv.splice(2,0,['Remark', esc(s.remarks)]);
     if(!sent && s.pendingHours) kv.push(['Waiting', '<span class="'+(s.pendingHours>=24?'ops-late-txt':'')+'">'+esc(waitLabel(s.pendingHours))+'</span>']);
     if(sent) kv.push(['Sent', esc(s.sentVia||'')+(s.sentAt?(' · '+esc(s.sentAt)):'')+(s.sentByName?(' · '+esc(s.sentByName)):'')]);
 
@@ -411,7 +472,17 @@
     /* v313: the "Send via" chips are gone and the report is optional, both at your request. The one
        thing that went with them is the WhatsApp hand-off — there is no longer a mode to key it on, so
        "Send and complete" now records the send rather than opening WhatsApp with the message written. */
-    body+='<div class="field" style="margin-top:12px"><label>Attach report <span class="muted">optional</span></label>'+
+    /* v321 — THE MISSING NUMBER. The outsource form asks for a name and a lab, nothing else, so a
+       brand-new patient reaches this popup with no mobile on the record. Asking here is the right
+       place: the desk has the report open and is about to send it, which is the only moment anyone
+       actually needs the number. It is written onto the row, so it is asked once, not every time. */
+    var needMob=!String(s.mobile||'').replace(/[^0-9]/g,'').length;
+    body+=(needMob
+      ? '<div class="field" style="margin-top:12px"><label>Patient mobile *</label>'+
+        '<input id="srMob" class="in" type="tel" inputmode="numeric" maxlength="10" placeholder="9825011223">'+
+        '<div class="ops-hint">Not on this record yet. It is saved when you send, so you are asked once.</div></div>'
+      : '')+
+      '<div class="field" style="margin-top:12px"><label>Attach report <span class="muted">optional</span></label>'+
         '<label class="dl-file"><span id="srUpSt">&#128206; Attach report (PDF)</span><input id="srUp" type="file" accept="application/pdf,image/*" hidden></label></div>'+
       '<div id="srMsg"></div>';
 
@@ -432,8 +503,10 @@
     $id('srSend').onclick=function(){
       var btn=this;
       function bad(m){ $id('srMsg').innerHTML='<div class="msg error">'+esc(m)+'</div>'; btn.disabled=false; }
+      var mob=($id('srMob')&&$id('srMob').value||'').replace(/[^0-9]/g,'');
+      if(needMob && mob.length!==10) return bad('Enter the patient\'s 10-digit mobile number.');
       btn.disabled=true; $id('srMsg').innerHTML='';
-      API.sendSampleReport(s.sampleId,{via:state.via, reportUrl:state.reportUrl}).then(function(r){
+      API.sendSampleReport(s.sampleId,{via:state.via, reportUrl:state.reportUrl, mobile:mob}).then(function(r){
         if(!(r&&r.ok)) return bad((r&&r.error)||'Could not send.');
         closeModal();
         toast('Report sent — the task is closed.');
@@ -466,7 +539,9 @@
       var late=(r.overdue>0);
       host.innerHTML='<div class="section-label" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
           'Samples and reports'+
-          '<span style="font-size:11px;color:#888;font-weight:400">collected &#8594; result &#8594; verified &#8594; sent</span>'+
+          /* v322: this caption still described the five-stage pipeline v320 cut down to three. It
+             is the first thing read on the card, and it was naming two stages that no longer exist. */
+          '<span style="font-size:11px;color:#888;font-weight:400">ordered &#8594; collected &#8594; sent</span>'+
           '<span class="spacer" style="flex:1"></span>'+
           '<button class="btn ghost sm" id="opsGo">Open module &#8599;</button></div>'+
         '<div class="card ops-dash">'+
@@ -514,6 +589,15 @@
     return '<a href="'+esc(url)+'" target="_blank" rel="noopener">'+esc(label)+'</a>';
   }
   function stageStrip(s){
+    /* v321: an outsource has its own two stops. Showing it the three-stage strip would claim a visit
+       and a collection that never happened. */
+    if(String(s.type||'')==='outsource'){
+      var oi=(String(s.status||'')==='sent')?1:0;
+      return '<div class="ops-stage2">'+[['outsourced','Outsourced'],['sent','Sent']].map(function(x,i){
+        var c=(i<oi)?'done':(i===oi?'now':'todo');
+        return '<span class="ops-st2 '+c+'">'+(i<oi?'&#10003; ':'')+esc(x[1])+'</span>';
+      }).join('<i class="ops-st2-sep"></i>')+'</div>';
+    }
     var STAGES=[['ordered','Ordered'],['collected','Collected'],['sent','Sent']];   /* v320 */
     var at=Number(s.stageIdx||0), isWalk=(String(s.type||'walkin')==='walkin');
     return '<div class="ops-stage2">'+STAGES.map(function(x,i){
@@ -1269,6 +1353,132 @@
     }
     box('ctName','ctPtN'); box('ctMob','ctPtM');
     var n=$id('ctName'); if(n) n.addEventListener('input', ctPicked);
+  }
+
+  /* ------------------------------------------------------------------ B4 · outsource
+     v321 — PROCESS 3. Two fields: who the patient is, and which outside lab the sample went to.
+
+     No mobile box, at your instruction. A repeat patient brings their number silently from the
+     search; a new one reaches the send popup without it and is asked there, once. That keeps this
+     form at two fields without ever creating a record that cannot be finished. */
+  var _os={ mobile:'', lab:'', busy:false };
+
+  window.openOutsource=function(after){
+    if(!window.opsCanOrder()){ toast('Your role cannot outsource a sample.',true); return; }
+    var brs=((window.S&&S.meta&&S.meta.branches)||[]);
+    var canPick=!!(perms().canViewAll||perms().level==='SUPER');
+    _os={ mobile:'', lab:'', busy:false };
+
+    var body=
+      '<div class="os-form">'+
+        (canPick?'<div class="field"><label>Branch</label><select id="osBranch" class="in">'+brs.map(function(b){ return '<option value="'+esc(b.BranchID)+'"'+(String(b.BranchID)===String(u().Branch)?' selected':'')+'>'+esc(b.BranchName)+'</option>'; }).join('')+'</select><div class="ops-hint">Head office picks; everyone else is pinned to their own branch.</div></div>'
+                :'<div class="field"><label>Branch</label><div class="ops-stamp-ro">'+esc(branchNameOf(u().Branch,brs))+' &middot; from your login</div></div>')+
+        '<div class="field"><label>Patient name *</label>'+
+          '<div class="ops-pt-wrap"><input id="osName" class="in" autocomplete="off" placeholder="Divya Patel"><div class="ops-pt-drop" id="osPtN"></div></div>'+
+          '<div class="ops-hint">Two letters &mdash; patients who came before appear below. Picking one brings their number with it.</div></div>'+
+        '<div class="field"><label>Outsource lab *</label>'+
+          '<div class="ops-pt-wrap"><input id="osLab" class="in" autocomplete="off" placeholder="Start typing the lab"><div class="ops-pt-drop" id="osLabD"></div></div>'+
+          '<div class="ops-hint" id="osLabHint">Labs you have used before appear as you type.</div></div>'+
+        '<div class="field"><label>Remark <span class="muted">optional</span></label>'+
+          '<input id="osNote" class="in" placeholder="Sample handed to their pickup at 4 PM"></div>'+
+      '</div><div id="osMsg"></div>';
+
+    openModal('Outsource — send to an outside lab', body,
+      '<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="osSave">Save outsource</button>');
+
+    osWirePatient();
+    osWireLab();
+
+    $id('osSave').onclick=function(){
+      var btn=this;
+      function bad(m){ $id('osMsg').innerHTML='<div class="msg error">'+esc(m)+'</div>'; btn.disabled=false; }
+      var name=($id('osName').value||'').trim();
+      var lab=(_os.lab||($id('osLab').value||'')).trim();
+      if(!name) return bad('Enter the patient name.');
+      if(!lab)  return bad('Enter the outside lab.');
+      btn.disabled=true; $id('osMsg').innerHTML='';
+      API.saveOutsource({ clientId:cid(), branchId:($id('osBranch')||{}).value||'',
+        patientName:name, mobile:_os.mobile||'', labName:lab,
+        remarks:($id('osNote').value||'').trim()
+      }).then(function(r){
+        if(r&&r.ok){ closeModal();
+          toast((r.sampleId||'Outsource')+' saved. The desk has the send-report task.');
+          if(API.refreshTasks) try{ API.refreshTasks(); }catch(e){}
+          if(typeof after==='function') after(r);
+        } else bad((r&&r.error)||'Could not save.');
+      },function(e){ bad((e&&e.message)||'Could not save.'); });
+    };
+    setTimeout(function(){ var n=$id('osName'); if(n) n.focus(); },60);
+  };
+
+  function osWirePatient(){
+    var inp=$id('osName'), dp=$id('osPtN'), timer=null;
+    if(!inp||!dp) return;
+    inp.addEventListener('input', function(){
+      _os.mobile='';                       /* typing over a picked patient drops their number */
+      var q=(inp.value||'').trim();
+      if(timer) clearTimeout(timer);
+      if(q.length<2){ dp.style.display='none'; return; }
+      timer=setTimeout(function(){
+        API.opsPatients(q).then(function(r){
+          var list=(r&&r.ok&&r.patients)||[];
+          dp.innerHTML=list.length
+            ? list.map(function(p,i){ return '<div class="ops-pt-it" data-i="'+i+'"><b>'+esc(p.name)+'</b>'+
+                '<span>'+esc(p.mobile)+'</span>'+(p.last?('<span class="ops-pt-last">last visit '+esc(p.last)+'</span>'):'')+'</div>'; }).join('')
+            : '<div class="ops-pt-none">New patient — the number is asked for when the report is sent.</div>';
+          dp._list=list; dp.style.display='block';
+        }, function(){ dp.style.display='none'; });
+      }, 300);
+    });
+    dp.addEventListener('mousedown', function(e){
+      var it=e.target.closest && e.target.closest('.ops-pt-it'); if(!it) return;
+      e.preventDefault();
+      var p=(dp._list||[])[Number(it.getAttribute('data-i'))]; if(!p) return;
+      inp.value=p.name||''; _os.mobile=p.mobile||'';
+      dp.style.display='none';
+    });
+    inp.addEventListener('blur', function(){ setTimeout(function(){ dp.style.display='none'; }, 150); });
+  }
+
+  /* The lab box. Offering what is on record is the only thing that stops METROPOLIS, Metropolis and
+     METROPOLIS HEALTHCARE becoming three labs in every report that ever groups by lab. Adding a
+     genuinely new one is still one tap, and it is spelled exactly as typed. */
+  function osWireLab(){
+    var inp=$id('osLab'), dp=$id('osLabD'), timer=null;
+    if(!inp||!dp) return;
+    function paint(list, q){
+      var h=list.map(function(l,i){
+        return '<div class="ops-pt-it" data-i="'+i+'"><b>'+esc(l.name)+'</b>'+
+          '<span>used '+l.uses+' time'+(l.uses===1?'':'s')+(l.last?(' · last '+esc(l.last)):'')+'</span></div>';
+      }).join('');
+      var exact=list.some(function(l){ return String(l.name).toLowerCase()===q.toLowerCase(); });
+      if(q && !exact) h+='<div class="ops-pt-add" data-new="1">+ Add &ldquo;'+esc(q)+'&rdquo; as a new lab</div>';
+      dp.innerHTML=h||'<div class="ops-pt-none">No labs on record yet — type the name and add it.</div>';
+      dp._list=list; dp._q=q; dp.style.display='block';
+    }
+    inp.addEventListener('input', function(){
+      _os.lab='';
+      var q=(inp.value||'').trim();
+      if(timer) clearTimeout(timer);
+      if(!q){ dp.style.display='none'; return; }
+      timer=setTimeout(function(){
+        API.opsLabs(q).then(function(r){ paint((r&&r.ok&&r.labs)||[], q); },
+                            function(){ paint([], q); });
+      }, 250);
+    });
+    dp.addEventListener('mousedown', function(e){
+      var add=e.target.closest && e.target.closest('.ops-pt-add');
+      if(add){ e.preventDefault(); _os.lab=String(dp._q||'').trim(); inp.value=_os.lab;
+               dp.style.display='none';
+               var hint=$id('osLabHint'); if(hint) hint.innerHTML='<b>New lab</b> — it will appear in this list next time.';
+               return; }
+      var it=e.target.closest && e.target.closest('.ops-pt-it'); if(!it) return;
+      e.preventDefault();
+      var l=(dp._list||[])[Number(it.getAttribute('data-i'))]; if(!l) return;
+      _os.lab=l.name; inp.value=l.name; dp.style.display='none';
+      var h2=$id('osLabHint'); if(h2) h2.textContent='Used '+l.uses+' time'+(l.uses===1?'':'s')+' before.';
+    });
+    inp.addEventListener('blur', function(){ setTimeout(function(){ dp.style.display='none'; }, 150); });
   }
 
   function branchNameOf(id, brs){
