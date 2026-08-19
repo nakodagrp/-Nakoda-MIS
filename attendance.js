@@ -46,10 +46,47 @@
      synced automatically when the network returns. The server records the original tap time, so
      late/half-day stays fair, and notes "Offline punch · synced HH:mm" for the manager. */
   function pq(){ try{ return JSON.parse(localStorage.getItem('nk_att_q')||'[]'); }catch(e){ return []; } }
-  function pqSave(q){ try{ localStorage.setItem('nk_att_q', JSON.stringify(q.slice(0,8))); }catch(e){} }
+  var PQ_MAX = 8, PQ_HOLD_MS = 120000;
+  /* v325 — TWO FIXES IN ONE FUNCTION.
+     (a) `q.slice(0,8)` kept the OLDEST eight. Once eight punches were stuck, the punch someone
+         had just made was thrown away the instant it was saved — no error, no message, and the
+         button had already gone green. It now keeps the NEWEST eight: today always survives.
+     (b) A selfie is ~90 KB of base64, so a full queue can hit the browser's storage quota. The
+         old code swallowed that failure silently and the punch was simply gone. Now, if the write
+         is refused, it drops the oldest entry and tries again until it fits — so the punch that
+         matters most is the last thing to be given up, never the first. */
+  function pqSave(q){
+    var arr=(q||[]).slice(-PQ_MAX);
+    for(var n=arr.length; n>0; n--){
+      try{ localStorage.setItem('nk_att_q', JSON.stringify(arr.slice(-n))); return true; }catch(e){}
+    }
+    try{ localStorage.setItem('nk_att_q','[]'); }catch(e){}
+    return false;
+  }
+  /* A hold means "a live attempt is in flight for this exact punch right now". It is only ever
+     true for the seconds a submit is running, so anything older than two minutes is the wreckage
+     of an attempt that never finished — the phone locked, the staff member switched apps, Android
+     dropped the tab. Before this, such a punch was skipped by pqPick for ever. */
+  function pqHeld(it, now){ return !!(it && it.hold && it.holdTs && (now-it.holdTs) < PQ_HOLD_MS); }
+  /* A fresh page load means nothing can possibly be in flight. Wipe every hold, including the
+     legacy ones that carry no timestamp — this is what releases the punches stuck on phones today. */
+  function pqReleaseStaleHolds(){
+    var q=pq(), ch=false, now=Date.now();
+    q.forEach(function(p){ if(p.hold && !pqHeld(p,now)){ delete p.hold; delete p.holdTs; ch=true; } });
+    if(ch) pqSave(q);
+    return ch;
+  }
+  /* A cool-off exists because a send failed. When the connection comes back that reason is gone,
+     so waiting out the remaining fifteen minutes helps nobody. */
+  function pqClearCooldowns(){
+    var q=pq(), ch=false;
+    q.forEach(function(p){ if(p.cool){ delete p.cool; ch=true; } });
+    if(ch) pqSave(q);
+    return ch;
+  }
   function pqToday(kind){ var t=todayS(); return pq().filter(function(p){ return p.date===t && p.kind===kind; })[0]; }
   function pqDrop(item){ pqSave(pq().filter(function(p){ return p.ts!==item.ts; })); }
-  var _pqBusy=false;
+  var _pqBusy=false, _pqBusyTs=0;
   /* v282 (bug C): pqSync used to process q[0] and ONLY q[0]. A check-in that could not land — a lapsed
      token, a Drive hiccup — sat at the head being retried up to 12 times, and the check-out queued behind
      it could never be attempted. The trapped check-out was then rejected with "Please check in first",
@@ -65,10 +102,15 @@
       var it=q[i];
       if(it.kind==='out'){
         var blocked=false;
-        for(var j=0;j<q.length;j++){ if(q[j].kind==='in' && q[j].date===it.date){ blocked=true; break; } }
+        /* v325: `pqHeld` was `q[j].hold`-blind here too. A check-in frozen by a stale hold blocked
+           its own check-out for ever, so one interrupted tap cost the whole day. A check-in that is
+           genuinely pending still blocks — that ordering rule is real and stays. */
+        for(var j=0;j<q.length;j++){ if(q[j].kind==='in' && q[j].date===it.date && !(q[j].hold && !pqHeld(q[j],now))){ blocked=true; break; } }
         if(blocked) continue;   // its own check-in has not landed yet — this one genuinely has to wait
       }
-      if(it.hold) continue;                  // v295: submitMark is attempting this exact punch live right now
+      if(pqHeld(it,now)) continue;           // v295: submitMark is attempting this exact punch live right now
+                                             // v325: …but only for two minutes. A hold left behind by a
+                                             // killed page used to park the punch here permanently.
       if(it.cool && now<it.cool) continue;   // failed very recently — let another punch have a turn
       return it;
     }
@@ -80,12 +122,17 @@
     if(it){ it.cool=Date.now()+Math.min(15*60000, 60000*Math.max(1,tries||1)); pqSave(q); }
   }
   function pqSync(){
+    /* v325 watchdog. _pqBusy is cleared in both the .then and the .catch, but if the promise never
+       settles at all the flag stayed true and the queue stopped for the rest of the session. */
+    if(_pqBusy && (Date.now()-_pqBusyTs) > 90000) _pqBusy=false;
     if(_pqBusy || !navigator.onLine) return;
     var q=pq(); if(!q.length) return;
     var item=pqPick(q); if(!item) return;   // everything is either blocked or cooling down
-    _pqBusy=true;
+    _pqBusy=true; _pqBusyTs=Date.now();
     var payload={punchId:item.punchId||'', selfie:item.selfie, lat:item.lat, lng:item.lng, noGeo:!!item.noGeo, wfh:!!item.wfh, altShift:!!item.altShift, remark:item.remark||'', clientDate:item.date, clientTime:item.time, offline:1};
-    var call=(item.kind==='in')?API.checkIn(payload):API.checkOut(payload);
+    var call;
+    try{ call=(item.kind==='in')?API.checkIn(payload):API.checkOut(payload); }
+    catch(e){ _pqBusy=false; pqCool(item,1); return; }   /* v325: a synchronous throw used to wedge the queue */
     call.then(function(r){
       _pqBusy=false;
       var em=String((r&&r.error)||'');
@@ -148,7 +195,11 @@
     return recs;
   }
   function refreshAfterSync(){ API.myAttendance(ymNow()).then(function(x){ if(x&&x.ok){ ATT.recs=mergeServerRecs(x.records); if(document.getElementById('attMe')) paintMe(); } }); }
-  try{ window.addEventListener('online', function(){ setTimeout(pqSync, 1500); }); }catch(e){}
+  /* v325. On load nothing can be in flight, so free every punch a killed page left behind — this is
+     what unsticks the phones that are already carrying a backlog. On `online`, drop the cool-offs too:
+     they exist because the connection failed, and the connection has just come back. */
+  try{ pqReleaseStaleHolds(); }catch(e){}
+  try{ window.addEventListener('online', function(){ pqReleaseStaleHolds(); pqClearCooldowns(); setTimeout(pqSync, 1500); }); }catch(e){}
   try{ setInterval(pqSync, 60000); }catch(e){}
 
   function renderAttendance(){
@@ -302,7 +353,9 @@
         : (!rec.checkOut ? '<button class="att-big out" id="attBtn">⊖ Check out</button>' : '<div class="att-done">✓ Done for today</div>');
     }
     var stat = rec ? ('In '+(rec.checkIn||'—')+(rec.checkOut?(' · Out '+rec.checkOut):'')+(rec.workHours?(' · '+rec.workHours+'h'):'')+(String(rec.late)==='yes'?' · ⚠ late (½ day)':'')+(rec._queued?' · ☁ waiting to send':'')) : 'Not checked in yet';
-    var qNote = qN ? '<div class="att-note" style="color:#854F0B;font-weight:600">☁ '+qN+' punch'+(qN>1?'es':'')+' saved on phone — will send automatically when internet returns.</div>' : '';
+    /* v325: a "Send now" the staff member can actually press, instead of watching a number that
+       never moves and having no way to ask why. */
+    var qNote = qN ? '<div class="att-note" style="color:#854F0B;font-weight:600">☁ '+qN+' punch'+(qN>1?'es':'')+' saved on phone — will send automatically when internet returns. <span id="attSendNow" style="text-decoration:underline;cursor:pointer;white-space:nowrap">Send now</span></div>' : '';
     // Alternate Sunday counter
     var sundayNote='';
     var sw__=String((S.user&&S.user.SundayWork)||'').toLowerCase().trim();
@@ -330,6 +383,23 @@
       monthStrip();
     if(!ATT.sending) pqSync();   // v201: any saved punches get a sync chance every time this screen paints
     var b=$id('attBtn'); if(b && !ATT.sending) b.onclick=function(){ doMark(inb?'in':'out'); };
+    var sn=$id('attSendNow'); if(sn) sn.onclick=function(){
+      if(!navigator.onLine){ toast('Still no internet — they will send by themselves the moment it returns.', true); return; }
+      sn.textContent='Sending…';
+      var before=pq().length;
+      /* Force the queue wide open: free anything held or cooling, and clear the busy flag in case a
+         previous attempt never settled. Re-sending is harmless — the server recognises the punchId
+         and replays its original answer rather than writing the punch twice. */
+      try{ pqReleaseStaleHolds(); pqClearCooldowns(); }catch(e){}
+      _pqBusy=false; pqSync();
+      setTimeout(function(){
+        var left=pq().length;
+        if(!left) toast('All saved punches sent ✓');
+        else if(left<before) toast((before-left)+' sent ✓ · '+left+' still trying.');
+        else toast(left+' punch'+(left>1?'es':'')+' still waiting — retrying in the background.', true);
+        paintMe();
+      }, 5000);
+    };
     var fix=$id('attFixSelfie'); if(fix) fix.onclick=function(){
       fix.textContent='Opening camera…';
       captureSelfie(function(b64){
@@ -604,13 +674,14 @@
       var d=new Date(ATT.tapTs||Date.now());
       var q=pq(); q.push({ts:Date.now(), punchId:_pid, kind:kind, date:tdy(), time:String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'),
         selfie:selfie, lat:c.lat, lng:c.lng, noGeo:!!ATT.noGeo, wfh:!!ATT.wfh, altShift:!!ATT.altShift, remark:(kind==='out'?(ATT.outRemark||''):''),
-        hold:1});   // hold = a live attempt is in flight right now; pqSync must not send the same punch alongside it
+        hold:1, holdTs:Date.now()});   // hold = a live attempt is in flight right now; pqSync must not send the same punch alongside it.
+                                     // v325: holdTs is what lets the queue tell a live attempt from one that died mid-flight.
       pqSave(q); _staged=true;
     }
     /* The live attempt is over and did not land it — hand the punch back to the background queue. */
     function releaseStaged(){
       var q=pq(), it=q.filter(function(p){ return p.punchId===_pid; })[0];
-      if(it){ delete it.hold; pqSave(q); }
+      if(it){ delete it.hold; delete it.holdTs; pqSave(q); }
       _staged=false;
     }
     /* The punch is settled (landed, or permanently rejected) — the queued copy has no further job. */
