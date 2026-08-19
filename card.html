@@ -143,6 +143,7 @@
     <button class="btn hide" id="save">Save my card</button>
     <button class="btn wa hide" id="wa">Send my card on WhatsApp</button>
     <button class="btn ghost hide" id="savenum">📇 Save lab number to contacts</button>
+    <a class="btn ghost hide" id="askUp" style="text-decoration:none;text-align:center;padding:15px" target="_blank" rel="noopener"></a>
     <a class="btn ghost hide" id="waOpen" style="text-decoration:none;text-align:center;padding:15px" target="_blank" rel="noopener">Open WhatsApp</a>
     <div class="ok" id="ok"></div>
     <div class="err" id="err2"></div>
@@ -171,6 +172,10 @@
   /* CFG starts as an object, never null. If the config call fails the form must still work —
      showCard() writes into CFG, and a null here crashed the success path after a failed boot. */
   var CFG = {}, CARD = null, TYPEROW = null, IMG_PNG = '', IMG_JPG = '';
+  /* What the printed code is FOR, kept separately: once an existing member scans, TYPEROW becomes
+     their own card type and we still need to know the QR said Platinum. */
+  var QR_TYPE = { id:TYPE, name:'Platinum' }, QR_BRANCH = BRANCH;
+  var UPGRADED = null;   /* set when this scan closed an older card and issued a better one */
 
   var DEFAULT_BENEFITS = [
     'Get up to 50% discount on all in-house tests',
@@ -319,6 +324,8 @@
     post('publicCardConfig', {branchId:BRANCH, typeId:TYPE}, 30000, 3).then(function(r){
       if(!r || !r.ok){ if(attemptNo < 3) setTimeout(function(){ boot(attemptNo+1); }, 4000); return; }
       CFG = r; TYPEROW = r.type || {name:'PLATINUM'};
+      QR_TYPE = { id:String(TYPEROW.typeId||TYPE||''), name:String(TYPEROW.name||'Platinum') };
+      QR_BRANCH = String(r.branchId || BRANCH || '');
       $('branchTag').textContent = (TYPEROW.name || 'PLATINUM') + ' · ' + (r.branchName || 'Membership');
       $('formTitle').textContent = 'Get your ' + titleCase(TYPEROW.name || 'Platinum') + ' card';
       if(!r.branchId && r.branches && r.branches.length){
@@ -337,13 +344,35 @@
     });
   }
   function titleCase(s){ s=String(s||'').toLowerCase(); return s.charAt(0).toUpperCase()+s.slice(1); }
+  /* "SOUTHBOPAL" reads badly on a customer's screen. */
+  function titleCaseWords(s){
+    return String(s||'').toLowerCase().replace(/(^|[\s\-_])([a-z])/g, function(m,a,b){ return a+b.toUpperCase(); }).trim();
+  }
+
+  /* An existing member on the wrong card is a sales conversation, not a dead end. One button, pre-written,
+     straight to the branch — the CRM officer picks it up with the card number already in hand. */
+  function setupUpgradeAsk(show_){
+    var a = $('askUp');
+    if(!show_){ hide(a); return; }
+    var ph = labNumber();
+    if(!ph){ hide(a); return; }
+    var msg = 'Hello Nakoda, I have ' + String((TYPEROW && TYPEROW.name) || '') + ' card ' + (CARD ? CARD.cardNumber : '') +
+              ' (' + (CARD ? CARD.holderName : '') + '). I would like to know about the ' + QR_TYPE.name + ' membership.';
+    a.href = 'https://wa.me/91' + ph + '?text=' + encodeURIComponent(msg);
+    a.textContent = 'Ask about ' + QR_TYPE.name + ' membership';
+    show(a);
+  }
 
   function benefitList(){
     var t = (TYPEROW && TYPEROW.benefitsText) ? String(TYPEROW.benefitsText) : '';
     /* Strip only a leading bullet or "1)" / "1." numbering — NOT any leading digit, or
        "20% less on packages" loses its 20 and reads "% less on packages". */
     var arr = t.split(/\r?\n/).map(function(x){ return x.replace(/^\s*(?:[-•*]+|\d{1,2}\s*[.)])\s*/,'').trim(); })
-                .filter(function(x){ return x.length > 1; });
+                .filter(function(x){ return x.length > 1; })
+                /* Some card types have a heading line ("Benefits", "Benefits:", "Card benefits") at the
+                   top of benefitsText. Every line was being ticked, so the list opened with a tick
+                   next to the word "Benefits". */
+                .filter(function(x){ return !/^(card\s+)?benefits?\s*[:\-–]?$/i.test(x); });
     return arr.length ? arr : DEFAULT_BENEFITS;
   }
   function renderBenefits(){
@@ -376,7 +405,7 @@
           showErr($('err'), (r && r.error) || 'Something went wrong. Please try again.');
           return;
         }
-        CARD = r.card; TYPEROW = r.type || TYPEROW;
+        CARD = r.card; TYPEROW = r.type || TYPEROW; UPGRADED = r.upgradedFrom || null;
         CFG.branchName  = r.branchName  || CFG.branchName;
         CFG.branchPhone = r.branchPhone || CFG.branchPhone;
         showCard(!!r.existing);
@@ -402,7 +431,7 @@
     $('welcomeSub').textContent='This takes a few seconds';
     show($('cardSkel')); hide($('cardBox')); hide($('saveHint'));
     hide($('metaRow')); hide($('ttlBen')); $('benList').innerHTML='';
-    hide($('save')); hide($('wa')); hide($('savenum')); hide($('waOpen')); hide($('sendStat'));
+    hide($('save')); hide($('wa')); hide($('savenum')); hide($('waOpen')); hide($('sendStat')); hide($('askUp'));
     $('ok').style.display='none'; clrErr($('err2')); $('callNote').textContent='';
     show($('stepMsg')); $('stepMsg').textContent=STEP_MSGS[0];
     var i=0;
@@ -427,13 +456,31 @@
     hide($('cardSkel')); hide($('stepMsg'));
     show($('cardBox')); show($('saveHint')); show($('metaRow')); show($('ttlBen')); show($('save'));
     window.scrollTo(0,0);
+    /* v328. The badge under the logo was written once, from the QR, and never touched again — so an
+       existing Gold member saw her Gold card sitting under the words "PLATINUM · SOUTHBOPAL". It now
+       always describes the card on the screen. */
+    var shownType = String((TYPEROW && TYPEROW.name) || 'Membership');
+    var shownBranch = titleCaseWords(CFG.branchName || '');
+    $('branchTag').textContent = shownType.toUpperCase() + (shownBranch ? (' · ' + shownBranch) : '');
+
+    var differentType = !!(existing && QR_TYPE.id && TYPEROW && TYPEROW.typeId &&
+                           String(TYPEROW.typeId).toUpperCase() !== String(QR_TYPE.id).toUpperCase());
     if(existing){
-      $('welcomeTtl').textContent = 'YOU ALREADY HAVE A CARD';
-      $('welcomeSub').textContent = 'This is the active card on your number';
+      $('welcomeTtl').textContent = 'YOU ALREADY HAVE A ' + shownType.toUpperCase() + ' CARD';
+      $('welcomeSub').textContent = differentType
+        ? ('This is the active card on your number. To move to ' + QR_TYPE.name + ', please ask at our branch.')
+        : 'This is the active card on your number';
+    } else if(UPGRADED){
+      /* Their old card was closed to make this one. Say so plainly — a member who is told nothing
+         and later finds their Gold cancelled has every reason to be angry about it. */
+      $('welcomeTtl').textContent = 'UPGRADED TO ' + shownType.toUpperCase();
+      $('welcomeSub').textContent = 'Your ' + UPGRADED.typeName + ' card ' + UPGRADED.cardNumber + ' has been closed and replaced by this one.';
     } else {
       $('welcomeTtl').textContent = 'YOUR CARD IS READY';
       $('welcomeSub').textContent = 'Welcome to the Nakoda family';
     }
+    /* Nothing to ask about once they are already on the card the QR offers. */
+    setupUpgradeAsk(differentType && !UPGRADED);
     $('mName').textContent = String(CARD.holderName||'').toUpperCase();
     $('mExp').textContent  = fmtDate(CARD.expiryDate);
     renderBenefits();
@@ -505,7 +552,7 @@
     if(_autoSent || !CARD || !IMG_JPG) return;
     _autoSent = true;
     setStat('busy', 'Sending your card to WhatsApp on +91 ' + CARD.mobile + '…');
-    post('publicSendCard', {cardNumber:CARD.cardNumber, mobile:CARD.mobile, imageBase64:IMG_JPG.split(',')[1]}, 90000, 2)
+    post('publicSendCard', {cardNumber:CARD.cardNumber, mobile:CARD.mobile, qrBranchId:QR_BRANCH, imageBase64:IMG_JPG.split(',')[1]}, 90000, 2)
       .then(function(r){
         if(r && r.ok){
           setStat('done', 'Sent ✓  Open WhatsApp on +91 ' + CARD.mobile + ' — your card is there.');
@@ -571,7 +618,7 @@
     clrErr($('err2'));
     var btn = $('wa'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span>Sending to your WhatsApp…';
     setStat('busy', 'Trying again…');
-    post('publicSendCard', {cardNumber:CARD.cardNumber, mobile:CARD.mobile, imageBase64:IMG_JPG.split(',')[1]}, 90000, 2)
+    post('publicSendCard', {cardNumber:CARD.cardNumber, mobile:CARD.mobile, qrBranchId:QR_BRANCH, imageBase64:IMG_JPG.split(',')[1]}, 90000, 2)
       .then(function(r){
         btn.disabled = false; btn.textContent = 'Send again on WhatsApp';
         if(r && r.ok){
