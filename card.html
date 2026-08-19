@@ -472,9 +472,17 @@
         : 'This is the active card on your number';
     } else if(UPGRADED){
       /* Their old card was closed to make this one. Say so plainly — a member who is told nothing
-         and later finds their Gold cancelled has every reason to be angry about it. */
-      $('welcomeTtl').textContent = 'UPGRADED TO ' + shownType.toUpperCase();
-      $('welcomeSub').textContent = 'Your ' + UPGRADED.typeName + ' card ' + UPGRADED.cardNumber + ' has been closed and replaced by this one.';
+         and later finds their old card cancelled has every reason to be angry about it. The wording
+         has to match what actually happened: a Gold becoming a Platinum is an upgrade, a Platinum
+         moving from one branch to another is not. */
+      if(UPGRADED.reason === 'branch'){
+        $('welcomeTtl').textContent = 'YOUR NEW ' + shownType.toUpperCase() + ' CARD';
+        $('welcomeSub').textContent = 'Issued at ' + (shownBranch || 'this branch') + '. Your earlier card ' +
+          UPGRADED.cardNumber + (UPGRADED.branchName ? (' from ' + titleCaseWords(UPGRADED.branchName)) : '') + ' has been closed.';
+      } else {
+        $('welcomeTtl').textContent = 'UPGRADED TO ' + shownType.toUpperCase();
+        $('welcomeSub').textContent = 'Your ' + UPGRADED.typeName + ' card ' + UPGRADED.cardNumber + ' has been closed and replaced by this one.';
+      }
     } else {
       $('welcomeTtl').textContent = 'YOUR CARD IS READY';
       $('welcomeSub').textContent = 'Welcome to the Nakoda family';
