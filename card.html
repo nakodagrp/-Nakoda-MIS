@@ -70,6 +70,15 @@
   @keyframes sp{to{transform:rotate(360deg)}}
   .ok{background:rgba(26,127,55,.18);border:1px solid rgba(37,211,102,.45);color:#b7f5cd;border-radius:12px;
     padding:11px 13px;font-size:13px;margin-top:14px;line-height:1.5;display:none}
+  /* The WhatsApp send now runs on its own behind the card, so it needs a quiet place to report
+     rather than a button the customer has to find and press. */
+  .sendstat{border-radius:12px;padding:11px 13px;font-size:13px;margin-top:14px;line-height:1.5;
+    display:flex;align-items:center;gap:9px}
+  .sendstat.busy{background:rgba(255,255,255,.06);border:1px solid rgba(236,200,87,.25);color:#DCD2AA}
+  .sendstat.done{background:rgba(26,127,55,.18);border:1px solid rgba(37,211,102,.45);color:#b7f5cd}
+  .sendstat.warn{background:rgba(192,57,43,.15);border:1px solid rgba(192,57,43,.5);color:#ffbdb5}
+  .sendstat .dot{flex:0 0 15px;height:15px;border:2px solid rgba(236,200,87,.3);border-top-color:#ECC857;
+    border-radius:50%;animation:sp .7s linear infinite}
   .hide{display:none!important}
   .center{text-align:center}
   .savehint{font-size:11.5px;color:#9d977f;text-align:center;margin-top:10px}
@@ -130,6 +139,7 @@
     <div class="ttl hide" id="ttlBen">Your benefits</div>
     <ul class="benefits" id="benList"></ul>
 
+    <div class="sendstat hide" id="sendStat"></div>
     <button class="btn hide" id="save">Save my card</button>
     <button class="btn wa hide" id="wa">Send my card on WhatsApp</button>
     <button class="btn ghost hide" id="savenum">📇 Save lab number to contacts</button>
@@ -392,7 +402,7 @@
     $('welcomeSub').textContent='This takes a few seconds';
     show($('cardSkel')); hide($('cardBox')); hide($('saveHint'));
     hide($('metaRow')); hide($('ttlBen')); $('benList').innerHTML='';
-    hide($('save')); hide($('wa')); hide($('savenum')); hide($('waOpen'));
+    hide($('save')); hide($('wa')); hide($('savenum')); hide($('waOpen')); hide($('sendStat'));
     $('ok').style.display='none'; clrErr($('err2')); $('callNote').textContent='';
     show($('stepMsg')); $('stepMsg').textContent=STEP_MSGS[0];
     var i=0;
@@ -436,6 +446,8 @@
       IMG_PNG = cv.toDataURL('image/png');
       IMG_JPG = cv.toDataURL('image/jpeg', 0.92);      /* smaller — what goes to WhatsApp */
       $('cardImg').src = IMG_PNG;
+      if(labNumber()) show($('savenum'));
+      autoSend();          /* v327: starts here and is never waited on */
     });
   }
 
@@ -473,9 +485,39 @@
 
   function revealWa(){
     $('save').textContent = 'Save again';
-    show($('wa'));
     if(labNumber()) show($('savenum'));
-    $('wa').scrollIntoView({behavior:'smooth', block:'center'});
+  }
+
+  /* ── the WhatsApp send, off the customer's clock ────────────────────────
+     Sending a card is two calls out to whatsbizapi carrying a ~70 KB photo, and then Meta's
+     delivery on top. That is four to eight seconds nobody can tune away — so the customer is no
+     longer asked to sit through it. The moment the card is drawn this fires on its own and
+     reports into a quiet line underneath, while they read their benefits. The old button only
+     comes back if the send actually fails, as a retry. */
+  var _autoSent = false;
+  function setStat(kind, msg){
+    var el = $('sendStat');
+    el.className = 'sendstat ' + kind;
+    el.innerHTML = (kind === 'busy' ? '<span class="dot"></span>' : '') + '<span></span>';
+    el.lastChild.textContent = msg;
+  }
+  function autoSend(){
+    if(_autoSent || !CARD || !IMG_JPG) return;
+    _autoSent = true;
+    setStat('busy', 'Sending your card to WhatsApp on +91 ' + CARD.mobile + '…');
+    post('publicSendCard', {cardNumber:CARD.cardNumber, mobile:CARD.mobile, imageBase64:IMG_JPG.split(',')[1]}, 90000, 2)
+      .then(function(r){
+        if(r && r.ok){
+          setStat('done', 'Sent ✓  Open WhatsApp on +91 ' + CARD.mobile + ' — your card is there.');
+        } else {
+          setStat('warn', (r && r.error) || 'Could not send just now — your card is on this phone, tap below to try again.');
+          show($('wa')); waFallback();
+        }
+      })
+      .catch(function(){
+        setStat('warn', 'Could not reach WhatsApp just now — your card is saved on this phone. Tap below to try again.');
+        show($('wa')); waFallback();
+      });
   }
 
   /* ── save the branch number to the phone's contacts ─────────────────────
@@ -524,23 +566,25 @@
     download(blob, fname); done();
   });
 
+  /* Only ever shown after an automatic send failed. */
   $('wa').addEventListener('click', function(){
-    clrErr($('err2')); $('ok').style.display = 'none';
+    clrErr($('err2'));
     var btn = $('wa'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span>Sending to your WhatsApp…';
+    setStat('busy', 'Trying again…');
     post('publicSendCard', {cardNumber:CARD.cardNumber, mobile:CARD.mobile, imageBase64:IMG_JPG.split(',')[1]}, 90000, 2)
       .then(function(r){
         btn.disabled = false; btn.textContent = 'Send again on WhatsApp';
         if(r && r.ok){
-          $('ok').textContent = '✅ Sent. Open WhatsApp on +91 ' + CARD.mobile + ' — your card is there.';
-          $('ok').style.display = 'block';
+          setStat('done', 'Sent ✓  Open WhatsApp on +91 ' + CARD.mobile + ' — your card is there.');
+          hide($('wa')); hide($('waOpen'));
         } else {
-          showErr($('err2'), (r && r.error) || 'Could not send right now.');
+          setStat('warn', (r && r.error) || 'Could not send right now.');
           waFallback();
         }
       })
       .catch(function(){
         btn.disabled = false; btn.textContent = 'Send again on WhatsApp';
-        showErr($('err2'),'Could not reach WhatsApp right now — your card is saved on this phone.');
+        setStat('warn', 'Could not reach WhatsApp right now — your card is saved on this phone.');
         waFallback();
       });
   });
