@@ -1,0 +1,176 @@
+/* ============================================================
+ *  Nakoda MIS — Service Worker
+ *  Caches the app shell so the app OPENS with no internet.
+ *  Bump CACHE_VERSION whenever you publish changes — users then
+ *  see the "update available" banner.
+ * ============================================================ */
+var CACHE_VERSION = 'nakoda-mis-v324';  /* v324: the public QR membership page. card.html and qr-poster.html are deliberately NOT part of the app shell and are excluded from this worker entirely (see the fetch handler) — a customer scanning a standee must always get the live page, and a staff phone must never serve them a cached one. Includes all of v323. */  /* v323: Outsource sits beside Collect sample — on the dashboard Quick log and on the Sample collection page, in the same order in both. Includes all of v322. */  /* v322: the outsource board fixes — rows folded into Collected are DRAWN under Collected instead of silently disappearing, the panel stops calling an outsource a walk-in, the send popup names the lab, and the quick-log tile stops eating the call outcome. Includes all of v321. */  /* v321: process 3 — outsource to report delivery. Two fields, two stages, and the desk holds one task until the outside lab's report goes out. Includes all of v320. */  /* v320: the Result and Verified stages are removed — a collected sample goes straight to the report desk. Three stages: ordered, collected, sent. Includes all of v319. */  /* v319: Order to delivery books a 5-minute slot at the branch counter — capacity is the number of chairs, not one, so a three-chair branch never reads full with two empty. Includes all of v318. */  /* v318: Sample collection opens the phlebotomist's diary — his month calendar with free days in green, his morning and evening times, click one and the blood-collection task is his. Includes all of v317. */  /* v317: home-visit orders are booked into 30-minute slots instead of a typed time — the grid shows what is free, a booked box is gone, and the order is finally stamped on the day that was chosen rather than always today. Repeat patients are found by name or number and bring their address with them. Includes all of v316. */  /* v316: bulk WhatsApp membership-card send. Includes all of v315. */  /* v315: arrived-in-lab trend on the main dashboard,
+     home-visit turnaround log under the Sample Collection board, and the appointment time fixed —
+     it was being stored at Sheets' 1899 epoch, which broke every on-time figure. Includes v314. */
+var SHELL = [
+  './',
+  './index.html',
+  './manifest.webmanifest',
+  './styles.css',
+  './config.js',
+  './api.js',
+  './app.js',
+  './branches.js',
+  './watemplates.js',
+  './membership.js',
+  './bulksend.js',
+  './cardadmin.js',
+  './tasks.js',
+  './calendar.js',
+  './attendance.js',
+  './hrmodules.js',
+  './leave.js',
+  './accounts.js',
+  './training.js',
+  './assets.js',
+  './inventory.js',
+  './stockauto.js',
+  './purchase.js',
+  './payreq.js',
+  './combo.js',
+  './recurring.js',
+  './finance.js',
+  './statementtable.js',
+  './partnerreview.js',
+  './bankpreview.js',
+  './ops.js',
+  './quicklog.js',
+  './extras.js',
+  './icons/login-logo.png',
+  './icons/logo-white.png',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+  './icons/favicon.png'
+];
+/* The minimum set needed to render a styled, working login screen. These are cached all-or-nothing,
+   so a device can NEVER end up with index.html but a missing styles.css (the broken unstyled state). */
+var CRITICAL = ['./','./index.html','./styles.css','./manifest.webmanifest','./config.js','./api.js','./app.js'];
+var OPTIONAL = SHELL.filter(function(u){ return CRITICAL.indexOf(u)<0; });
+
+/* ============================================================ v288 — WHY BUMPING THE VERSION DIDN'T WORK
+   THE BUG. c.addAll() and c.add() fetch through the browser's ordinary HTTP cache. GitHub Pages serves
+   these files with Cache-Control: max-age=600, so for ten minutes after an upload the browser will hand
+   the service worker its OLD copy of a file — and the service worker will faithfully store that old copy
+   in its brand-new cache. Bumping CACHE_VERSION does nothing about this: you get a fresh cache carefully
+   filled with stale files, and the app keeps showing the previous build. Uploading again does not help,
+   because the browser is still inside the same ten-minute window.
+
+   That is why the finance table kept coming back with B2C/B2D/B2B and ₹0 cells after every deploy.
+
+   THE FIX. Fetch each shell file with {cache:'reload'}, which bypasses the HTTP cache and goes to the
+   network. What lands in the service worker cache is then genuinely what is on the server. */
+function freshRequest_(u){ return new Request(u, {cache:'reload'}); }
+function addFresh_(c,u){
+  return fetch(freshRequest_(u)).then(function(res){
+    if(!res || res.status!==200) throw new Error('bad status '+(res&&res.status)+' for '+u);
+    return c.put(u, res);
+  });
+}
+self.addEventListener('install', function(e){
+  e.waitUntil(
+    caches.open(CACHE_VERSION).then(function(c){
+      // Critical files are all-or-nothing: if any can't be fetched, install REJECTS and the browser
+      // retries later — so we never activate a half-cached (unstyled) shell.
+      return Promise.all(CRITICAL.map(function(u){ return addFresh_(c,u); })).then(function(){
+        // Everything else is best-effort; a single missing module/icon must not block install.
+        return Promise.all(OPTIONAL.map(function(u){ return addFresh_(c,u).catch(function(){}); }));
+      });
+    })
+  );
+});
+
+self.addEventListener('activate', function(e){
+  e.waitUntil(
+    caches.keys().then(function(keys){
+      return Promise.all(keys.map(function(k){ if(k!==CACHE_VERSION) return caches.delete(k); }));
+    }).then(function(){ return self.clients.claim(); })
+  );
+});
+
+self.addEventListener('message', function(e){
+  if (e.data === 'SKIP_WAITING') self.skipWaiting();
+  /* v288: lets the app ask "which build are you actually serving?" — the question that has been
+     impossible to answer from the outside every time a deploy appeared not to take. */
+  if (e.data === 'WHICH_BUILD' && e.source && e.source.postMessage){
+    e.source.postMessage({ type:'BUILD', version:CACHE_VERSION });
+  }
+});
+
+/* ============================================================ v295 — THE DOUBLE-FETCH BUG
+   THE BUG. The old handler read:
+
+       var net = fetch(req).then(...);
+       return cached || net;
+
+   `fetch(req)` is a function CALL, evaluated the moment that line runs — long before
+   `cached || net` decides which one to return. So a cache hit still fired a full network
+   request; the response was simply thrown away. index.html pulls in 35 scripts, styles.css
+   and five icons, so EVERY page load quietly put ~40 needless requests on the wire even
+   though all 40 files were already sitting in the cache.
+
+   WHY THAT BROKE PUNCHING. On a branch's mobile connection those 40 requests compete with
+   the one request that actually matters — the check-in POST carrying a photo. The punch
+   waits behind them for its share of a narrow pipe, and on a bad morning it loses the race
+   and aborts. "Photo taken, then nothing happened."
+
+   THE FIX. Serve the cached copy IMMEDIATELY and revalidate in the background at most once
+   per file per service-worker lifetime, so a file is refreshed but never re-fetched forty
+   times a day. Nothing is fetched at all when the device is offline. Updates still arrive
+   the normal way — a CACHE_VERSION bump re-installs the whole shell.
+   ============================================================ */
+var REVALIDATED_ = {};   /* url -> 1, reset whenever the service worker restarts */
+
+function revalidate_(req){
+  var key = req.url;
+  if (REVALIDATED_[key]) return;        // already refreshed this file since the SW woke up
+  if (!self.navigator || self.navigator.onLine !== false) {
+    REVALIDATED_[key] = 1;
+    fetch(req).then(function(res){
+      if (res && res.status === 200){
+        var copy = res.clone();
+        caches.open(CACHE_VERSION).then(function(c){ c.put(req, copy); });
+      }
+    }).catch(function(){ delete REVALIDATED_[key]; });   // failed — allow another try later
+  }
+}
+
+self.addEventListener('fetch', function(e){
+  var req = e.request;
+  if (req.method !== 'GET') return;
+  var url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+  /* v324 — PUBLIC PAGES ARE NOT OURS TO CACHE.
+     card.html is the page behind the printed QR standee and qr-poster.html prints those standees.
+     Neither is in SHELL, so without this they would be cached on first visit as a "genuine miss"
+     and a staff phone that once opened a customer link would keep serving that copy for the life of
+     the cache. Returning here leaves them to the network, exactly like any ordinary web page. */
+  if (/\/(card|qr-poster)\.html$/.test(url.pathname)) return;
+  e.respondWith(
+    caches.match(req).then(function(cached){
+      if (cached){
+        /* Answer from cache NOW. Refresh quietly afterwards, once, and never block on it. */
+        e.waitUntil(Promise.resolve().then(function(){ revalidate_(req); }));
+        return cached;
+      }
+      /* Genuine miss — only now do we touch the network. */
+      return fetch(req).then(function(res){
+        if (res && res.status === 200){
+          var copy = res.clone();
+          caches.open(CACHE_VERSION).then(function(c){ c.put(req, copy); });
+        }
+        return res;
+      }).catch(function(){
+        if (req.mode === 'navigate') return caches.match('./index.html');   // offline page loads → cached shell
+        return cached;
+      });
+    })
+  );
+});
+
+/* v307: the push + notificationclick handlers were removed with the notification system.
+   Nothing sends web-push to this worker any more. */

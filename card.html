@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Nakoda Platinum Membership</title>
+<link rel="icon" href="./icons/favicon.png">
+<meta name="theme-color" content="#0A2E20">
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0}
+  body{
+    background:radial-gradient(120% 80% at 50% 0%,#14442F 0%,#0A2E20 45%,#06231A 100%) fixed;
+    color:#F3EFE2;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    min-height:100vh;padding:18px 14px 40px;
+  }
+  .wrap{max-width:480px;margin:0 auto}
+  .brand{text-align:center;margin:10px 0 22px}
+  .brand h1{font-family:Georgia,"Times New Roman",serif;font-size:34px;letter-spacing:2px;margin:0;
+    background:linear-gradient(90deg,#B58C2F,#ECC857 50%,#8C6B1F);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .brand p{font-family:Georgia,serif;font-style:italic;font-size:12.5px;color:#ECC85799;margin:4px 0 0;letter-spacing:.4px}
+  .brand .br{display:inline-block;margin-top:10px;font-size:11.5px;letter-spacing:2px;text-transform:uppercase;
+    color:#DCD2AA;border:1px solid rgba(236,200,87,.35);border-radius:99px;padding:5px 14px}
+  .panel{background:rgba(255,255,255,.05);border:1px solid rgba(236,200,87,.18);border-radius:18px;padding:20px 18px;
+    backdrop-filter:blur(6px);box-shadow:0 18px 40px rgba(0,0,0,.35)}
+  .panel h2{margin:0 0 4px;font-size:19px;font-weight:700;letter-spacing:.2px}
+  .panel .sub{margin:0 0 18px;font-size:13px;color:#CFC7AE;line-height:1.5}
+  label{display:block;font-size:11.5px;letter-spacing:1.2px;text-transform:uppercase;color:#B9B097;margin:14px 0 6px;font-weight:700}
+  input{width:100%;padding:14px 14px;font-size:16px;border-radius:12px;border:1px solid rgba(236,200,87,.28);
+    background:rgba(0,0,0,.28);color:#FFF8E7;outline:none;font-family:inherit}
+  input:focus{border-color:#ECC857;box-shadow:0 0 0 3px rgba(236,200,87,.15)}
+  input::placeholder{color:#7f7a6a}
+  .row-phone{display:flex;gap:8px;align-items:stretch}
+  .cc{display:flex;align-items:center;padding:0 12px;border-radius:12px;border:1px solid rgba(236,200,87,.28);
+    background:rgba(0,0,0,.28);font-size:15px;color:#DCD2AA;flex:0 0 auto}
+  .btn{display:block;width:100%;margin-top:20px;padding:16px;border:0;border-radius:14px;font-size:16px;font-weight:800;
+    letter-spacing:.3px;cursor:pointer;font-family:inherit;
+    background:linear-gradient(135deg,#B58C2F,#ECC857 50%,#8C6B1F);color:#221802;box-shadow:0 10px 24px rgba(236,200,87,.22)}
+  .btn:active{transform:translateY(1px)}
+  .btn[disabled]{opacity:.55;cursor:default;box-shadow:none}
+  .btn.wa{background:linear-gradient(135deg,#25D366,#128C7E);color:#fff;box-shadow:0 10px 24px rgba(37,211,102,.22)}
+  .btn.ghost{background:transparent;border:1px solid rgba(236,200,87,.4);color:#ECC857;box-shadow:none;font-weight:700}
+  .note{font-size:11.5px;color:#9d977f;margin-top:12px;line-height:1.55;text-align:center}
+  .err{background:rgba(192,57,43,.15);border:1px solid rgba(192,57,43,.5);color:#ffbdb5;border-radius:12px;
+    padding:11px 13px;font-size:13px;margin-top:14px;display:none;line-height:1.5}
+  .cardbox{margin:4px 0 6px;border-radius:14px;overflow:hidden;box-shadow:0 20px 44px rgba(0,0,0,.5)}
+  .cardbox img{display:block;width:100%;border-radius:14px}
+  .benefits{margin:20px 0 0;padding:0;list-style:none}
+  .benefits li{position:relative;padding:9px 0 9px 30px;font-size:13.5px;line-height:1.5;color:#EDE6D2;
+    border-bottom:1px dashed rgba(236,200,87,.16)}
+  .benefits li:last-child{border-bottom:0}
+  .benefits li:before{content:"";position:absolute;left:4px;top:14px;width:14px;height:8px;
+    border-left:2px solid #ECC857;border-bottom:2px solid #ECC857;transform:rotate(-45deg)}
+  .ttl{font-size:12px;letter-spacing:1.6px;text-transform:uppercase;color:#ECC857;font-weight:800;margin:22px 0 2px}
+  .meta{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;color:#CFC7AE;margin-top:14px;
+    border-top:1px solid rgba(236,200,87,.16);padding-top:14px}
+  .meta b{display:block;color:#FFF8E7;font-size:13.5px;margin-top:3px;font-weight:700}
+  .spin{display:inline-block;width:16px;height:16px;border:2px solid rgba(34,24,2,.3);border-top-color:#221802;
+    border-radius:50%;animation:sp .7s linear infinite;vertical-align:-3px;margin-right:8px}
+  .btn.wa .spin{border-color:rgba(255,255,255,.35);border-top-color:#fff}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .ok{background:rgba(26,127,55,.18);border:1px solid rgba(37,211,102,.45);color:#b7f5cd;border-radius:12px;
+    padding:11px 13px;font-size:13px;margin-top:14px;line-height:1.5;display:none}
+  .hide{display:none!important}
+  .center{text-align:center}
+  .savehint{font-size:11.5px;color:#9d977f;text-align:center;margin-top:10px}
+  select{width:100%;padding:14px;font-size:16px;border-radius:12px;border:1px solid rgba(236,200,87,.28);
+    background:rgba(0,0,0,.28);color:#FFF8E7;font-family:inherit}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="brand">
+    <h1>NAKODA</h1>
+    <p>Diagnostics &amp; Research Center</p>
+    <div class="br" id="branchTag">Membership</div>
+  </div>
+
+  <!-- ── STEP 1 : form ───────────────────────────────────────────── -->
+  <div class="panel" id="stepForm">
+    <h2 id="formTitle">Get your Platinum card</h2>
+    <p class="sub" id="formSub">Enter your name and mobile number. Your membership card is created instantly and sent to your WhatsApp.</p>
+
+    <div id="branchPickWrap" class="hide">
+      <label for="branchSel">Select branch</label>
+      <select id="branchSel"></select>
+    </div>
+
+    <label for="nm">Full name</label>
+    <input id="nm" type="text" autocomplete="name" autocapitalize="words" maxlength="40" placeholder="e.g. Ashok Shah">
+
+    <label for="mo">WhatsApp mobile number</label>
+    <div class="row-phone">
+      <div class="cc">+91</div>
+      <input id="mo" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="10" placeholder="10-digit number">
+    </div>
+
+    <button class="btn" id="go">Create my card</button>
+    <div class="err" id="err"></div>
+    <div class="note">By continuing you agree to receive your membership card and lab updates on WhatsApp.</div>
+  </div>
+
+  <!-- ── STEP 2 : card ───────────────────────────────────────────── -->
+  <div class="panel hide" id="stepCard">
+    <div class="center" style="margin-bottom:14px">
+      <div style="font-size:12px;letter-spacing:2px;color:#ECC857;font-weight:800" id="welcomeTtl">YOUR CARD IS READY</div>
+      <div style="font-size:13px;color:#CFC7AE;margin-top:4px" id="welcomeSub">Welcome to the Nakoda family</div>
+    </div>
+
+    <div class="cardbox"><img id="cardImg" alt="Nakoda Platinum Membership Card"></div>
+    <div class="savehint">Tip: you can also press and hold the card to save it.</div>
+
+    <div class="meta">
+      <div>Member<b id="mName">—</b></div>
+      <div style="text-align:right">Valid thru<b id="mExp">—</b></div>
+    </div>
+
+    <div class="ttl">Your benefits</div>
+    <ul class="benefits" id="benList"></ul>
+
+    <button class="btn" id="save">Save my card</button>
+    <button class="btn wa hide" id="wa">Send my card on WhatsApp</button>
+    <a class="btn ghost hide" id="waOpen" style="text-decoration:none;text-align:center;padding:15px" target="_blank" rel="noopener">Open WhatsApp</a>
+    <div class="ok" id="ok"></div>
+    <div class="err" id="err2"></div>
+    <div class="note" id="callNote"></div>
+  </div>
+
+</div>
+
+<script src="./config.js"></script>
+<script>
+(function(){
+  'use strict';
+
+  /* ============================================================
+     Nakoda — public self-service membership card (QR landing page)
+     Standalone: does not load app.js / api.js and never registers
+     the service worker, so a customer's phone stays a plain page.
+     ============================================================ */
+
+  var API = (window.NAKODA_CONFIG && window.NAKODA_CONFIG.API_URL) || '';
+  var qs  = new URLSearchParams(location.search);
+  var BRANCH = (qs.get('b') || qs.get('branch') || '').trim();
+  var TYPE   = (qs.get('t') || 'PLATINUM').trim().toUpperCase();
+  var REFER  = (qs.get('r') || '').trim();
+
+  var CFG = null, CARD = null, TYPEROW = null, IMG_PNG = '', IMG_JPG = '';
+
+  var DEFAULT_BENEFITS = [
+    'Get up to 50% discount on all in-house tests',
+    'Get up to 20% discount on all outsourced tests',
+    'Discount available on bills above ₹300',
+    'Reports on priority',
+    'Dedicated CRM officer',
+    'Valid for all family members',
+    '20% less on full body check-up packages'
+  ];
+
+  function $(id){ return document.getElementById(id); }
+  function show(el){ el.classList.remove('hide'); }
+  function hide(el){ el.classList.add('hide'); }
+  function showErr(box, m){ box.textContent = m; box.style.display = 'block'; }
+  function clrErr(box){ box.textContent = ''; box.style.display = 'none'; }
+
+  function post(action, payload, timeoutMs){
+    var body = JSON.stringify(Object.assign({action:action}, payload||{}));
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var to = ctrl ? setTimeout(function(){ try{ ctrl.abort(); }catch(e){} }, timeoutMs||45000) : null;
+    return fetch(API, {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+                       body:body, redirect:'follow', signal:ctrl?ctrl.signal:undefined})
+      .then(function(r){ return r.json(); })
+      .then(function(j){ if(to) clearTimeout(to); return j; },
+            function(e){ if(to) clearTimeout(to); throw e; });
+  }
+
+  /* ── card renderer — identical to membership.js drawCard() ─────────── */
+  var CARD_THEMES = {
+    HUNTER_GREEN:     { bg:['#0A2E20','#14442F','#06231A'], foil:['#B58C2F','#ECC857','#8C6B1F'], labelMuted:'rgba(220,210,170,0.65)', valueColor:'#FAF5E6', guilloche:'rgba(236,200,87,0.06)' },
+    MIDNIGHT_SAPPHIRE:{ bg:['#0E1B3D','#1F3066','#091226'], foil:['#A0AEC9','#EAEDF4','#8A95AC'], labelMuted:'rgba(195,210,240,0.65)', valueColor:'#FFFFFF', guilloche:'rgba(255,255,255,0.045)' },
+    OXBLOOD:          { bg:['#2A0810','#4F1620','#1F0410'], foil:['#C2A35E','#EBD08A','#9C7E3E'], labelMuted:'rgba(240,210,180,0.60)', valueColor:'#FAF0E6', guilloche:'rgba(235,208,138,0.05)' },
+    AUBERGINE:        { bg:['#1A0628','#330F4F','#0F031C'], foil:['#B58C2F','#ECC857','#8C6B1F'], labelMuted:'rgba(220,195,240,0.60)', valueColor:'#F5ECF8', guilloche:'rgba(236,200,87,0.05)' },
+    ANTHRACITE:       { bg:['#1A1D26','#2C3140','#0E1018'], foil:['#A0AEC9','#EAEDF4','#8A95AC'], labelMuted:'rgba(200,210,225,0.55)', valueColor:'#F5F7FA', guilloche:'rgba(255,255,255,0.04)' },
+    EMERALD_ROSE:     { bg:['#08322A','#10544A','#062821'], foil:['#B57778','#E8B8B0','#9C5E5E'], labelMuted:'rgba(232,184,176,0.60)', valueColor:'#FBEFEA', guilloche:'rgba(232,184,176,0.06)' },
+    CHAMPAGNE_GOLD:   { bg:['#FFFBEC','#FBEFC3','#E8CB85'], foil:['#9A6B17','#E6BE3F','#7D5410'], labelMuted:'rgba(110,75,20,0.60)',   valueColor:'#3D2400', guilloche:'rgba(100,70,10,0.05)', light:true },
+    ONYX:             { bg:['#0A0A0E','#1A1A20','#000000'], foil:['#A0AEC9','#EAEDF4','#8A95AC'], labelMuted:'rgba(200,210,225,0.45)', valueColor:'#FFFFFF', guilloche:'rgba(255,255,255,0.035)' },
+    MAROON_CHAMPAGNE: { bg:['#3A0A10','#5F1820','#26050A'], foil:['#C2A35E','#EBD08A','#9C7E3E'], labelMuted:'rgba(232,210,160,0.60)', valueColor:'#FAF1E6', guilloche:'rgba(235,208,138,0.05)' },
+    SLATE_TEAL:       { bg:['#0A2530','#143842','#061923'], foil:['#A0AEC9','#EAEDF4','#8A95AC'], labelMuted:'rgba(190,215,225,0.60)', valueColor:'#EDF6F8', guilloche:'rgba(255,255,255,0.04)' },
+    COPPER_BRONZE:    { bg:['#5C2E0E','#8B4513','#3E1D08'], foil:['#C2A35E','#EBD08A','#9C7E3E'], labelMuted:'rgba(240,215,175,0.62)', valueColor:'#FDF3E7', guilloche:'rgba(235,208,138,0.055)' },
+    SLATE_INDIGO:     { bg:['#1A1F6E','#2E3599','#0F1248'], foil:['#A0AEC9','#EAEDF4','#8A95AC'], labelMuted:'rgba(195,200,245,0.62)', valueColor:'#EEF0FF', guilloche:'rgba(255,255,255,0.042)' },
+    FOREST_SAGE:      { bg:['#1E3D0A','#355C12','#12270A'], foil:['#B58C2F','#ECC857','#8C6B1F'], labelMuted:'rgba(210,230,185,0.62)', valueColor:'#F2FAE8', guilloche:'rgba(236,200,87,0.055)' },
+    DUSTY_ROSE:       { bg:['#5C2D38','#8C4A58','#3D1A23'], foil:['#C2A35E','#EBD08A','#9C7E3E'], labelMuted:'rgba(240,205,215,0.60)', valueColor:'#FDF0F3', guilloche:'rgba(235,208,138,0.05)' },
+    GRAPHITE_STEEL:   { bg:['#1C2530','#2E3D4F','#101820'], foil:['#A0AEC9','#EAEDF4','#8A95AC'], labelMuted:'rgba(195,210,228,0.58)', valueColor:'#EDF2F7', guilloche:'rgba(255,255,255,0.038)' }
+  };
+  function resolveTheme(type){
+    var id = (type && type.themeId) ? String(type.themeId).toUpperCase() : null;
+    if(id && CARD_THEMES[id]) return CARD_THEMES[id];
+    var n = (type && type.name ? type.name : '').toUpperCase();
+    if(n.indexOf('PLATINUM') >= 0) return CARD_THEMES.HUNTER_GREEN;
+    if(n.indexOf('GOLD') >= 0) return CARD_THEMES.CHAMPAGNE_GOLD;
+    return CARD_THEMES.HUNTER_GREEN;
+  }
+  function fmtExpiry(d){ if(!d) return ''; var x=new Date(d); if(isNaN(x)) return ''; return String(x.getMonth()+1).padStart(2,'0')+'/'+x.getFullYear(); }
+  function fmtDate(d){ if(!d) return ''; var x=new Date(d); if(isNaN(x)) return String(d); return String(x.getDate()).padStart(2,'0')+'/'+String(x.getMonth()+1).padStart(2,'0')+'/'+x.getFullYear(); }
+  function roundRect(c,x,y,w,h,r){ c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath(); }
+
+  function drawCard(canvas, card, type){
+    var ctx=canvas.getContext('2d'), W=canvas.width, H=canvas.height;
+    var typeUpper=(type&&type.name?type.name:'').toUpperCase();
+    var theme=resolveTheme(type), isLight=!!theme.light, isDark=!isLight;
+    var bg=ctx.createLinearGradient(0,0,W,H); bg.addColorStop(0,theme.bg[0]); bg.addColorStop(0.55,theme.bg[1]); bg.addColorStop(1,theme.bg[2]);
+    var labelMuted=theme.labelMuted, valueColor=theme.valueColor, foil=theme.foil;
+    ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+    ctx.save(); ctx.strokeStyle=theme.guilloche; ctx.lineWidth=1;
+    var cx=W*1.05, cy=H*0.45; for(var r=60;r<W*1.2;r+=16){ ctx.beginPath(); ctx.arc(cx,cy,r,Math.PI*0.55,Math.PI*1.45); ctx.stroke(); } ctx.restore();
+    var logoX=W*0.06, logoY=H*0.08, wordSize=Math.round(H*0.14);
+    ctx.font='700 '+wordSize+'px Georgia, "Times New Roman", serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+    var wWidth=ctx.measureText('NAKODA').width;
+    var wf=ctx.createLinearGradient(logoX,logoY,logoX+wWidth,logoY+wordSize); wf.addColorStop(0,foil[0]); wf.addColorStop(0.5,foil[1]); wf.addColorStop(1,foil[2]);
+    ctx.fillStyle=wf; ctx.fillText('NAKODA',logoX,logoY);
+    var subSize=Math.round(H*0.038); ctx.font='500 italic '+subSize+'px Georgia, serif'; ctx.fillStyle=wf;
+    ctx.fillText('Diagnostics & Research Center',logoX,logoY+wordSize+8);
+    if(typeUpper){
+      var tf=Math.round(H*0.052); ctx.font='500 '+tf+'px Georgia, serif'; ctx.textAlign='right'; ctx.textBaseline='top';
+      var tX=W-W*0.06, tY=H*0.10, letters=typeUpper.split(''), sp=Math.round(tf*0.30), tw=0;
+      letters.forEach(function(L){ tw+=ctx.measureText(L).width+sp; }); tw-=sp;
+      var fg=ctx.createLinearGradient(tX-tw,tY,tX,tY+tf); fg.addColorStop(0,foil[0]); fg.addColorStop(0.5,foil[1]); fg.addColorStop(1,foil[2]);
+      ctx.fillStyle=fg; var cur=tX;
+      for(var i=letters.length-1;i>=0;i--){ var lw=ctx.measureText(letters[i]).width; ctx.textAlign='left'; ctx.fillText(letters[i],cur-lw,tY); cur-=(lw+sp); }
+      ctx.fillStyle=fg; ctx.fillRect(tX-tw,tY+tf+6,tw,1);
+    }
+    var chipW=W*0.10, chipH=chipW*0.78, chipX=W*0.06, chipY=H*0.38;
+    var cm=ctx.createLinearGradient(chipX,chipY,chipX+chipW,chipY+chipH); cm.addColorStop(0,foil[0]); cm.addColorStop(0.5,foil[1]); cm.addColorStop(1,foil[2]);
+    ctx.fillStyle=cm; roundRect(ctx,chipX,chipY,chipW,chipH,8); ctx.fill();
+    var pad=5, ig=ctx.createLinearGradient(chipX,chipY,chipX+chipW,chipY+chipH); ig.addColorStop(0,foil[0]); ig.addColorStop(1,foil[2]);
+    ctx.fillStyle=ig; roundRect(ctx,chipX+pad,chipY+pad,chipW-pad*2,chipH-pad*2,5); ctx.fill();
+    ctx.strokeStyle='rgba(0,0,0,0.30)'; ctx.lineWidth=1.2;
+    for(var ri=1;ri<4;ri++){ var yy=chipY+pad+((chipH-pad*2)*ri/4); ctx.beginPath(); ctx.moveTo(chipX+pad,yy); ctx.lineTo(chipX+chipW-pad,yy); ctx.stroke(); }
+    for(var ci=1;ci<3;ci++){ var xx=chipX+pad+((chipW-pad*2)*ci/3); ctx.beginPath(); ctx.moveTo(xx,chipY+pad); ctx.lineTo(xx,chipY+chipH-pad); ctx.stroke(); }
+    var num=Math.round(H*0.085); ctx.font='600 '+num+'px "SF Mono","Consolas","Courier New",monospace'; ctx.textAlign='left'; ctx.textBaseline='top'; ctx.fillStyle=valueColor;
+    ctx.fillText(String(card.cardNumber||''),W*0.06,H*0.59);
+    ctx.fillStyle=labelMuted; ctx.font='600 '+Math.round(H*0.030)+'px Georgia, serif'; ctx.textAlign='left';
+    ctx.fillText('MEMBER NAME',W*0.06,H*0.77);
+    ctx.fillStyle=valueColor; ctx.font='700 '+Math.round(H*0.062)+'px Georgia, serif';
+    ctx.fillText(String(card.holderName||'').toUpperCase(),W*0.06,H*0.82);
+    ctx.fillStyle=labelMuted; ctx.font='600 '+Math.round(H*0.030)+'px Georgia, serif'; ctx.textAlign='right';
+    ctx.fillText('VALID THRU',W*0.94,H*0.77);
+    ctx.fillStyle=valueColor; ctx.font='700 '+Math.round(H*0.062)+'px Georgia, serif';
+    ctx.fillText(fmtExpiry(card.expiryDate),W*0.94,H*0.82);
+    ctx.strokeStyle=isDark?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.06)'; ctx.lineWidth=1.5; roundRect(ctx,8,8,W-16,H-16,18); ctx.stroke();
+  }
+
+  /* Fonts must be ready before the card is drawn or the first paint uses a
+     fallback face and the text sits at the wrong width. */
+  function fontsReady(){
+    if(document.fonts && document.fonts.ready) return document.fonts.ready.catch(function(){});
+    return Promise.resolve();
+  }
+
+  /* ── boot: ask the server what this QR belongs to ──────────────────── */
+  function boot(){
+    if(!API){ showErr($('err'),'This page is not configured yet (config.js missing API URL).'); return; }
+    post('publicCardConfig', {branchId:BRANCH, typeId:TYPE}, 20000).then(function(r){
+      if(!r || !r.ok){ showErr($('err'), (r && r.error) || 'Could not load. Please try again.'); return; }
+      CFG = r; TYPEROW = r.type || {name:'PLATINUM'};
+      $('branchTag').textContent = (TYPEROW.name || 'PLATINUM') + ' · ' + (r.branchName || 'Membership');
+      $('formTitle').textContent = 'Get your ' + titleCase(TYPEROW.name || 'Platinum') + ' card';
+      if(!r.branchId && r.branches && r.branches.length){
+        var sel = $('branchSel'); sel.innerHTML = '';
+        r.branches.forEach(function(b){
+          var o = document.createElement('option'); o.value = b.branchId; o.textContent = b.branchName; sel.appendChild(o);
+        });
+        show($('branchPickWrap'));
+      } else {
+        BRANCH = r.branchId;
+      }
+      renderBenefits();
+    }).catch(function(){
+      showErr($('err'),'No internet connection. Please check your network and try again.');
+    });
+  }
+  function titleCase(s){ s=String(s||'').toLowerCase(); return s.charAt(0).toUpperCase()+s.slice(1); }
+
+  function benefitList(){
+    var t = (TYPEROW && TYPEROW.benefitsText) ? String(TYPEROW.benefitsText) : '';
+    /* Strip only a leading bullet or "1)" / "1." numbering — NOT any leading digit, or
+       "20% less on packages" loses its 20 and reads "% less on packages". */
+    var arr = t.split(/\r?\n/).map(function(x){ return x.replace(/^\s*(?:[-•*]+|\d{1,2}\s*[.)])\s*/,'').trim(); })
+                .filter(function(x){ return x.length > 1; });
+    return arr.length ? arr : DEFAULT_BENEFITS;
+  }
+  function renderBenefits(){
+    var ul = $('benList'); ul.innerHTML = '';
+    benefitList().forEach(function(b){ var li=document.createElement('li'); li.textContent=b; ul.appendChild(li); });
+  }
+
+  /* ── step 1 → issue ────────────────────────────────────────────────── */
+  $('mo').addEventListener('input', function(){ this.value = this.value.replace(/\D/g,'').slice(0,10); });
+  $('nm').addEventListener('input', function(){ this.value = this.value.replace(/[^A-Za-z઀-૿ऀ-ॿ .'-]/g,'').slice(0,40); });
+
+  $('go').addEventListener('click', function(){
+    clrErr($('err'));
+    var name = $('nm').value.trim().replace(/\s+/g,' ');
+    var mob  = $('mo').value.replace(/\D/g,'');
+    var branchId = BRANCH || ($('branchSel') && $('branchSel').value) || '';
+    if(name.length < 3){ showErr($('err'),'Please enter your full name.'); $('nm').focus(); return; }
+    if(!/^[6-9]\d{9}$/.test(mob)){ showErr($('err'),'Please enter a valid 10-digit Indian mobile number.'); $('mo').focus(); return; }
+    if(!branchId){ showErr($('err'),'Please select a branch.'); return; }
+
+    var btn = $('go'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span>Creating your card…';
+    post('publicIssueCard', {data:{branchId:branchId, typeId:TYPE, holderName:name, mobile:mob, referByName:REFER}}, 60000)
+      .then(function(r){
+        if(!r || !r.ok){
+          btn.disabled = false; btn.textContent = 'Create my card';
+          showErr($('err'), (r && r.error) || 'Something went wrong. Please try again.');
+          return;
+        }
+        CARD = r.card; TYPEROW = r.type || TYPEROW; CFG.branchName = r.branchName || CFG.branchName;
+        CFG.branchPhone = r.branchPhone || CFG.branchPhone;
+        showCard(!!r.existing);
+      })
+      .catch(function(){
+        btn.disabled = false; btn.textContent = 'Create my card';
+        showErr($('err'),'Connection lost. Please check your internet and tap again — your card is not created twice.');
+      });
+  });
+
+  /* ── step 2 → paint, save, send ────────────────────────────────────── */
+  function showCard(existing){
+    hide($('stepForm')); show($('stepCard'));
+    window.scrollTo(0,0);
+    if(existing){
+      $('welcomeTtl').textContent = 'YOU ALREADY HAVE A CARD';
+      $('welcomeSub').textContent = 'This is the active card on your number';
+    }
+    $('mName').textContent = String(CARD.holderName||'').toUpperCase();
+    $('mExp').textContent  = fmtDate(CARD.expiryDate);
+    renderBenefits();
+    var ph = String(CFG.branchPhone||'').replace(/\D/g,'');
+    $('callNote').textContent = 'Card no. ' + CARD.cardNumber + (ph ? ('  ·  Any help: ' + ph) : '');
+
+    fontsReady().then(function(){
+      var cv = document.createElement('canvas'); cv.width = 1012; cv.height = 638;
+      drawCard(cv, CARD, TYPEROW);
+      IMG_PNG = cv.toDataURL('image/png');
+      IMG_JPG = cv.toDataURL('image/jpeg', 0.92);      /* smaller — what goes to WhatsApp */
+      $('cardImg').src = IMG_PNG;
+    });
+  }
+
+  function dataUriToBlob(uri){
+    var parts = uri.split(','), mime = parts[0].match(/:(.*?);/)[1], bin = atob(parts[1]);
+    var arr = new Uint8Array(bin.length);
+    for(var i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
+    return new Blob([arr], {type:mime});
+  }
+
+  $('save').addEventListener('click', function(){
+    if(!IMG_PNG) return;
+    var fname = 'Nakoda-' + (TYPEROW.name||'Card') + '-' + CARD.cardNumber + '.png';
+    var blob = dataUriToBlob(IMG_PNG);
+    var done = function(){ revealWa(); };
+
+    /* Phones: the share sheet is the only route that offers "Save to Photos".
+       Desktop and anything without it: ordinary download. */
+    if(navigator.canShare && window.File){
+      var file = new File([blob], fname, {type:'image/png'});
+      if(navigator.canShare({files:[file]})){
+        navigator.share({files:[file], title:'Nakoda Membership Card'})
+          .then(done).catch(function(){ download(blob, fname); done(); });
+        return;
+      }
+    }
+    download(blob, fname); done();
+  });
+
+  function download(blob, fname){
+    var url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = url; a.download = fname; document.body.appendChild(a); a.click();
+    setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 4000);
+  }
+
+  function revealWa(){
+    $('save').textContent = 'Save again';
+    show($('wa'));
+    $('wa').scrollIntoView({behavior:'smooth', block:'center'});
+  }
+
+  $('wa').addEventListener('click', function(){
+    clrErr($('err2')); $('ok').style.display = 'none';
+    var btn = $('wa'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span>Sending to your WhatsApp…';
+    post('publicSendCard', {cardNumber:CARD.cardNumber, mobile:CARD.mobile, imageBase64:IMG_JPG.split(',')[1]}, 90000)
+      .then(function(r){
+        btn.disabled = false; btn.textContent = 'Send again on WhatsApp';
+        if(r && r.ok){
+          $('ok').textContent = '✅ Sent. Open WhatsApp on +91 ' + CARD.mobile + ' — your card is there.';
+          $('ok').style.display = 'block';
+        } else {
+          showErr($('err2'), (r && r.error) || 'Could not send right now.');
+          waFallback();
+        }
+      })
+      .catch(function(){
+        btn.disabled = false; btn.textContent = 'Send again on WhatsApp';
+        showErr($('err2'),'Could not reach WhatsApp right now — your card is saved on this phone.');
+        waFallback();
+      });
+  });
+
+  function waFallback(){
+    var ph = String(CFG.branchPhone||'').replace(/\D/g,'');
+    var msg = 'Hi Nakoda, my membership card ' + CARD.cardNumber + ' (' + CARD.holderName + ') did not arrive on WhatsApp. Please send it.';
+    var a = $('waOpen');
+    a.href = 'https://wa.me/' + (ph ? ('91'+ph) : '') + '?text=' + encodeURIComponent(msg);
+    show(a);
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>
