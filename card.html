@@ -44,6 +44,14 @@
   .note{font-size:11.5px;color:#9d977f;margin-top:12px;line-height:1.55;text-align:center}
   .err{background:rgba(192,57,43,.15);border:1px solid rgba(192,57,43,.5);color:#ffbdb5;border-radius:12px;
     padding:11px 13px;font-size:13px;margin-top:14px;display:none;line-height:1.5}
+  /* The card frame appears the instant they tap, as a shimmer, so a few seconds of waiting
+     looks like something happening rather than a frozen button. 63.04% = 638/1012, the card's
+     own shape, kept as padding rather than aspect-ratio so older phones size it correctly too. */
+  .cardskel{width:100%;height:0;padding-bottom:63.04%;border-radius:14px;border:1px solid rgba(236,200,87,.2);
+    background:linear-gradient(100deg,rgba(255,255,255,.04) 32%,rgba(236,200,87,.15) 50%,rgba(255,255,255,.04) 68%);
+    background-size:240% 100%;animation:shim 1.5s linear infinite}
+  @keyframes shim{to{background-position:-240% 0}}
+  .stepmsg{text-align:center;font-size:12.5px;color:#CFC7AE;margin-top:14px;min-height:18px}
   .cardbox{margin:4px 0 6px;border-radius:14px;overflow:hidden;box-shadow:0 20px 44px rgba(0,0,0,.5)}
   .cardbox img{display:block;width:100%;border-radius:14px}
   .benefits{margin:20px 0 0;padding:0;list-style:none}
@@ -109,19 +117,22 @@
       <div style="font-size:13px;color:#CFC7AE;margin-top:4px" id="welcomeSub">Welcome to the Nakoda family</div>
     </div>
 
-    <div class="cardbox"><img id="cardImg" alt="Nakoda Platinum Membership Card"></div>
-    <div class="savehint">Tip: you can also press and hold the card to save it.</div>
+    <div class="cardskel hide" id="cardSkel"></div>
+    <div class="cardbox hide" id="cardBox"><img id="cardImg" alt="Nakoda Platinum Membership Card"></div>
+    <div class="stepmsg hide" id="stepMsg"></div>
+    <div class="savehint hide" id="saveHint">Tip: you can also press and hold the card to save it.</div>
 
-    <div class="meta">
+    <div class="meta hide" id="metaRow">
       <div>Member<b id="mName">—</b></div>
       <div style="text-align:right">Valid thru<b id="mExp">—</b></div>
     </div>
 
-    <div class="ttl">Your benefits</div>
+    <div class="ttl hide" id="ttlBen">Your benefits</div>
     <ul class="benefits" id="benList"></ul>
 
-    <button class="btn" id="save">Save my card</button>
+    <button class="btn hide" id="save">Save my card</button>
     <button class="btn wa hide" id="wa">Send my card on WhatsApp</button>
+    <button class="btn ghost hide" id="savenum">📇 Save lab number to contacts</button>
     <a class="btn ghost hide" id="waOpen" style="text-decoration:none;text-align:center;padding:15px" target="_blank" rel="noopener">Open WhatsApp</a>
     <div class="ok" id="ok"></div>
     <div class="err" id="err2"></div>
@@ -344,11 +355,13 @@
     if(!branchId){ showErr($('err'),'Please select a branch.'); return; }
 
     var btn = $('go'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span>Creating your card…';
+    showPending();
     /* 4 attempts. The server returns the card this mobile already holds rather than
        making a second one, so repeating the request cannot produce a duplicate. */
     post('publicIssueCard', {data:{branchId:branchId, typeId:TYPE, holderName:name, mobile:mob, referByName:REFER}}, 60000, 4)
       .then(function(r){
         if(!r || !r.ok){
+          undoPending();
           btn.disabled = false; btn.textContent = 'Create my card';
           showErr($('err'), (r && r.error) || 'Something went wrong. Please try again.');
           return;
@@ -359,18 +372,57 @@
         showCard(!!r.existing);
       })
       .catch(function(){
+        undoPending();
         btn.disabled = false; btn.textContent = 'Create my card';
         showErr($('err'),'The line is slow right now. Tap once more — you will not get two cards.');
       });
   });
 
+  /* ── the wait ───────────────────────────────────────────────────────────
+     The old screen left "Creating your card…" on a dead button while the server worked, and a
+     few seconds of nothing reads as broken — which is why people tapped twice. The card frame
+     now appears immediately as a shimmer with the real step underneath. Nothing false is shown:
+     the shimmer is an empty placeholder and the actual card is only drawn once the number is
+     confirmed by the server. */
+  var _stepTimer=null;
+  var STEP_MSGS=['Reserving your membership number…','Writing your card…','Almost there…'];
+  function showPending(){
+    hide($('stepForm')); show($('stepCard'));
+    $('welcomeTtl').textContent='CREATING YOUR CARD';
+    $('welcomeSub').textContent='This takes a few seconds';
+    show($('cardSkel')); hide($('cardBox')); hide($('saveHint'));
+    hide($('metaRow')); hide($('ttlBen')); $('benList').innerHTML='';
+    hide($('save')); hide($('wa')); hide($('savenum')); hide($('waOpen'));
+    $('ok').style.display='none'; clrErr($('err2')); $('callNote').textContent='';
+    show($('stepMsg')); $('stepMsg').textContent=STEP_MSGS[0];
+    var i=0;
+    clearInterval(_stepTimer);
+    _stepTimer=setInterval(function(){ i=Math.min(i+1,STEP_MSGS.length-1); $('stepMsg').textContent=STEP_MSGS[i]; }, 2600);
+    window.scrollTo(0,0);
+  }
+  /* The request failed — put them back on the form with their details still typed in. */
+  function undoPending(){
+    clearInterval(_stepTimer);
+    hide($('stepCard')); show($('stepForm'));
+    hide($('cardSkel')); hide($('stepMsg'));
+    $('welcomeTtl').textContent='YOUR CARD IS READY';
+    $('welcomeSub').textContent='Welcome to the Nakoda family';
+    window.scrollTo(0,0);
+  }
+
   /* ── step 2 → paint, save, send ────────────────────────────────────── */
   function showCard(existing){
+    clearInterval(_stepTimer);
     hide($('stepForm')); show($('stepCard'));
+    hide($('cardSkel')); hide($('stepMsg'));
+    show($('cardBox')); show($('saveHint')); show($('metaRow')); show($('ttlBen')); show($('save'));
     window.scrollTo(0,0);
     if(existing){
       $('welcomeTtl').textContent = 'YOU ALREADY HAVE A CARD';
       $('welcomeSub').textContent = 'This is the active card on your number';
+    } else {
+      $('welcomeTtl').textContent = 'YOUR CARD IS READY';
+      $('welcomeSub').textContent = 'Welcome to the Nakoda family';
     }
     $('mName').textContent = String(CARD.holderName||'').toUpperCase();
     $('mExp').textContent  = fmtDate(CARD.expiryDate);
@@ -422,8 +474,55 @@
   function revealWa(){
     $('save').textContent = 'Save again';
     show($('wa'));
+    if(labNumber()) show($('savenum'));
     $('wa').scrollIntoView({behavior:'smooth', block:'center'});
   }
+
+  /* ── save the branch number to the phone's contacts ─────────────────────
+     A vCard is the only thing every phone understands here. Android opens the contact card with
+     the number filled in; iOS offers "Add to Contacts" through the share sheet; a desktop just
+     downloads a small .vcf that adds the contact when opened.
+
+     Why this is worth a button: your cards go out from the branch's WhatsApp number. Until that
+     number is a saved contact it shows up as an unknown sender, which is exactly the message
+     people ignore. Saved once, every later report and reminder arrives from "Nakoda Lab". */
+  function labNumber(){ return String((CFG && CFG.branchPhone) || '').replace(/\D/g,'').slice(-10); }
+
+  function buildVCard(){
+    var ph = labNumber();
+    /* Plain ASCII in the name — a stray em dash can render as mojibake in some phonebooks. */
+    var name = 'Nakoda Lab' + (CFG.branchName ? (' - ' + String(CFG.branchName).replace(/[^\x20-\x7E]/g,'').trim()) : '');
+    return [
+      'BEGIN:VCARD',
+      'VERSION:3.0',
+      'N:Lab;Nakoda;;;',
+      'FN:' + name,
+      'ORG:Nakoda Diagnostics and Research Center',
+      'TEL;TYPE=CELL,VOICE:+91' + ph,
+      'NOTE:' + ((TYPEROW && TYPEROW.name) ? TYPEROW.name : 'Platinum') + ' membership ' + (CARD ? CARD.cardNumber : ''),
+      'END:VCARD'
+    ].join('\r\n') + '\r\n';
+  }
+
+  $('savenum').addEventListener('click', function(){
+    clrErr($('err2'));
+    var ph = labNumber();
+    if(!ph){ showErr($('err2'), 'This branch has no contact number saved yet.'); return; }
+    var blob = new Blob([buildVCard()], {type:'text/vcard;charset=utf-8'});
+    var fname = 'Nakoda-Lab.vcf';
+    var btn = $('savenum');
+    var done = function(){ btn.textContent = '📇 Saved — check your contacts'; };
+
+    if(navigator.canShare && window.File){
+      var file = new File([blob], fname, {type:'text/vcard'});
+      if(navigator.canShare({files:[file]})){
+        navigator.share({files:[file], title:'Nakoda Lab'})
+          .then(done).catch(function(){ download(blob, fname); done(); });
+        return;
+      }
+    }
+    download(blob, fname); done();
+  });
 
   $('wa').addEventListener('click', function(){
     clrErr($('err2')); $('ok').style.display = 'none';
