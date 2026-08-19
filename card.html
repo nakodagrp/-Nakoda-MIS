@@ -147,7 +147,9 @@
   var TYPE   = (qs.get('t') || 'PLATINUM').trim().toUpperCase();
   var REFER  = (qs.get('r') || '').trim();
 
-  var CFG = null, CARD = null, TYPEROW = null, IMG_PNG = '', IMG_JPG = '';
+  /* CFG starts as an object, never null. If the config call fails the form must still work —
+     showCard() writes into CFG, and a null here crashed the success path after a failed boot. */
+  var CFG = {}, CARD = null, TYPEROW = null, IMG_PNG = '', IMG_JPG = '';
 
   var DEFAULT_BENEFITS = [
     'Get up to 50% discount on all in-house tests',
@@ -165,7 +167,17 @@
   function showErr(box, m){ box.textContent = m; box.style.display = 'block'; }
   function clrErr(box){ box.textContent = ''; box.style.display = 'none'; }
 
-  function post(action, payload, timeoutMs){
+  /* ── network ────────────────────────────────────────────────────────────
+     WHY THIS RETRIES. An Apps Script web app has to spin a container up for the
+     first request that reaches it after an idle spell or a fresh deployment, and
+     that first request can crawl or drop outright — which is exactly the "tap
+     once, nothing; tap again, card" the counter saw. The customer must not be the
+     retry mechanism, so the page does it silently.
+
+     Retrying publicIssueCard is safe by design: the server hands back the card a
+     mobile already holds instead of minting a second one, so N attempts can only
+     ever produce one card. */
+  function once(action, payload, timeoutMs){
     var body = JSON.stringify(Object.assign({action:action}, payload||{}));
     var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
     var to = ctrl ? setTimeout(function(){ try{ ctrl.abort(); }catch(e){} }, timeoutMs||45000) : null;
@@ -175,6 +187,22 @@
       .then(function(j){ if(to) clearTimeout(to); return j; },
             function(e){ if(to) clearTimeout(to); throw e; });
   }
+  function sleep(ms){ return new Promise(function(res){ setTimeout(res, ms); }); }
+
+  function post(action, payload, timeoutMs, tries){
+    tries = tries || 1;
+    return attempt(1);
+    function attempt(n){
+      return once(action, payload, timeoutMs).catch(function(e){
+        if(n >= tries) throw e;
+        return sleep(700 * n).then(function(){ return attempt(n + 1); });
+      });
+    }
+  }
+
+  /* Wakes the script container while the customer is still typing, so the first
+     call that actually matters lands on a warm one. Failure is ignored. */
+  function warmUp(){ if(API) once('version', {}, 15000).catch(function(){}); }
 
   /* ── card renderer — identical to membership.js drawCard() ─────────── */
   var CARD_THEMES = {
@@ -259,11 +287,16 @@
     return Promise.resolve();
   }
 
-  /* ── boot: ask the server what this QR belongs to ──────────────────── */
-  function boot(){
+  /* ── boot: ask the server what this QR belongs to ──────────────────────
+     Quietly. A failure here must NOT put a red box in front of a customer who
+     has not done anything yet — the branch is already known from the URL, so the
+     form works regardless, and this only fills in the branch name and the live
+     benefits list. It keeps trying in the background. */
+  function boot(attemptNo){
+    attemptNo = attemptNo || 1;
     if(!API){ showErr($('err'),'This page is not configured yet (config.js missing API URL).'); return; }
-    post('publicCardConfig', {branchId:BRANCH, typeId:TYPE}, 20000).then(function(r){
-      if(!r || !r.ok){ showErr($('err'), (r && r.error) || 'Could not load. Please try again.'); return; }
+    post('publicCardConfig', {branchId:BRANCH, typeId:TYPE}, 30000, 3).then(function(r){
+      if(!r || !r.ok){ if(attemptNo < 3) setTimeout(function(){ boot(attemptNo+1); }, 4000); return; }
       CFG = r; TYPEROW = r.type || {name:'PLATINUM'};
       $('branchTag').textContent = (TYPEROW.name || 'PLATINUM') + ' · ' + (r.branchName || 'Membership');
       $('formTitle').textContent = 'Get your ' + titleCase(TYPEROW.name || 'Platinum') + ' card';
@@ -278,7 +311,8 @@
       }
       renderBenefits();
     }).catch(function(){
-      showErr($('err'),'No internet connection. Please check your network and try again.');
+      /* Silent. Try again shortly — by then the script container is usually awake. */
+      if(attemptNo < 3) setTimeout(function(){ boot(attemptNo+1); }, 4000);
     });
   }
   function titleCase(s){ s=String(s||'').toLowerCase(); return s.charAt(0).toUpperCase()+s.slice(1); }
@@ -310,20 +344,23 @@
     if(!branchId){ showErr($('err'),'Please select a branch.'); return; }
 
     var btn = $('go'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span>Creating your card…';
-    post('publicIssueCard', {data:{branchId:branchId, typeId:TYPE, holderName:name, mobile:mob, referByName:REFER}}, 60000)
+    /* 4 attempts. The server returns the card this mobile already holds rather than
+       making a second one, so repeating the request cannot produce a duplicate. */
+    post('publicIssueCard', {data:{branchId:branchId, typeId:TYPE, holderName:name, mobile:mob, referByName:REFER}}, 60000, 4)
       .then(function(r){
         if(!r || !r.ok){
           btn.disabled = false; btn.textContent = 'Create my card';
           showErr($('err'), (r && r.error) || 'Something went wrong. Please try again.');
           return;
         }
-        CARD = r.card; TYPEROW = r.type || TYPEROW; CFG.branchName = r.branchName || CFG.branchName;
+        CARD = r.card; TYPEROW = r.type || TYPEROW;
+        CFG.branchName  = r.branchName  || CFG.branchName;
         CFG.branchPhone = r.branchPhone || CFG.branchPhone;
         showCard(!!r.existing);
       })
       .catch(function(){
         btn.disabled = false; btn.textContent = 'Create my card';
-        showErr($('err'),'Connection lost. Please check your internet and tap again — your card is not created twice.');
+        showErr($('err'),'The line is slow right now. Tap once more — you will not get two cards.');
       });
   });
 
@@ -391,7 +428,7 @@
   $('wa').addEventListener('click', function(){
     clrErr($('err2')); $('ok').style.display = 'none';
     var btn = $('wa'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span>Sending to your WhatsApp…';
-    post('publicSendCard', {cardNumber:CARD.cardNumber, mobile:CARD.mobile, imageBase64:IMG_JPG.split(',')[1]}, 90000)
+    post('publicSendCard', {cardNumber:CARD.cardNumber, mobile:CARD.mobile, imageBase64:IMG_JPG.split(',')[1]}, 90000, 2)
       .then(function(r){
         btn.disabled = false; btn.textContent = 'Send again on WhatsApp';
         if(r && r.ok){
@@ -417,6 +454,7 @@
     show(a);
   }
 
+  warmUp();   /* wake the script container while the customer is still typing */
   boot();
 })();
 </script>
