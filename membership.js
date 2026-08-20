@@ -79,6 +79,227 @@
   }
   function newCardCanvas(){ var c=document.createElement('canvas'); c.width=1012; c.height=638; c.style.width='100%'; c.style.borderRadius='12px'; c.style.display='block'; return c; }
 
+  /* Used only when a card type has no benefitsText of its own. */
+  var DEFAULT_BENEFITS = [
+    'Get up to 50% discount on all in-house tests',
+    'Get up to 20% discount on all outsourced tests',
+    'Discount available on bills above \u20B9300',
+    'Reports on priority',
+    'Dedicated CRM officer',
+    'Valid for all family members',
+    '20% less on full body check-up packages'
+  ];
+
+  /* ══════════════════════════════════════════════════════════════════════════
+     v332 · THE PICTURE THAT GOES OUT IS THE CARD **AND** ITS BENEFITS
+     ─────────────────────────────────────────────────────────────────────────
+     Every send path used to draw the 1012×638 card front and stop there, so the
+     member received a card and no idea what it was worth — the benefits only
+     existed as text further down the message, where nobody reads them, and not
+     at all in the image they save to their gallery.
+
+     buildCardImage() returns one taller canvas: the same front card on top
+     (drawn by the very same drawCard(), so the card can never drift between
+     screen, download and WhatsApp), the benefit list under it, and a footer
+     carrying the card number and the lab's number.
+
+     The height is measured rather than fixed. Four benefits give a shorter
+     picture than nine, and a benefit too long for the width wraps onto a second
+     line instead of running off the edge.
+     ══════════════════════════════════════════════════════════════════════════ */
+  var CIMG = {
+    W:1080,      /* card front is 1012 wide, so PAD*2 + 1012 = 1080 exactly */
+    PAD:34,      /* outer margin */
+    GAP:26,      /* card ↔ benefits panel */
+    PX:36,       /* padding inside the benefits panel */
+    TICK:44,     /* column reserved for the gold tick */
+    TITLE:29, SUB:18, BEN:25, LINE:34, ROWPAD:15, FOOT:19
+  };
+
+  /* Word-wrap against the real measured width of the real font. */
+  function cimgWrap_(ctx, text, maxW){
+    var words = String(text||'').split(/\s+/), lines = [], cur = '';
+    for(var i=0;i<words.length;i++){
+      var t = cur ? (cur + ' ' + words[i]) : words[i];
+      if(cur && ctx.measureText(t).width > maxW){ lines.push(cur); cur = words[i]; }
+      else cur = t;
+    }
+    if(cur) lines.push(cur);
+    return lines.length ? lines : [''];
+  }
+
+  /* Letter-spaced, centred — canvas has no letter-spacing, so it is drawn a
+     letter at a time, the same way drawCard() sets the card type. */
+  function cimgSpaced_(ctx, text, cx, y, sp){
+    var letters = String(text||'').split(''), tw = 0, i;
+    for(i=0;i<letters.length;i++) tw += ctx.measureText(letters[i]).width + sp;
+    tw -= sp;
+    var x = cx - tw/2;
+    for(i=0;i<letters.length;i++){ ctx.fillText(letters[i], x, y); x += ctx.measureText(letters[i]).width + sp; }
+    return tw;
+  }
+
+  /* The list the customer sees, from Membership_Card_Types ▸ benefitsText.
+     Strips a leading bullet or "1)" numbering but NOT a leading digit — otherwise
+     "20% less on packages" loses its 20 — and drops a "Benefits:" heading line. */
+  function cardBenefitLines(type, fallback){
+    var t = (type && type.benefitsText) ? String(type.benefitsText) : '';
+    var arr = t.split(/\r?\n/)
+      .map(function(x){ return x.replace(/^\s*(?:[-•*✓✔]+|\d{1,2}\s*[.)])\s*/,'').trim(); })
+      .filter(function(x){ return x.length > 1; })
+      .filter(function(x){ return !/^(card\s+)?benefits?\s*[:\-–]?$/i.test(x); });
+    return arr.length ? arr : (fallback || []);
+  }
+
+  /* card  — the Membership_Cards row
+     type  — the Membership_Card_Types row (name, themeId, benefitsText)
+     opts  — { benefits:[…] override, labPhone:'9512714001', labelText:'…' }
+     returns a ready canvas. */
+  function buildCardImage(card, type, opts){
+    opts = opts || {};
+    var W = CIMG.W, PAD = CIMG.PAD;
+    var CARDW = W - PAD*2, CARDH = Math.round(CARDW * 638 / 1012);
+    var theme = resolveTheme(type), foil = theme.foil;
+    var typeName = String((type && type.name) || 'Membership').toUpperCase();
+    var bens = (opts.benefits && opts.benefits.length) ? opts.benefits : cardBenefitLines(type, []);
+    var textMaxW = CARDW - CIMG.PX*2 - CIMG.TICK;
+
+    /* ── measure first: a throwaway context, same fonts, to get the height ── */
+    var m = document.createElement('canvas').getContext('2d');
+    m.font = '400 ' + CIMG.BEN + 'px -apple-system,"Segoe UI",Roboto,Arial,sans-serif';
+    var rows = bens.map(function(b){ return cimgWrap_(m, b, textMaxW); });
+    var rowsH = rows.reduce(function(s, ls){ return s + CIMG.ROWPAD*2 + ls.length*CIMG.LINE; }, 0);
+
+    var panelH = 32                      /* top padding            */
+               + CIMG.TITLE + 12         /* "PLATINUM BENEFITS"    */
+               + CIMG.SUB   + 24         /* Nakoda Diagnostics …   */
+               + rowsH                   /* the ticked lines       */
+               + 18 + 1 + 20             /* rule above the footer  */
+               + CIMG.FOOT + 28;         /* footer + bottom pad    */
+    if(!bens.length) panelH = 32 + CIMG.TITLE + 12 + CIMG.SUB + 24 + 18 + 1 + 20 + CIMG.FOOT + 28;
+
+    var H = PAD + CARDH + CIMG.GAP + panelH + PAD;
+
+    var cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    var ctx = cv.getContext('2d');
+
+    /* ── background ───────────────────────────────────────────────────────── */
+    var bg = ctx.createLinearGradient(0, 0, W*0.35, H);
+    bg.addColorStop(0, '#0A2419'); bg.addColorStop(0.45, '#061912'); bg.addColorStop(1, '#02100B');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+    ctx.save();
+    ctx.strokeStyle = 'rgba(236,200,87,0.16)'; ctx.lineWidth = 2;
+    roundRect(ctx, 7, 7, W-14, H-14, 30); ctx.stroke();
+    ctx.restore();
+
+    /* ── the card itself, from the one renderer ───────────────────────────── */
+    var off = document.createElement('canvas'); off.width = 1012; off.height = 638;
+    drawCard(off, card, type);
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 28; ctx.shadowOffsetY = 12;
+    ctx.fillStyle = '#000'; roundRect(ctx, PAD, PAD, CARDW, CARDH, 26); ctx.fill();
+    ctx.restore();
+    ctx.save(); roundRect(ctx, PAD, PAD, CARDW, CARDH, 26); ctx.clip();
+    ctx.drawImage(off, PAD, PAD, CARDW, CARDH); ctx.restore();
+    ctx.save(); roundRect(ctx, PAD, PAD, CARDW, CARDH, 26);
+    ctx.strokeStyle = 'rgba(236,200,87,0.30)'; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
+
+    /* ── benefits panel ───────────────────────────────────────────────────── */
+    var py = PAD + CARDH + CIMG.GAP;
+    var pg = ctx.createLinearGradient(PAD, py, PAD + CARDW, py + panelH);
+    pg.addColorStop(0, '#0C3325'); pg.addColorStop(0.55, '#08241B'); pg.addColorStop(1, '#051A13');
+    ctx.save();
+    ctx.fillStyle = pg; roundRect(ctx, PAD, py, CARDW, panelH, 26); ctx.fill();
+    ctx.strokeStyle = 'rgba(236,200,87,0.26)'; ctx.lineWidth = 2;
+    roundRect(ctx, PAD, py, CARDW, panelH, 26); ctx.stroke();
+    ctx.restore();
+
+    var cx = PAD + CARDW/2;
+    var y  = py + 32;
+
+    /* title */
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.font = '800 ' + CIMG.TITLE + 'px -apple-system,"Segoe UI",Roboto,Arial,sans-serif';
+    var tg = ctx.createLinearGradient(PAD, y, PAD + CARDW, y + CIMG.TITLE);
+    tg.addColorStop(0, foil[0]); tg.addColorStop(0.5, foil[1]); tg.addColorStop(1, foil[2]);
+    ctx.fillStyle = tg;
+    cimgSpaced_(ctx, typeName + ' BENEFITS', cx, y, Math.round(CIMG.TITLE*0.12));
+    y += CIMG.TITLE + 12;
+
+    /* sub-title */
+    ctx.font = 'italic 400 ' + CIMG.SUB + 'px Georgia, "Times New Roman", serif';
+    ctx.fillStyle = 'rgba(236,200,87,0.62)'; ctx.textAlign = 'center';
+    ctx.fillText(String(opts.labelText || 'Nakoda Diagnostics & Research Center'), cx, y);
+    y += CIMG.SUB + 24;
+
+    /* the ticked lines */
+    ctx.textAlign = 'left';
+    for(var i=0;i<rows.length;i++){
+      var lines = rows[i], rowH = CIMG.ROWPAD*2 + lines.length*CIMG.LINE;
+      var tx = PAD + CIMG.PX, ty = y + CIMG.ROWPAD;
+
+      /* gold tick */
+      ctx.save();
+      ctx.strokeStyle = foil[1]; ctx.lineWidth = 3.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(tx + 2,  ty + 15);
+      ctx.lineTo(tx + 10, ty + 24);
+      ctx.lineTo(tx + 25, ty + 5);
+      ctx.stroke();
+      ctx.restore();
+
+      ctx.font = '400 ' + CIMG.BEN + 'px -apple-system,"Segoe UI",Roboto,Arial,sans-serif';
+      ctx.fillStyle = '#EDE6D2';
+      for(var l=0;l<lines.length;l++) ctx.fillText(lines[l], tx + CIMG.TICK, ty + 2 + l*CIMG.LINE);
+
+      y += rowH;
+      if(i < rows.length - 1){
+        ctx.save();
+        ctx.strokeStyle = 'rgba(236,200,87,0.15)'; ctx.lineWidth = 1;
+        if(ctx.setLineDash) ctx.setLineDash([5, 6]);
+        ctx.beginPath(); ctx.moveTo(PAD + CIMG.PX, y + 0.5); ctx.lineTo(PAD + CARDW - CIMG.PX, y + 0.5); ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    /* ── footer: card number left, lab number right ───────────────────────── */
+    y += 18;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(236,200,87,0.20)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(PAD + CIMG.PX, y + 0.5); ctx.lineTo(PAD + CARDW - CIMG.PX, y + 0.5); ctx.stroke();
+    ctx.restore();
+    y += 20;
+
+    var lab = String(opts.labPhone || '').replace(/\D/g, '');
+    ctx.textBaseline = 'top';
+    ctx.font = '400 ' + CIMG.FOOT + 'px -apple-system,"Segoe UI",Roboto,Arial,sans-serif';
+    ctx.fillStyle = 'rgba(220,210,170,0.60)'; ctx.textAlign = 'left';
+    var lbl = 'Card no. ';
+    ctx.fillText(lbl, PAD + CIMG.PX, y);
+    var lblW = ctx.measureText(lbl).width;
+    ctx.font = '700 ' + CIMG.FOOT + 'px -apple-system,"Segoe UI",Roboto,Arial,sans-serif';
+    ctx.fillStyle = '#EDE6D2';
+    ctx.fillText(String(card.cardNumber || ''), PAD + CIMG.PX + lblW, y);
+    if(lab){
+      ctx.textAlign = 'right';
+      ctx.font = '400 ' + CIMG.FOOT + 'px -apple-system,"Segoe UI",Roboto,Arial,sans-serif';
+      ctx.fillStyle = 'rgba(220,210,170,0.60)';
+      var rt = 'Nakoda Lab ';
+      var rw = ctx.measureText(rt).width;
+      ctx.font = '700 ' + CIMG.FOOT + 'px -apple-system,"Segoe UI",Roboto,Arial,sans-serif';
+      ctx.fillStyle = '#EDE6D2';
+      ctx.fillText(lab, PAD + CARDW - CIMG.PX, y);
+      var numW = ctx.measureText(lab).width;
+      ctx.font = '400 ' + CIMG.FOOT + 'px -apple-system,"Segoe UI",Roboto,Arial,sans-serif';
+      ctx.fillStyle = 'rgba(220,210,170,0.60)';
+      ctx.textAlign = 'left';
+      ctx.fillText(rt, PAD + CARDW - CIMG.PX - numW - rw, y);
+    }
+
+    return cv;
+  }
+
   /* ── state ────────────────────────────────────────────────────────────── */
   var TYPES=[], TYPEMAP={}, PRICEMAP={};
   function setTypes(arr){ TYPES=arr||[]; TYPEMAP={}; TYPES.forEach(function(t){ TYPEMAP[t.typeId]=t; }); }
@@ -105,7 +326,7 @@
         '<select id="cardStatus"><option value="">All status</option><option value="active">Active</option><option value="expired">Expired</option><option value="cancelled">Cancelled</option><option value="renewed">Renewed</option></select>'+
       '</div><div id="cardList" class="center-load"><span class="loader dark"></span> Loading…</div></div>';
     document.getElementById('issueCardBtn').onclick=function(){ openIssueCardModal(); };
-    /* v316: bulk WhatsApp send — logic lives in bulksend.js */
+    /* v316: bulk WhatsApp send — all the logic lives in bulksend.js */
     document.getElementById('wabModeBtn').onclick=function(){ if(window.WABulk) WABulk.toggleMode(); };
     document.getElementById('wabUnsentBtn').onclick=function(){ if(window.WABulk) WABulk.sendAllUnsent(); };
     document.getElementById('cardTypesBtn').onclick=function(){ openCardTypes(); };
@@ -165,8 +386,11 @@
     if(nm.indexOf('NAVSARI')>=0) return '9998144001';
     if(nm.indexOf('DIGITAL')>=0) return '9512754001';
     if(nm.indexOf('UDHANA')>=0||nm.indexOf('COOP')>=0||nm.indexOf('CO-OP')>=0||nm.indexOf('OPRATIVE')>=0) return '7405878379';
-    if(nm.indexOf('PAL')>=0) return '9408894464';
+    /* v332 BUG FIX — order matters. "SOUTH BOPAL" contains the letters PAL, so the Pal test fired
+       first and South Bopal was handed Pal's number (9408894464). Test the specific branch first,
+       and match Pal only as a whole word. This only ever bites branches with no Phone in Branches. */
     if(nm.indexOf('SOUTH')>=0||nm.indexOf('BOPAL')>=0) return '9512714001';
+    if(/\bPAL\b/.test(nm)) return '9408894464';
     return '';
   }
   function buildMessage(c,t,branchName,branchMobile){
@@ -209,13 +433,20 @@
           '<button class="btn" id="cdApiSend" style="width:100%;background:#1a7f37">🚀 Send via Official API</button>'+
           '<div id="cdApiStatus" style="font-size:11px;color:#999;font-style:italic;margin-top:4px">Uses this branch\'s approved template — the text box above does not apply to this option.</div>'+
         '</div>'):'';
-      var benefits=(t&&t.benefitsText)?('<div style="margin-top:10px;white-space:pre-line;background:#f6f7f9;border-radius:8px;padding:10px;font-size:12.5px">'+esc(t.benefitsText)+'</div>'):'';
+      /* v332: the benefits are inside the picture now, so the grey text block under the modal was
+         saying the same thing twice. Kept as a one-line reminder of where the wording is edited. */
+      var benefits='<div style="font-size:11.5px;color:#999;margin-top:10px">Benefits shown on the card image come from <b>Card types \u25B8 '+esc(t?t.name:'')+'</b>.</div>';
       var actions='<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn ghost" id="cdDl" style="flex:1;min-width:110px">⬇ Download Image</button>'+
         (r.canIssue&&!c.activatedAt&&c.status==='active'?'<button class="btn ghost" id="cdActivate" style="flex:1;min-width:110px;color:#1a7f37">✓ Mark activated</button>':'')+
         (r.canIssue&&c.status==='active'?'<button class="btn ghost" id="cdCancel" style="flex:1;min-width:110px;color:#C0392B">Cancel Card</button>':'')+
         (r.canIssue?'<button class="btn ghost" id="cdRenew" style="flex:1;min-width:110px">↻ Renew</button>':'')+'</div>';
       openModal('Card · '+c.cardNumber, '<div id="cardCanvasBox"></div>'+info+sendBlock+benefits+actions, '<button class="btn ghost" onclick="closeModal()">Close</button>');
-      var cv=newCardCanvas(); document.getElementById('cardCanvasBox').appendChild(cv); drawCard(cv,c,t);
+      /* v332. ONE canvas from here down. Everything below — the preview, Download, Share, Open Chat
+         and the official API send — reads this same `cv`, so the staff member is looking at exactly
+         what the customer receives: card front, benefit list, card number and lab number. */
+      var cv=buildCardImage(c, t, { benefits:cardBenefitLines(t, DEFAULT_BENEFITS), labPhone:branchPhone(c.branchId) });
+      cv.style.width='100%'; cv.style.borderRadius='12px'; cv.style.display='block';
+      document.getElementById('cardCanvasBox').appendChild(cv);
       document.getElementById('cdDl').onclick=function(){ var a=document.createElement('a'); a.download='Nakoda-Card-'+c.cardNumber+'.png'; a.href=cv.toDataURL('image/png'); a.click(); };
       var markSent=function(){ if(r.canIssue) API.markCardSent(c.cardNumber).catch(function(){}); };
       var sh=document.getElementById('cdShare'); if(sh) sh.onclick=function(){ shareSystem(cv,c,(document.getElementById('cdMsg')||{}).value||msg); markSent(); };
@@ -226,10 +457,8 @@
         if(!confirm('Send this membership card on WhatsApp to '+phone+' via the official API?')) return;
         var st=document.getElementById('cdApiStatus');
         ap.disabled=true; ap.innerHTML='<span class="loader"></span> Sending…'; st.textContent='Uploading card image & calling WhatsApp…';
-        /* v313: JPEG, not PNG. The card is a gradient with text — PNG stores that almost losslessly
-           and large, JPEG stores it small, and it then goes up as base64 which adds a further third.
-           The Download button above still produces a PNG, because a file the branch keeps should not
-           be lossy; only the copy crossing the wire to WhatsApp changes. */
+        /* JPEG: the picture is now more than twice as tall, and waSendCardCore_ already derives the
+           mime from the bytes (the /9j/ check), so this is smaller over a branch line for free. */
         var b64=cv.toDataURL('image/jpeg',0.9).split(',')[1];
         API.waSendCard(c.cardNumber, b64, phone).then(function(rr){
           ap.disabled=false; ap.textContent='🚀 Send via Official API';
@@ -339,8 +568,12 @@
     };
   };
 
-  /* v316: bulksend.js draws cards offscreen with THIS drawing code. */
+  /* v316: bulksend.js draws cards offscreen with THIS drawing code, so a bulk
+     card image can never differ from the one shown in the card popup. */
   window.__nakodaCard={ drawCard:drawCard, newCardCanvas:newCardCanvas,
+                        buildCardImage:buildCardImage,
+                        benefitsFor:function(typeId){ return cardBenefitLines(TYPEMAP[typeId], DEFAULT_BENEFITS); },
+                        labPhoneFor:function(branchId){ return branchPhone(branchId); },
                         typeFor:function(id){ return TYPEMAP[id]; } };
   window.renderMembershipCards=renderMembershipCards;
   window.openCardDetail=openCardDetail;

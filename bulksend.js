@@ -203,11 +203,22 @@
         if(!draw){ failed[it.cardNumber] = 'Card renderer not loaded.'; return resolve(); }
         var full = (LAST || []).filter(function(c){ return String(c.cardNumber) === String(it.cardNumber); })[0];
         if(!full){ failed[it.cardNumber] = 'Card row not in the current list.'; return resolve(); }
-        var cv = draw.newCardCanvas();
-        try{ draw.drawCard(cv, full, draw.typeFor(full.typeId)); }
+        /* v332: the bulk picture is the same one the card popup and the QR page produce — card
+           front, benefits, card number and lab number — so a bulk send and a single send can
+           never put two different images in front of two members. */
+        var cv;
+        try{
+          cv = draw.buildCardImage
+             ? draw.buildCardImage(full, draw.typeFor(full.typeId),
+                 { benefits: draw.benefitsFor(full.typeId), labPhone: draw.labPhoneFor(full.branchId) })
+             : (function(){ var c = draw.newCardCanvas(); draw.drawCard(c, full, draw.typeFor(full.typeId)); return c; })();
+        }
         catch(e){ failed[it.cardNumber] = 'Could not draw the card image.'; return resolve(); }
+        /* JPEG. A bulk run uploads one picture per card and the picture is now ~2.3x taller;
+           as PNG that is about 1.6 MB each, and base64 adds a third on top. v332's waCardMedia
+           reads the mime off the bytes, so this is ~200 KB instead. */
         var b64;
-        try{ b64 = cv.toDataURL('image/png').split(',')[1]; }
+        try{ b64 = cv.toDataURL('image/jpeg', 0.9).split(',')[1]; }
         catch(e){ failed[it.cardNumber] = 'Could not read the card image.'; return resolve(); }
         API.waCardMedia(it.cardNumber, b64).then(function(r){
           if(r && r.ok) media[it.cardNumber] = r.url; else failed[it.cardNumber] = (r && r.error) || 'Image upload failed.';
