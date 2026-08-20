@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Nakoda Platinum Membership</title>
+<link rel="icon" href="./icons/favicon.png">
+<meta name="theme-color" content="#0A2E20">
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0}
+  body{
+    background:radial-gradient(120% 80% at 50% 0%,#14442F 0%,#0A2E20 45%,#06231A 100%) fixed;
+    color:#F3EFE2;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    min-height:100vh;padding:18px 14px 40px;
+  }
+  .wrap{max-width:480px;margin:0 auto}
+  .brand{text-align:center;margin:10px 0 22px}
+  .brand h1{font-family:Georgia,"Times New Roman",serif;font-size:34px;letter-spacing:2px;margin:0;
+    background:linear-gradient(90deg,#B58C2F,#ECC857 50%,#8C6B1F);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .brand p{font-family:Georgia,serif;font-style:italic;font-size:12.5px;color:#ECC85799;margin:4px 0 0;letter-spacing:.4px}
+  .brand .br{display:inline-block;margin-top:10px;font-size:11.5px;letter-spacing:2px;text-transform:uppercase;
+    color:#DCD2AA;border:1px solid rgba(236,200,87,.35);border-radius:99px;padding:5px 14px}
+  .panel{background:rgba(255,255,255,.05);border:1px solid rgba(236,200,87,.18);border-radius:18px;padding:20px 18px;
+    backdrop-filter:blur(6px);box-shadow:0 18px 40px rgba(0,0,0,.35)}
+  .panel h2{margin:0 0 4px;font-size:19px;font-weight:700;letter-spacing:.2px}
+  .panel .sub{margin:0 0 18px;font-size:13px;color:#CFC7AE;line-height:1.5}
+  label{display:block;font-size:11.5px;letter-spacing:1.2px;text-transform:uppercase;color:#B9B097;margin:14px 0 6px;font-weight:700}
+  input{width:100%;padding:14px 14px;font-size:16px;border-radius:12px;border:1px solid rgba(236,200,87,.28);
+    background:rgba(0,0,0,.28);color:#FFF8E7;outline:none;font-family:inherit}
+  input:focus{border-color:#ECC857;box-shadow:0 0 0 3px rgba(236,200,87,.15)}
+  input::placeholder{color:#7f7a6a}
+  .row-phone{display:flex;gap:8px;align-items:stretch}
+  .cc{display:flex;align-items:center;padding:0 12px;border-radius:12px;border:1px solid rgba(236,200,87,.28);
+    background:rgba(0,0,0,.28);font-size:15px;color:#DCD2AA;flex:0 0 auto}
+  .btn{display:block;width:100%;margin-top:20px;padding:16px;border:0;border-radius:14px;font-size:16px;font-weight:800;
+    letter-spacing:.3px;cursor:pointer;font-family:inherit;
+    background:linear-gradient(135deg,#B58C2F,#ECC857 50%,#8C6B1F);color:#221802;box-shadow:0 10px 24px rgba(236,200,87,.22)}
+  .btn:active{transform:translateY(1px)}
+  .btn[disabled]{opacity:.55;cursor:default;box-shadow:none}
+  .btn.wa{background:linear-gradient(135deg,#25D366,#128C7E);color:#fff;box-shadow:0 10px 24px rgba(37,211,102,.22)}
+  .btn.ghost{background:transparent;border:1px solid rgba(236,200,87,.4);color:#ECC857;box-shadow:none;font-weight:700}
+  .note{font-size:11.5px;color:#9d977f;margin-top:12px;line-height:1.55;text-align:center}
+  .err{background:rgba(192,57,43,.15);border:1px solid rgba(192,57,43,.5);color:#ffbdb5;border-radius:12px;
+    padding:11px 13px;font-size:13px;margin-top:14px;display:none;line-height:1.5}
+  /* The card frame appears the instant they tap, as a shimmer, so a few seconds of waiting
+     looks like something happening rather than a frozen button. 63.04% = 638/1012, the card's
+     own shape, kept as padding rather than aspect-ratio so older phones size it correctly too. */
+  .cardskel{width:100%;height:0;padding-bottom:63.04%;border-radius:14px;border:1px solid rgba(236,200,87,.2);
+    background:linear-gradient(100deg,rgba(255,255,255,.04) 32%,rgba(236,200,87,.15) 50%,rgba(255,255,255,.04) 68%);
+    background-size:240% 100%;animation:shim 1.5s linear infinite}
+  @keyframes shim{to{background-position:-240% 0}}
+  .stepmsg{text-align:center;font-size:12.5px;color:#CFC7AE;margin-top:14px;min-height:18px}
+  .cardbox{margin:4px 0 6px;border-radius:14px;overflow:hidden;box-shadow:0 20px 44px rgba(0,0,0,.5)}
+  .cardbox img{display:block;width:100%;border-radius:14px}
+  .benefits{margin:20px 0 0;padding:0;list-style:none}
+  .benefits li{position:relative;padding:9px 0 9px 30px;font-size:13.5px;line-height:1.5;color:#EDE6D2;
+    border-bottom:1px dashed rgba(236,200,87,.16)}
+  .benefits li:last-child{border-bottom:0}
+  .benefits li:before{content:"";position:absolute;left:4px;top:14px;width:14px;height:8px;
+    border-left:2px solid #ECC857;border-bottom:2px solid #ECC857;transform:rotate(-45deg)}
+  .ttl{font-size:12px;letter-spacing:1.6px;text-transform:uppercase;color:#ECC857;font-weight:800;margin:22px 0 2px}
+  .meta{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;color:#CFC7AE;margin-top:14px;
+    border-top:1px solid rgba(236,200,87,.16);padding-top:14px}
+  .meta b{display:block;color:#FFF8E7;font-size:13.5px;margin-top:3px;font-weight:700}
+  .spin{display:inline-block;width:16px;height:16px;border:2px solid rgba(34,24,2,.3);border-top-color:#221802;
+    border-radius:50%;animation:sp .7s linear infinite;vertical-align:-3px;margin-right:8px}
+  .btn.wa .spin{border-color:rgba(255,255,255,.35);border-top-color:#fff}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .ok{background:rgba(26,127,55,.18);border:1px solid rgba(37,211,102,.45);color:#b7f5cd;border-radius:12px;
+    padding:11px 13px;font-size:13px;margin-top:14px;line-height:1.5;display:none}
+  /* The WhatsApp send now runs on its own behind the card, so it needs a quiet place to report
+     rather than a button the customer has to find and press. */
+  .sendstat{border-radius:12px;padding:11px 13px;font-size:13px;margin-top:14px;line-height:1.5;
+    display:flex;align-items:center;gap:9px}
+  .sendstat.busy{background:rgba(255,255,255,.06);border:1px solid rgba(236,200,87,.25);color:#DCD2AA}
+  .sendstat.done{background:rgba(26,127,55,.18);border:1px solid rgba(37,211,102,.45);color:#b7f5cd}
+  .sendstat.warn{background:rgba(192,57,43,.15);border:1px solid rgba(192,57,43,.5);color:#ffbdb5}
+  .sendstat .dot{flex:0 0 15px;height:15px;border:2px solid rgba(236,200,87,.3);border-top-color:#ECC857;
+    border-radius:50%;animation:sp .7s linear infinite}
+  .hide{display:none!important}
+  .center{text-align:center}
+  .savehint{font-size:11.5px;color:#9d977f;text-align:center;margin-top:10px}
+  select{width:100%;padding:14px;font-size:16px;border-radius:12px;border:1px solid rgba(236,200,87,.28);
+    background:rgba(0,0,0,.28);color:#FFF8E7;font-family:inherit}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="brand">
+    <h1>NAKODA</h1>
+    <p>Diagnostics &amp; Research Center</p>
+    <div class="br" id="branchTag">Membership</div>
+  </div>
+
+  <!-- ── STEP 1 : form ───────────────────────────────────────────── -->
+  <div class="panel" id="stepForm">
+    <h2 id="formTitle">Get your Platinum card</h2>
+    <p class="sub" id="formSub">Enter your name and mobile number. Your membership card is created instantly and sent to your WhatsApp.</p>
+
+    <div id="branchPickWrap" class="hide">
+      <label for="branchSel">Select branch</label>
+      <select id="branchSel"></select>
+    </div>
+
+    <label for="nm">Full name</label>
+    <input id="nm" type="text" autocomplete="name" autocapitalize="words" maxlength="40" placeholder="e.g. Ashok Shah">
+
+    <label for="mo">WhatsApp mobile number</label>
+    <div class="row-phone">
+      <div class="cc">+91</div>
+      <input id="mo" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="10" placeholder="10-digit number">
+    </div>
+
+    <button class="btn" id="go">Create my card</button>
+    <div class="err" id="err"></div>
+    <div class="note">By continuing you agree to receive your membership card and lab updates on WhatsApp.</div>
+  </div>
+
+  <!-- ── STEP 2 : card ───────────────────────────────────────────── -->
+  <div class="panel hide" id="stepCard">
+    <div class="center" style="margin-bottom:14px">
+      <div style="font-size:12px;letter-spacing:2px;color:#ECC857;font-weight:800" id="welcomeTtl">YOUR CARD IS READY</div>
+      <div style="font-size:13px;color:#CFC7AE;margin-top:4px" id="welcomeSub">Welcome to the Nakoda family</div>
+    </div>
+
+    <div class="cardskel hide" id="cardSkel"></div>
+    <div class="cardbox hide" id="cardBox"><img id="cardImg" alt="Nakoda Platinum Membership Card"></div>
+    <div class="stepmsg hide" id="stepMsg"></div>
+    <div class="savehint hide" id="saveHint">Tip: you can also press and hold the card to save it.</div>
+
+    <div class="meta hide" id="metaRow">
+      <div>Member<b id="mName">—</b></div>
+      <div style="text-align:right">Valid thru<b id="mExp">—</b></div>
+    </div>
+
+    <div class="ttl hide" id="ttlBen">Your benefits</div>
+    <ul class="benefits" id="benList"></ul>
+
+    <div class="sendstat hide" id="sendStat"></div>
+    <button class="btn hide" id="save">Save my card</button>
+    <button class="btn wa hide" id="wa">Send my card on WhatsApp</button>
+    <button class="btn ghost hide" id="savenum">📇 Save lab number to contacts</button>
+    <a class="btn ghost hide" id="askUp" style="text-decoration:none;text-align:center;padding:15px" target="_blank" rel="noopener"></a>
+    <a class="btn ghost hide" id="waOpen" style="text-decoration:none;text-align:center;padding:15px" target="_blank" rel="noopener">Open WhatsApp</a>
+    <div class="ok" id="ok"></div>
+    <div class="err" id="err2"></div>
+    <div class="note" id="callNote"></div>
+  </div>
+
+</div>
+
+<script src="./config.js"></script>
+<script>
+(function(){
+  'use strict';
+
+  /* ============================================================
+     Nakoda — public self-service membership card (QR landing page)
+     Standalone: does not load app.js / api.js and never registers
+     the service worker, so a customer's phone stays a plain page.
+     ============================================================ */
+
+  var API = (window.NAKODA_CONFIG && window.NAKODA_CONFIG.API_URL) || '';
+  var qs  = new URLSearchParams(location.search);
+  var BRANCH = (qs.get('b') || qs.get('branch') || '').trim();
+  var TYPE   = (qs.get('t') || 'PLATINUM').trim().toUpperCase();
+  var REFER  = (qs.get('r') || '').trim();
+
+  /* CFG starts as an object, never null. If the config call fails the form must still work —
+     showCard() writes into CFG, and a null here crashed the success path after a failed boot. */
+  var CFG = {}, CARD = null, TYPEROW = null, IMG_PNG = '', IMG_JPG = '';
+  /* What the printed code is FOR, kept separately: once an existing member scans, TYPEROW becomes
+     their own card type and we still need to know the QR said Platinum. */
+  var QR_TYPE = { id:TYPE, name:'Platinum' }, QR_BRANCH = BRANCH;
+  var UPGRADED = null;   /* set when this scan closed an older card and issued a better one */
+
+  var DEFAULT_BENEFITS = [
+    'Get up to 50% discount on all in-house tests',
+    'Get up to 20% discount on all outsourced tests',
+    'Discount available on bills above ₹300',
+    'Reports on priority',
+    'Dedicated CRM officer',
+    'Valid for all family members',
+    '20% less on full body check-up packages'
+  ];
+
+  function $(id){ return document.getElementById(id); }
+  function show(el){ el.classList.remove('hide'); }
+  function hide(el){ el.classList.add('hide'); }
+  function showErr(box, m){ box.textContent = m; box.style.display = 'block'; }
+  function clrErr(box){ box.textContent = ''; box.style.display = 'none'; }
+
+  /* ── network ────────────────────────────────────────────────────────────
+     WHY THIS RETRIES. An Apps Script web app has to spin a container up for the
+     first request that reaches it after an idle spell or a fresh deployment, and
+     that first request can crawl or drop outright — which is exactly the "tap
+     once, nothing; tap again, card" the counter saw. The customer must not be the
+     retry mechanism, so the page does it silently.
+
+     Retrying publicIssueCard is safe by design: the server hands back the card a
+     mobile already holds instead of minting a second one, so N attempts can only
+     ever produce one card. */
+  function once(action, payload, timeoutMs){
+    var body = JSON.stringify(Object.assign({action:action}, payload||{}));
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var to = ctrl ? setTimeout(function(){ try{ ctrl.abort(); }catch(e){} }, timeoutMs||45000) : null;
+    return fetch(API, {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+                       body:body, redirect:'follow', signal:ctrl?ctrl.signal:undefined})
+      .then(function(r){ return r.json(); })
+      .then(function(j){ if(to) clearTimeout(to); return j; },
+            function(e){ if(to) clearTimeout(to); throw e; });
+  }
+  function sleep(ms){ return new Promise(function(res){ setTimeout(res, ms); }); }
+
+  function post(action, payload, timeoutMs, tries){
+    tries = tries || 1;
+    return attempt(1);
+    function attempt(n){
+      return once(action, payload, timeoutMs).catch(function(e){
+        if(n >= tries) throw e;
+        return sleep(700 * n).then(function(){ return attempt(n + 1); });
+      });
+    }
+  }
+
+  /* Wakes the script container AND opens the Spreadsheet handle while the customer is still
+     typing, so the first call that actually matters — publicIssueCard — lands on a warm one
+     instead of paying to open the sheet itself. Failure is ignored either way; this is a
+     head start, not a dependency. v334: was 'version', which never touched Sheets at all. */
+  function warmUp(){ if(API) once('publicWarm', {}, 15000).catch(function(){}); }
+
+  /* ── card renderer — identical to membership.js drawCard() ─────────── */
+  var CARD_THEMES = {
+    HUNTER_GREEN:     { bg:['#0A2E20','#14442F','#06231A'], foil:['#B58C2F','#ECC857','#8C6B1F'], labelMuted:'rgba(220,210,170,0.65)', valueColor:'#FAF5E6', guilloche:'rgba(236,200,87,0.06)' },
+    MIDNIGHT_SAPPHIRE:{ bg:['#0E1B3D','#1F3066','#091226'], foil:['#A0AEC9','#EAEDF4','#8A95AC'], labelMuted:'rgba(195,210,240,0.65)', valueColor:'#FFFFFF', guilloche:'rgba(255,255,255,0.045)' },
+    OXBLOOD:          { bg:['#2A0810','#4F1620','#1F0410'], foil:['#C2A35E','#EBD08A','#9C7E3E'], labelMuted:'rgba(240,210,180,0.60)', valueColor:'#FAF0E6', guilloche:'rgba(235,208,138,0.05)' },
+    AUBERGINE:        { bg:['#1A0628','#330F4F','#0F031C'], foil:['#B58C2F','#ECC857','#8C6B1F'], labelMuted:'rgba(220,195,240,0.60)', valueColor:'#F5ECF8', guilloche:'rgba(236,200,87,0.05)' },
+    ANTHRACITE:       { bg:['#1A1D26','#2C3140','#0E1018'], foil:['#A0AEC9','#EAEDF4','#8A95AC'], labelMuted:'rgba(200,210,225,0.55)', valueColor:'#F5F7FA', guilloche:'rgba(255,255,255,0.04)' },
+    EMERALD_ROSE:     { bg:['#08322A','#10544A','#062821'], foil:['#B57778','#E8B8B0','#9C5E5E'], labelMuted:'rgba(232,184,176,0.60)', valueColor:'#FBEFEA', guilloche:'rgba(232,184,176,0.06)' },
+    CHAMPAGNE_GOLD:   { bg:['#FFFBEC','#FBEFC3','#E8CB85'], foil:['#9A6B17','#E6BE3F','#7D5410'], labelMuted:'rgba(110,75,20,0.60)',   valueColor:'#3D2400', guilloche:'rgba(100,70,10,0.05)', light:true },
+    ONYX:             { bg:['#0A0A0E','#1A1A20','#000000'], foil:['#A0AEC9','#EAEDF4','#8A95AC'], labelMuted:'rgba(200,210,225,0.45)', valueColor:'#FFFFFF', guilloche:'rgba(255,255,255,0.035)' },
+    MAROON_CHAMPAGNE: { bg:['#3A0A10','#5F1820','#26050A'], foil:['#C2A35E','#EBD08A','#9C7E3E'], labelMuted:'rgba(232,210,160,0.60)', valueColor:'#FAF1E6', guilloche:'rgba(235,208,138,0.05)' },
+    SLATE_TEAL:       { bg:['#0A2530','#143842','#061923'], foil:['#A0AEC9','#EAEDF4','#8A95AC'], labelMuted:'rgba(190,215,225,0.60)', valueColor:'#EDF6F8', guilloche:'rgba(255,255,255,0.04)' },
+    COPPER_BRONZE:    { bg:['#5C2E0E','#8B4513','#3E1D08'], foil:['#C2A35E','#EBD08A','#9C7E3E'], labelMuted:'rgba(240,215,175,0.62)', valueColor:'#FDF3E7', guilloche:'rgba(235,208,138,0.055)' },
+    SLATE_INDIGO:     { bg:['#1A1F6E','#2E3599','#0F1248'], foil:['#A0AEC9','#EAEDF4','#8A95AC'], labelMuted:'rgba(195,200,245,0.62)', valueColor:'#EEF0FF', guilloche:'rgba(255,255,255,0.042)' },
+    FOREST_SAGE:      { bg:['#1E3D0A','#355C12','#12270A'], foil:['#B58C2F','#ECC857','#8C6B1F'], labelMuted:'rgba(210,230,185,0.62)', valueColor:'#F2FAE8', guilloche:'rgba(236,200,87,0.055)' },
+    DUSTY_ROSE:       { bg:['#5C2D38','#8C4A58','#3D1A23'], foil:['#C2A35E','#EBD08A','#9C7E3E'], labelMuted:'rgba(240,205,215,0.60)', valueColor:'#FDF0F3', guilloche:'rgba(235,208,138,0.05)' },
+    GRAPHITE_STEEL:   { bg:['#1C2530','#2E3D4F','#101820'], foil:['#A0AEC9','#EAEDF4','#8A95AC'], labelMuted:'rgba(195,210,228,0.58)', valueColor:'#EDF2F7', guilloche:'rgba(255,255,255,0.038)' }
+  };
+  function resolveTheme(type){
+    var id = (type && type.themeId) ? String(type.themeId).toUpperCase() : null;
+    if(id && CARD_THEMES[id]) return CARD_THEMES[id];
+    var n = (type && type.name ? type.name : '').toUpperCase();
+    if(n.indexOf('PLATINUM') >= 0) return CARD_THEMES.HUNTER_GREEN;
+    if(n.indexOf('GOLD') >= 0) return CARD_THEMES.CHAMPAGNE_GOLD;
+    return CARD_THEMES.HUNTER_GREEN;
+  }
+  function fmtExpiry(d){ if(!d) return ''; var x=new Date(d); if(isNaN(x)) return ''; return String(x.getMonth()+1).padStart(2,'0')+'/'+x.getFullYear(); }
+  function fmtDate(d){ if(!d) return ''; var x=new Date(d); if(isNaN(x)) return String(d); return String(x.getDate()).padStart(2,'0')+'/'+String(x.getMonth()+1).padStart(2,'0')+'/'+x.getFullYear(); }
+  function roundRect(c,x,y,w,h,r){ c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath(); }
+
+  function drawCard(canvas, card, type){
+    var ctx=canvas.getContext('2d'), W=canvas.width, H=canvas.height;
+    var typeUpper=(type&&type.name?type.name:'').toUpperCase();
+    var theme=resolveTheme(type), isLight=!!theme.light, isDark=!isLight;
+    var bg=ctx.createLinearGradient(0,0,W,H); bg.addColorStop(0,theme.bg[0]); bg.addColorStop(0.55,theme.bg[1]); bg.addColorStop(1,theme.bg[2]);
+    var labelMuted=theme.labelMuted, valueColor=theme.valueColor, foil=theme.foil;
+    ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+    ctx.save(); ctx.strokeStyle=theme.guilloche; ctx.lineWidth=1;
+    var cx=W*1.05, cy=H*0.45; for(var r=60;r<W*1.2;r+=16){ ctx.beginPath(); ctx.arc(cx,cy,r,Math.PI*0.55,Math.PI*1.45); ctx.stroke(); } ctx.restore();
+    var logoX=W*0.06, logoY=H*0.08, wordSize=Math.round(H*0.14);
+    ctx.font='700 '+wordSize+'px Georgia, "Times New Roman", serif'; ctx.textAlign='left'; ctx.textBaseline='top';
+    var wWidth=ctx.measureText('NAKODA').width;
+    var wf=ctx.createLinearGradient(logoX,logoY,logoX+wWidth,logoY+wordSize); wf.addColorStop(0,foil[0]); wf.addColorStop(0.5,foil[1]); wf.addColorStop(1,foil[2]);
+    ctx.fillStyle=wf; ctx.fillText('NAKODA',logoX,logoY);
+    var subSize=Math.round(H*0.038); ctx.font='500 italic '+subSize+'px Georgia, serif'; ctx.fillStyle=wf;
+    ctx.fillText('Diagnostics & Research Center',logoX,logoY+wordSize+8);
+    if(typeUpper){
+      var tf=Math.round(H*0.052); ctx.font='500 '+tf+'px Georgia, serif'; ctx.textAlign='right'; ctx.textBaseline='top';
+      var tX=W-W*0.06, tY=H*0.10, letters=typeUpper.split(''), sp=Math.round(tf*0.30), tw=0;
+      letters.forEach(function(L){ tw+=ctx.measureText(L).width+sp; }); tw-=sp;
+      var fg=ctx.createLinearGradient(tX-tw,tY,tX,tY+tf); fg.addColorStop(0,foil[0]); fg.addColorStop(0.5,foil[1]); fg.addColorStop(1,foil[2]);
+      ctx.fillStyle=fg; var cur=tX;
+      for(var i=letters.length-1;i>=0;i--){ var lw=ctx.measureText(letters[i]).width; ctx.textAlign='left'; ctx.fillText(letters[i],cur-lw,tY); cur-=(lw+sp); }
+      ctx.fillStyle=fg; ctx.fillRect(tX-tw,tY+tf+6,tw,1);
+    }
+    var chipW=W*0.10, chipH=chipW*0.78, chipX=W*0.06, chipY=H*0.38;
+    var cm=ctx.createLinearGradient(chipX,chipY,chipX+chipW,chipY+chipH); cm.addColorStop(0,foil[0]); cm.addColorStop(0.5,foil[1]); cm.addColorStop(1,foil[2]);
+    ctx.fillStyle=cm; roundRect(ctx,chipX,chipY,chipW,chipH,8); ctx.fill();
+    var pad=5, ig=ctx.createLinearGradient(chipX,chipY,chipX+chipW,chipY+chipH); ig.addColorStop(0,foil[0]); ig.addColorStop(1,foil[2]);
+    ctx.fillStyle=ig; roundRect(ctx,chipX+pad,chipY+pad,chipW-pad*2,chipH-pad*2,5); ctx.fill();
+    ctx.strokeStyle='rgba(0,0,0,0.30)'; ctx.lineWidth=1.2;
+    for(var ri=1;ri<4;ri++){ var yy=chipY+pad+((chipH-pad*2)*ri/4); ctx.beginPath(); ctx.moveTo(chipX+pad,yy); ctx.lineTo(chipX+chipW-pad,yy); ctx.stroke(); }
+    for(var ci=1;ci<3;ci++){ var xx=chipX+pad+((chipW-pad*2)*ci/3); ctx.beginPath(); ctx.moveTo(xx,chipY+pad); ctx.lineTo(xx,chipY+chipH-pad); ctx.stroke(); }
+    var num=Math.round(H*0.085); ctx.font='600 '+num+'px "SF Mono","Consolas","Courier New",monospace'; ctx.textAlign='left'; ctx.textBaseline='top'; ctx.fillStyle=valueColor;
+    ctx.fillText(String(card.cardNumber||''),W*0.06,H*0.59);
+    ctx.fillStyle=labelMuted; ctx.font='600 '+Math.round(H*0.030)+'px Georgia, serif'; ctx.textAlign='left';
+    ctx.fillText('MEMBER NAME',W*0.06,H*0.77);
+    ctx.fillStyle=valueColor; ctx.font='700 '+Math.round(H*0.062)+'px Georgia, serif';
+    ctx.fillText(String(card.holderName||'').toUpperCase(),W*0.06,H*0.82);
+    ctx.fillStyle=labelMuted; ctx.font='600 '+Math.round(H*0.030)+'px Georgia, serif'; ctx.textAlign='right';
+    ctx.fillText('VALID THRU',W*0.94,H*0.77);
+    ctx.fillStyle=valueColor; ctx.font='700 '+Math.round(H*0.062)+'px Georgia, serif';
+    ctx.fillText(fmtExpiry(card.expiryDate),W*0.94,H*0.82);
+    ctx.strokeStyle=isDark?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.06)'; ctx.lineWidth=1.5; roundRect(ctx,8,8,W-16,H-16,18); ctx.stroke();
+  }
+
+  /* v333 — the "back" panel: the benefits list with real percentages, on its own themed panel
+     below the card. This is what actually goes to WhatsApp now, so the percentages travel as
+     PIXELS inside the image, never as template text — the template body stays exactly what
+     Meta approved as Utility, whatever the benefits list says. */
+  function wrapLines(ctx, text, maxWidth){
+    var words=String(text).split(' '), lines=[], cur='';
+    for(var i=0;i<words.length;i++){
+      var test=cur?(cur+' '+words[i]):words[i];
+      if(ctx.measureText(test).width>maxWidth && cur){ lines.push(cur); cur=words[i]; }
+      else cur=test;
+    }
+    if(cur) lines.push(cur);
+    return lines.length?lines:[''];
+  }
+  function benefitsBackHeight(W, benefits){
+    var probe=document.createElement('canvas').getContext('2d');
+    var bodySize=Math.round(W*0.0205);
+    probe.font='400 '+bodySize+'px Georgia, serif';
+    var maxTextW=W*0.80, lineH=Math.round(bodySize*1.28), rowGap=Math.round(W*0.014);
+    var titleBlock=Math.round(W*0.034)+8+Math.round(W*0.016)+34;
+    var listH=0;
+    benefits.forEach(function(b){ listH += wrapLines(probe,b,maxTextW).length*lineH + rowGap; });
+    return titleBlock + listH + 56; /* + footer */
+  }
+  function drawBenefitsBack(canvas, card, benefits, branchPhone, theme){
+    var ctx=canvas.getContext('2d'), W=canvas.width, H=canvas.height, isDark=!theme.light;
+    var bg=ctx.createLinearGradient(0,0,W,H); bg.addColorStop(0,theme.bg[0]); bg.addColorStop(0.55,theme.bg[1]); bg.addColorStop(1,theme.bg[2]);
+    ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+    ctx.save(); ctx.strokeStyle=theme.guilloche; ctx.lineWidth=1;
+    var cx=W*1.05, cy=H*0.45; for(var r=60;r<W*1.2;r+=16){ ctx.beginPath(); ctx.arc(cx,cy,r,Math.PI*0.55,Math.PI*1.45); ctx.stroke(); } ctx.restore();
+
+    var foil=theme.foil, labelMuted=theme.labelMuted, valueColor=theme.valueColor;
+    var titleSize=Math.round(W*0.034);
+    ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.font='700 '+titleSize+'px Georgia, serif';
+    var title='PLATINUM BENEFITS', tw=ctx.measureText(title).width;
+    var tg=ctx.createLinearGradient(W/2-tw/2,26,W/2+tw/2,26+titleSize); tg.addColorStop(0,foil[0]); tg.addColorStop(0.5,foil[1]); tg.addColorStop(1,foil[2]);
+    ctx.fillStyle=tg; ctx.fillText(title,W/2,26);
+    var subSize=Math.round(W*0.016);
+    ctx.font='500 italic '+subSize+'px Georgia, serif'; ctx.fillStyle=labelMuted;
+    ctx.fillText('Nakoda Diagnostics & Research Center',W/2,26+titleSize+8);
+
+    var bodySize=Math.round(W*0.0205), lineH=Math.round(bodySize*1.28), rowGap=Math.round(W*0.014);
+    var maxTextW=W*0.80, y=26+titleSize+8+subSize+34;
+    ctx.font='400 '+bodySize+'px Georgia, serif';
+    ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+    benefits.forEach(function(b, i){
+      var lines=wrapLines(ctx,b,maxTextW), rowTop=y;
+      ctx.strokeStyle=foil[1]; ctx.lineWidth=Math.max(2.5,Math.round(W*0.0032));
+      ctx.lineCap='round'; ctx.lineJoin='round';
+      var chkY=rowTop+bodySize*0.55;
+      ctx.beginPath();
+      ctx.moveTo(W*0.075,chkY);
+      ctx.lineTo(W*0.092,chkY+bodySize*0.30);
+      ctx.lineTo(W*0.128,chkY-bodySize*0.34);
+      ctx.stroke();
+      ctx.fillStyle=valueColor;
+      lines.forEach(function(ln,li){ ctx.fillText(ln,W*0.145,rowTop+bodySize+li*lineH); });
+      var used=lines.length*lineH;
+      y += used + rowGap;
+      if(i<benefits.length-1){
+        ctx.strokeStyle='rgba(255,255,255,0.08)'; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.moveTo(W*0.075,y-rowGap*0.55); ctx.lineTo(W*0.925,y-rowGap*0.55); ctx.stroke();
+      }
+    });
+
+    ctx.strokeStyle='rgba(255,255,255,0.15)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(W*0.075,H-46); ctx.lineTo(W*0.925,H-46); ctx.stroke();
+    ctx.font='600 '+Math.round(W*0.0145)+'px Georgia, serif'; ctx.fillStyle=labelMuted;
+    ctx.textAlign='left'; ctx.fillText('Card no. '+String(card.cardNumber||''),W*0.075,H-24);
+    ctx.textAlign='right'; ctx.fillText(branchPhone?('Nakoda Lab '+branchPhone):'',W*0.925,H-24);
+    ctx.strokeStyle=isDark?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.06)'; ctx.lineWidth=1.5; roundRect(ctx,8,8,W-16,H-16,18); ctx.stroke();
+  }
+
+  /* Fonts must be ready before the card is drawn or the first paint uses a
+     fallback face and the text sits at the wrong width. */
+  function fontsReady(){
+    if(document.fonts && document.fonts.ready) return document.fonts.ready.catch(function(){});
+    return Promise.resolve();
+  }
+
+  /* ── boot: ask the server what this QR belongs to ──────────────────────
+     Quietly. A failure here must NOT put a red box in front of a customer who
+     has not done anything yet — the branch is already known from the URL, so the
+     form works regardless, and this only fills in the branch name and the live
+     benefits list. It keeps trying in the background. */
+  function boot(attemptNo){
+    attemptNo = attemptNo || 1;
+    if(!API){ showErr($('err'),'This page is not configured yet (config.js missing API URL).'); return; }
+    post('publicCardConfig', {branchId:BRANCH, typeId:TYPE}, 30000, 3).then(function(r){
+      if(!r || !r.ok){ if(attemptNo < 3) setTimeout(function(){ boot(attemptNo+1); }, 4000); return; }
+      CFG = r; TYPEROW = r.type || {name:'PLATINUM'};
+      QR_TYPE = { id:String(TYPEROW.typeId||TYPE||''), name:String(TYPEROW.name||'Platinum') };
+      QR_BRANCH = String(r.branchId || BRANCH || '');
+      $('branchTag').textContent = (TYPEROW.name || 'PLATINUM') + ' · ' + (r.branchName || 'Membership');
+      $('formTitle').textContent = 'Get your ' + titleCase(TYPEROW.name || 'Platinum') + ' card';
+      if(!r.branchId && r.branches && r.branches.length){
+        var sel = $('branchSel'); sel.innerHTML = '';
+        r.branches.forEach(function(b){
+          var o = document.createElement('option'); o.value = b.branchId; o.textContent = b.branchName; sel.appendChild(o);
+        });
+        show($('branchPickWrap'));
+      } else {
+        BRANCH = r.branchId;
+      }
+      renderBenefits();
+    }).catch(function(){
+      /* Silent. Try again shortly — by then the script container is usually awake. */
+      if(attemptNo < 3) setTimeout(function(){ boot(attemptNo+1); }, 4000);
+    });
+  }
+  function titleCase(s){ s=String(s||'').toLowerCase(); return s.charAt(0).toUpperCase()+s.slice(1); }
+  /* "SOUTHBOPAL" reads badly on a customer's screen. */
+  function titleCaseWords(s){
+    return String(s||'').toLowerCase().replace(/(^|[\s\-_])([a-z])/g, function(m,a,b){ return a+b.toUpperCase(); }).trim();
+  }
+
+  /* An existing member on the wrong card is a sales conversation, not a dead end. One button, pre-written,
+     straight to the branch — the CRM officer picks it up with the card number already in hand. */
+  function setupUpgradeAsk(show_){
+    var a = $('askUp');
+    if(!show_){ hide(a); return; }
+    var ph = labNumber();
+    if(!ph){ hide(a); return; }
+    var msg = 'Hello Nakoda, I have ' + String((TYPEROW && TYPEROW.name) || '') + ' card ' + (CARD ? CARD.cardNumber : '') +
+              ' (' + (CARD ? CARD.holderName : '') + '). I would like to know about the ' + QR_TYPE.name + ' membership.';
+    a.href = 'https://wa.me/91' + ph + '?text=' + encodeURIComponent(msg);
+    a.textContent = 'Ask about ' + QR_TYPE.name + ' membership';
+    show(a);
+  }
+
+  function benefitList(){
+    var t = (TYPEROW && TYPEROW.benefitsText) ? String(TYPEROW.benefitsText) : '';
+    /* Strip only a leading bullet or "1)" / "1." numbering — NOT any leading digit, or
+       "20% less on packages" loses its 20 and reads "% less on packages". */
+    var arr = t.split(/\r?\n/).map(function(x){ return x.replace(/^\s*(?:[-•*]+|\d{1,2}\s*[.)])\s*/,'').trim(); })
+                .filter(function(x){ return x.length > 1; })
+                /* Some card types have a heading line ("Benefits", "Benefits:", "Card benefits") at the
+                   top of benefitsText. Every line was being ticked, so the list opened with a tick
+                   next to the word "Benefits". */
+                .filter(function(x){ return !/^(card\s+)?benefits?\s*[:\-–]?$/i.test(x); });
+    return arr.length ? arr : DEFAULT_BENEFITS;
+  }
+  function renderBenefits(){
+    var ul = $('benList'); ul.innerHTML = '';
+    benefitList().forEach(function(b){ var li=document.createElement('li'); li.textContent=b; ul.appendChild(li); });
+  }
+
+  /* ── step 1 → issue ────────────────────────────────────────────────── */
+  $('mo').addEventListener('input', function(){ this.value = this.value.replace(/\D/g,'').slice(0,10); });
+  $('nm').addEventListener('input', function(){ this.value = this.value.replace(/[^A-Za-z઀-૿ऀ-ॿ .'-]/g,'').slice(0,40); });
+
+  $('go').addEventListener('click', function(){
+    clrErr($('err'));
+    var name = $('nm').value.trim().replace(/\s+/g,' ');
+    var mob  = $('mo').value.replace(/\D/g,'');
+    var branchId = BRANCH || ($('branchSel') && $('branchSel').value) || '';
+    if(name.length < 3){ showErr($('err'),'Please enter your full name.'); $('nm').focus(); return; }
+    if(!/^[6-9]\d{9}$/.test(mob)){ showErr($('err'),'Please enter a valid 10-digit Indian mobile number.'); $('mo').focus(); return; }
+    if(!branchId){ showErr($('err'),'Please select a branch.'); return; }
+
+    var btn = $('go'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span>Creating your card…';
+    showPending();
+    /* 4 attempts. The server returns the card this mobile already holds rather than
+       making a second one, so repeating the request cannot produce a duplicate. */
+    post('publicIssueCard', {data:{branchId:branchId, typeId:TYPE, holderName:name, mobile:mob, referByName:REFER}}, 60000, 4)
+      .then(function(r){
+        if(!r || !r.ok){
+          undoPending();
+          btn.disabled = false; btn.textContent = 'Create my card';
+          showErr($('err'), (r && r.error) || 'Something went wrong. Please try again.');
+          return;
+        }
+        CARD = r.card; TYPEROW = r.type || TYPEROW; UPGRADED = r.upgradedFrom || null;
+        CFG.branchName  = r.branchName  || CFG.branchName;
+        CFG.branchPhone = r.branchPhone || CFG.branchPhone;
+        showCard(!!r.existing);
+      })
+      .catch(function(){
+        undoPending();
+        btn.disabled = false; btn.textContent = 'Create my card';
+        showErr($('err'),'The line is slow right now. Tap once more — you will not get two cards.');
+      });
+  });
+
+  /* ── the wait ───────────────────────────────────────────────────────────
+     The old screen left "Creating your card…" on a dead button while the server worked, and a
+     few seconds of nothing reads as broken — which is why people tapped twice. The card frame
+     now appears immediately as a shimmer with the real step underneath. Nothing false is shown:
+     the shimmer is an empty placeholder and the actual card is only drawn once the number is
+     confirmed by the server. */
+  var _stepTimer=null;
+  var STEP_MSGS=['Reserving your membership number…','Writing your card…','Almost there…'];
+  function showPending(){
+    hide($('stepForm')); show($('stepCard'));
+    $('welcomeTtl').textContent='CREATING YOUR CARD';
+    $('welcomeSub').textContent='This takes a few seconds';
+    show($('cardSkel')); hide($('cardBox')); hide($('saveHint'));
+    hide($('metaRow')); hide($('ttlBen')); $('benList').innerHTML='';
+    hide($('save')); hide($('wa')); hide($('savenum')); hide($('waOpen')); hide($('sendStat')); hide($('askUp'));
+    $('ok').style.display='none'; clrErr($('err2')); $('callNote').textContent='';
+    show($('stepMsg')); $('stepMsg').textContent=STEP_MSGS[0];
+    var i=0;
+    clearInterval(_stepTimer);
+    _stepTimer=setInterval(function(){ i=Math.min(i+1,STEP_MSGS.length-1); $('stepMsg').textContent=STEP_MSGS[i]; }, 2600);
+    window.scrollTo(0,0);
+  }
+  /* The request failed — put them back on the form with their details still typed in. */
+  function undoPending(){
+    clearInterval(_stepTimer);
+    hide($('stepCard')); show($('stepForm'));
+    hide($('cardSkel')); hide($('stepMsg'));
+    $('welcomeTtl').textContent='YOUR CARD IS READY';
+    $('welcomeSub').textContent='Welcome to the Nakoda family';
+    window.scrollTo(0,0);
+  }
+
+  /* ── step 2 → paint, save, send ────────────────────────────────────── */
+  function showCard(existing){
+    clearInterval(_stepTimer);
+    hide($('stepForm')); show($('stepCard'));
+    hide($('cardSkel')); hide($('stepMsg'));
+    show($('cardBox')); show($('saveHint')); show($('metaRow')); show($('ttlBen')); show($('save'));
+    window.scrollTo(0,0);
+    /* v328. The badge under the logo was written once, from the QR, and never touched again — so an
+       existing Gold member saw her Gold card sitting under the words "PLATINUM · SOUTHBOPAL". It now
+       always describes the card on the screen. */
+    var shownType = String((TYPEROW && TYPEROW.name) || 'Membership');
+    var shownBranch = titleCaseWords(CFG.branchName || '');
+    $('branchTag').textContent = shownType.toUpperCase() + (shownBranch ? (' · ' + shownBranch) : '');
+
+    var differentType = !!(existing && QR_TYPE.id && TYPEROW && TYPEROW.typeId &&
+                           String(TYPEROW.typeId).toUpperCase() !== String(QR_TYPE.id).toUpperCase());
+    if(existing){
+      $('welcomeTtl').textContent = 'YOU ALREADY HAVE A ' + shownType.toUpperCase() + ' CARD';
+      $('welcomeSub').textContent = differentType
+        ? ('This is the active card on your number. To move to ' + QR_TYPE.name + ', please ask at our branch.')
+        : 'This is the active card on your number';
+    } else if(UPGRADED){
+      /* Their old card was closed to make this one. Say so plainly — a member who is told nothing
+         and later finds their old card cancelled has every reason to be angry about it. The wording
+         has to match what actually happened: a Gold becoming a Platinum is an upgrade, a Platinum
+         moving from one branch to another is not. */
+      if(UPGRADED.reason === 'branch'){
+        $('welcomeTtl').textContent = 'YOUR NEW ' + shownType.toUpperCase() + ' CARD';
+        $('welcomeSub').textContent = 'Issued at ' + (shownBranch || 'this branch') + '. Your earlier card ' +
+          UPGRADED.cardNumber + (UPGRADED.branchName ? (' from ' + titleCaseWords(UPGRADED.branchName)) : '') + ' has been closed.';
+      } else {
+        $('welcomeTtl').textContent = 'UPGRADED TO ' + shownType.toUpperCase();
+        $('welcomeSub').textContent = 'Your ' + UPGRADED.typeName + ' card ' + UPGRADED.cardNumber + ' has been closed and replaced by this one.';
+      }
+    } else {
+      $('welcomeTtl').textContent = 'YOUR CARD IS READY';
+      $('welcomeSub').textContent = 'Welcome to the Nakoda family';
+    }
+    /* Nothing to ask about once they are already on the card the QR offers. */
+    setupUpgradeAsk(differentType && !UPGRADED);
+    $('mName').textContent = String(CARD.holderName||'').toUpperCase();
+    $('mExp').textContent  = fmtDate(CARD.expiryDate);
+    renderBenefits();
+    var ph = String(CFG.branchPhone||'').replace(/\D/g,'');
+    $('callNote').textContent = 'Card no. ' + CARD.cardNumber + (ph ? ('  ·  Any help: ' + ph) : '');
+
+    fontsReady().then(function(){
+      var W=1012, frontH=638, gap=14;
+      var benefits=benefitList();
+      var theme=resolveTheme(TYPEROW);
+      var backH=benefitsBackHeight(W, benefits);
+      var branchPhone=String(CFG.branchPhone||'').replace(/\D/g,'');
+
+      var cvFront=document.createElement('canvas'); cvFront.width=W; cvFront.height=frontH;
+      drawCard(cvFront, CARD, TYPEROW);
+      var cvBack=document.createElement('canvas'); cvBack.width=W; cvBack.height=backH;
+      drawBenefitsBack(cvBack, CARD, benefits, branchPhone, theme);
+
+      /* v333: front + benefits-back, stacked into ONE image — this is the file that gets
+         saved to the phone and the file that goes to WhatsApp. The percentages are pixels
+         here, not template text, so they never touch what Meta sees when it categorises
+         the message. */
+      var cv = document.createElement('canvas'); cv.width = W; cv.height = frontH + gap + backH;
+      var cx = cv.getContext('2d');
+      /* Fill the seam between the two panels with the theme's own tone instead of leaving it
+         canvas-default black — a JPEG has no transparency, so an unfilled gap became a hard
+         black bar once autoSend() switched the outgoing image from PNG to JPEG. */
+      cx.fillStyle = theme.light ? '#F2ECD9' : theme.bg[2];
+      cx.fillRect(0, 0, cv.width, cv.height);
+      cx.drawImage(cvFront, 0, 0);
+      cx.drawImage(cvBack, 0, frontH + gap);
+
+      IMG_PNG = cv.toDataURL('image/png');
+      IMG_JPG = cv.toDataURL('image/jpeg', 0.92);      /* smaller — what goes to WhatsApp */
+      $('cardImg').src = IMG_PNG;
+      if(labNumber()) show($('savenum'));
+      autoSend();          /* v327: starts here and is never waited on */
+    });
+  }
+
+  function dataUriToBlob(uri){
+    var parts = uri.split(','), mime = parts[0].match(/:(.*?);/)[1], bin = atob(parts[1]);
+    var arr = new Uint8Array(bin.length);
+    for(var i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
+    return new Blob([arr], {type:mime});
+  }
+
+  $('save').addEventListener('click', function(){
+    if(!IMG_PNG) return;
+    var fname = 'Nakoda-' + (TYPEROW.name||'Card') + '-' + CARD.cardNumber + '.png';
+    var blob = dataUriToBlob(IMG_PNG);
+    var done = function(){ revealWa(); };
+
+    /* Phones: the share sheet is the only route that offers "Save to Photos".
+       Desktop and anything without it: ordinary download. */
+    if(navigator.canShare && window.File){
+      var file = new File([blob], fname, {type:'image/png'});
+      if(navigator.canShare({files:[file]})){
+        navigator.share({files:[file], title:'Nakoda Membership Card'})
+          .then(done).catch(function(){ download(blob, fname); done(); });
+        return;
+      }
+    }
+    download(blob, fname); done();
+  });
+
+  function download(blob, fname){
+    var url = URL.createObjectURL(blob), a = document.createElement('a');
+    a.href = url; a.download = fname; document.body.appendChild(a); a.click();
+    setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 4000);
+  }
+
+  function revealWa(){
+    $('save').textContent = 'Save again';
+    if(labNumber()) show($('savenum'));
+  }
+
+  /* ── the WhatsApp send, off the customer's clock ────────────────────────
+     Sending a card is two calls out to whatsbizapi carrying a ~70 KB photo, and then Meta's
+     delivery on top. That is four to eight seconds nobody can tune away — so the customer is no
+     longer asked to sit through it. The moment the card is drawn this fires on its own and
+     reports into a quiet line underneath, while they read their benefits. The old button only
+     comes back if the send actually fails, as a retry. */
+  var _autoSent = false;
+  function setStat(kind, msg){
+    var el = $('sendStat');
+    el.className = 'sendstat ' + kind;
+    el.innerHTML = (kind === 'busy' ? '<span class="dot"></span>' : '') + '<span></span>';
+    el.lastChild.textContent = msg;
+  }
+  function autoSend(){
+    if(_autoSent || !CARD || !IMG_JPG) return;
+    _autoSent = true;
+    setStat('busy', 'Sending your card to WhatsApp on +91 ' + CARD.mobile + '…');
+    post('publicSendCard', {cardNumber:CARD.cardNumber, mobile:CARD.mobile, qrBranchId:QR_BRANCH, imageBase64:IMG_JPG.split(',')[1]}, 90000, 2)
+      .then(function(r){
+        if(r && r.ok){
+          setStat('done', 'Sent ✓  Open WhatsApp on +91 ' + CARD.mobile + ' — your card is there.');
+        } else {
+          setStat('warn', (r && r.error) || 'Could not send just now — your card is on this phone, tap below to try again.');
+          show($('wa')); waFallback();
+        }
+      })
+      .catch(function(){
+        setStat('warn', 'Could not reach WhatsApp just now — your card is saved on this phone. Tap below to try again.');
+        show($('wa')); waFallback();
+      });
+  }
+
+  /* ── save the branch number to the phone's contacts ─────────────────────
+     A vCard is the only thing every phone understands here. Android opens the contact card with
+     the number filled in; iOS offers "Add to Contacts" through the share sheet; a desktop just
+     downloads a small .vcf that adds the contact when opened.
+
+     Why this is worth a button: your cards go out from the branch's WhatsApp number. Until that
+     number is a saved contact it shows up as an unknown sender, which is exactly the message
+     people ignore. Saved once, every later report and reminder arrives from "Nakoda Lab". */
+  function labNumber(){ return String((CFG && CFG.branchPhone) || '').replace(/\D/g,'').slice(-10); }
+
+  function buildVCard(){
+    var ph = labNumber();
+    /* Plain ASCII in the name — a stray em dash can render as mojibake in some phonebooks. */
+    var name = 'Nakoda Lab' + (CFG.branchName ? (' - ' + String(CFG.branchName).replace(/[^\x20-\x7E]/g,'').trim()) : '');
+    return [
+      'BEGIN:VCARD',
+      'VERSION:3.0',
+      'N:Lab;Nakoda;;;',
+      'FN:' + name,
+      'ORG:Nakoda Diagnostics and Research Center',
+      'TEL;TYPE=CELL,VOICE:+91' + ph,
+      'NOTE:' + ((TYPEROW && TYPEROW.name) ? TYPEROW.name : 'Platinum') + ' membership ' + (CARD ? CARD.cardNumber : ''),
+      'END:VCARD'
+    ].join('\r\n') + '\r\n';
+  }
+
+  $('savenum').addEventListener('click', function(){
+    clrErr($('err2'));
+    var ph = labNumber();
+    if(!ph){ showErr($('err2'), 'This branch has no contact number saved yet.'); return; }
+    var blob = new Blob([buildVCard()], {type:'text/vcard;charset=utf-8'});
+    var fname = 'Nakoda-Lab.vcf';
+    var btn = $('savenum');
+    var done = function(){ btn.textContent = '📇 Saved — check your contacts'; };
+
+    if(navigator.canShare && window.File){
+      var file = new File([blob], fname, {type:'text/vcard'});
+      if(navigator.canShare({files:[file]})){
+        navigator.share({files:[file], title:'Nakoda Lab'})
+          .then(done).catch(function(){ download(blob, fname); done(); });
+        return;
+      }
+    }
+    download(blob, fname); done();
+  });
+
+  /* Only ever shown after an automatic send failed. */
+  $('wa').addEventListener('click', function(){
+    clrErr($('err2'));
+    var btn = $('wa'); btn.disabled = true; btn.innerHTML = '<span class="spin"></span>Sending to your WhatsApp…';
+    setStat('busy', 'Trying again…');
+    post('publicSendCard', {cardNumber:CARD.cardNumber, mobile:CARD.mobile, qrBranchId:QR_BRANCH, imageBase64:IMG_JPG.split(',')[1]}, 90000, 2)
+      .then(function(r){
+        btn.disabled = false; btn.textContent = 'Send again on WhatsApp';
+        if(r && r.ok){
+          setStat('done', 'Sent ✓  Open WhatsApp on +91 ' + CARD.mobile + ' — your card is there.');
+          hide($('wa')); hide($('waOpen'));
+        } else {
+          setStat('warn', (r && r.error) || 'Could not send right now.');
+          waFallback();
+        }
+      })
+      .catch(function(){
+        btn.disabled = false; btn.textContent = 'Send again on WhatsApp';
+        setStat('warn', 'Could not reach WhatsApp right now — your card is saved on this phone.');
+        waFallback();
+      });
+  });
+
+  function waFallback(){
+    var ph = String(CFG.branchPhone||'').replace(/\D/g,'');
+    var msg = 'Hi Nakoda, my membership card ' + CARD.cardNumber + ' (' + CARD.holderName + ') did not arrive on WhatsApp. Please send it.';
+    var a = $('waOpen');
+    a.href = 'https://wa.me/' + (ph ? ('91'+ph) : '') + '?text=' + encodeURIComponent(msg);
+    show(a);
+  }
+
+  warmUp();   /* wake the script container while the customer is still typing */
+  boot();
+})();
+</script>
+</body>
+</html>
