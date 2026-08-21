@@ -611,10 +611,48 @@
       if(_focusT) clearTimeout(_focusT);
       _focusT=setTimeout(function(){ if(!_done && _pendingSelfieCb===done) done(null); }, 2500);
     }
-    function useFilePicker(){
+    /* Opening the file dialog from JavaScript needs TRANSIENT USER ACTIVATION — the browser only
+       allows it for a few seconds after a real tap, and it refuses SILENTLY otherwise: no dialog,
+       no error, no console warning, nothing.
+
+       That is fatal on the desktop path. The chain is
+           click → doMark → startMark → captureSelfie → getUserMedia(...).catch → input.click()
+       and that .catch runs after an async round trip. On a PC with no webcam, or where the camera
+       permission prompt sat on screen for a few seconds before being dismissed, the activation has
+       expired by the time we get there — so `input.click()` does absolutely nothing and the staff
+       member sees the button do absolutely nothing. Combined with the stuck-busy flag (see above),
+       every later click was dead too.
+
+       So: use the direct call ONLY while we still hold the original tap (the synchronous path, when
+       the browser has no camera API at all), and otherwise put a real button on screen. Clicking
+       that button is itself a fresh user gesture, so the dialog always opens. */
+    function pickNow(){
       _pendingSelfieCb=done;
       try{ window.addEventListener('focus', onFocusBack); }catch(e){}
       $id('attSelfie').click();
+    }
+    function useFilePicker(){ pickNow(); }          /* only safe inside the original tap */
+    function askForPhoto(msg){                       /* safe anywhere — the user provides the gesture */
+      if(_done) return;
+      openModal('Add your photo',
+        '<div style="text-align:center">'+
+        '<div style="font-size:13px;color:#555;margin-bottom:14px">'+esc(msg)+'</div>'+
+        '<button class="btn" id="selPick" style="cursor:pointer">📷 Choose or take photo</button> '+
+        '<button class="btn ghost" id="selCancel" style="cursor:pointer">Cancel</button></div>','');
+      var chose=false;
+      var pick=document.getElementById('selPick');
+      if(pick) pick.onclick=function(){ chose=true; closeModal(); pickNow(); };   // a REAL tap — the dialog opens
+      var can=document.getElementById('selCancel');
+      if(can) can.onclick=function(){ closeModal(); done(null); };
+      /* If this window disappears by the × or the backdrop — i.e. without "Choose" being pressed —
+         that is a cancellation, and the punch must be released rather than left hanging. */
+      if(_poll) clearInterval(_poll);
+      _poll=setInterval(function(){
+        if(_done){ clearInterval(_poll); _poll=null; return; }
+        if(document.getElementById('selPick')) return;      // still on screen
+        clearInterval(_poll); _poll=null;
+        if(!chose) done(null);
+      }, 400);
     }
     if(!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){ useFilePicker(); return; }  // fallback to file/camera input
     var stream=null;
@@ -623,7 +661,7 @@
     // BLACK-SELFIE FIX: capturing before the camera delivers its first frame produced an empty black
     // photo (punch went through with no face). Keep Capture disabled until real frames are flowing.
     function camReady(){ var s2=document.getElementById('camSnap'); if(s2&&v.videoWidth>0){ s2.disabled=false; s2.style.opacity=''; s2.innerHTML='📸 Capture'; } }
-    navigator.mediaDevices.getUserMedia({video:{facingMode:'user'}}).then(function(st){ stream=st; v.srcObject=st; v.onloadeddata=camReady; v.onplaying=camReady; setTimeout(camReady,1200); setTimeout(camReady,2500); }).catch(function(){ if(_poll){ clearInterval(_poll); _poll=null; } closeModal(); toast('Camera blocked — pick a photo instead.',true); useFilePicker(); });
+    navigator.mediaDevices.getUserMedia({video:{facingMode:'user'}}).then(function(st){ stream=st; v.srcObject=st; v.onloadeddata=camReady; v.onplaying=camReady; setTimeout(camReady,1200); setTimeout(camReady,2500); }).catch(function(){ if(_poll){ clearInterval(_poll); _poll=null; } closeModal(); askForPhoto('This device has no camera available, or the camera is blocked. Choose a photo instead — your punch will still be recorded.'); });
     function stopCam(){ try{ if(stream) stream.getTracks().forEach(function(t){t.stop();}); }catch(e){} }
     var snap=document.getElementById('camSnap'); if(snap) snap.onclick=function(){
       if(!v.videoWidth){ toast('Camera is still starting — wait a second and tap again.',true); return; }

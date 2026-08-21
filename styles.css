@@ -418,7 +418,15 @@ table.pm-grid{border-collapse:collapse;font-size:11px;min-width:560px}
 .att-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px;text-align:center;max-width:420px;margin:0 auto}
 .att-day{font-size:16px;font-weight:700}
 .att-sub{font-size:12px;color:#8a9099;margin:2px 0 12px}
-.att-big{border:0;border-radius:14px;padding:16px 20px;font-size:18px;font-weight:700;color:#fff;width:100%}
+.att-big{border:0;border-radius:14px;padding:16px 20px;font-size:18px;font-weight:700;color:#fff;width:100%;cursor:pointer;-webkit-tap-highlight-color:rgba(255,255,255,.25);transition:filter .12s,transform .06s}
+/* v333: the punch button had NO cursor:pointer, so on a desktop the mouse arrow never changed over it
+   and it read as a coloured panel rather than a control - "the check in button is not clickable".
+   (The .sending rule further down already set cursor:default, which shows a pointer was always
+   intended here and simply never written.) :active gives a press response too, so a tap that IS
+   registering looks like it registered, even while the camera and GPS are still starting up. */
+.att-big:hover{filter:brightness(1.06)}
+.att-big:active{transform:scale(.985);filter:brightness(.94)}
+.att-big:disabled,.att-big.sending{cursor:default;transform:none;filter:none}
 .att-big.in{background:#1ba94c}.att-big.out{background:var(--red)}
 /* v297: payroll unsaved-changes bar, device-draft offer, and the marker on every edited field.
    Amber = "this figure exists only on your screen". It stays until the edit is saved. */
