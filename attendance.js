@@ -288,13 +288,20 @@
         '<div id="attApprove"></div>':'')+
       '<div style="height:110px"></div>';   // bottom spacer so the last approve card clears the mobile bottom nav
     $id('attSelfie').onchange=function(){
-      var f=this.files[0]; if(!f) return; var fr=new FileReader();
+      var f=this.files[0];
+      /* v333: some browsers DO fire `change` with an empty list when the picker is dismissed. The
+         old code returned here and left the resolver dangling, which is one of the ways ATT.busy
+         got stuck true and the punch button went dead. Resolve it as a cancellation instead. */
+      if(!f){ var c0=_pendingSelfieCb; _pendingSelfieCb=null; if(c0) c0(null); return; }
+      var fr=new FileReader();
       fr.onload=function(){
         resizeDataUrl(fr.result, function(b64){
           var cb=_pendingSelfieCb; _pendingSelfieCb=null;
           if(cb) cb(b64); else submitMark(ATT.kind, b64);   // no camera-flow resolver waiting — used standalone
         });
       };
+      /* And if the file cannot be read at all, that must not strand the punch either. */
+      fr.onerror=function(){ var c1=_pendingSelfieCb; _pendingSelfieCb=null; toast('Could not read that photo — please try again.',true); if(c1) c1(null); };
       fr.readAsDataURL(f); this.value='';
     };
     paintMe();
@@ -555,15 +562,68 @@
     img.src=dataUrl;
   }
   var _pendingSelfieCb=null;
+  /* ============================================================================================
+     v333 — "THE CHECK OUT BUTTON IS NOT CLICKABLE".
+
+     THE BUG. doMark sets ATT.busy=true and hands off to captureSelfie, and NOTHING clears it until
+     the selfie callback fires. The callback fired on exactly one path: tapping 📸 Capture. Every
+     other way out of that camera window called neither `cb` nor anything else:
+
+         • the Cancel button          — stopCam(); closeModal();  …and then nothing
+         • the × in the modal header  — openModal's own onclick="closeModal()"
+         • tapping the dark backdrop  — openModal's mousedown handler on #ov
+         • the file-picker fallback, dismissed without choosing a photo (no `change` event fires)
+
+     So the moment anybody opened the camera and backed out of it, ATT.busy stayed true for the
+     REST OF THE SESSION, and every later tap on Check in / Check out hit the guard at the top of
+     doMark and returned. The button looked completely normal, and did nothing. The only clue was
+     a toast saying "Your punch is being sent" — which is easy to miss and, worse, reads like the
+     punch is on its way, so the person waits instead of reloading. Closing and re-opening the app
+     was the only cure, and nobody knew that.
+
+     This is not new in v333 — it is in the build running in the branches today.
+
+     THE FIX, in three parts, because one is not enough:
+       1. `done()` is a once-only resolver, and EVERY exit calls it — Cancel, ×, backdrop, a
+          dismissed file picker. Cancelling now resolves with null, which startMark already knows
+          how to handle ("nothing was captured, nothing to preserve").
+       2. A poll watches for the camera window vanishing by any means at all, including routes
+          added to openModal in future. If the video element is gone and we have not resolved, the
+          user closed it.
+       3. doMark carries a watchdog, so even a path nobody has thought of cannot leave the button
+          permanently dead. A stuck flag now costs 90 seconds, not the whole day.
+     ============================================================================================ */
   function captureSelfie(cb){
-    if(!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){ _pendingSelfieCb=cb; $id('attSelfie').click(); return; }  // fallback to file/camera input
+    var _done=false, _poll=null, _focusT=null;
+    function done(v){
+      if(_done) return;
+      _done=true;
+      if(_poll){ clearInterval(_poll); _poll=null; }
+      if(_focusT){ clearTimeout(_focusT); _focusT=null; }
+      try{ window.removeEventListener('focus', onFocusBack); }catch(e){}
+      if(_pendingSelfieCb===done) _pendingSelfieCb=null;
+      try{ cb(v); }catch(e){}
+    }
+    /* The file picker gives NO event when it is dismissed. The window regaining focus is the only
+       signal there is, so if a moment later no photo has arrived, treat it as cancelled. */
+    function onFocusBack(){
+      if(_done) return;
+      if(_focusT) clearTimeout(_focusT);
+      _focusT=setTimeout(function(){ if(!_done && _pendingSelfieCb===done) done(null); }, 2500);
+    }
+    function useFilePicker(){
+      _pendingSelfieCb=done;
+      try{ window.addEventListener('focus', onFocusBack); }catch(e){}
+      $id('attSelfie').click();
+    }
+    if(!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){ useFilePicker(); return; }  // fallback to file/camera input
     var stream=null;
     openModal('Take selfie','<div style="text-align:center"><video id="camV" autoplay playsinline muted style="width:100%;max-width:320px;border-radius:10px;background:#000"></video><canvas id="camC" style="display:none"></canvas><div style="margin-top:10px"><button class="btn" id="camSnap" disabled style="opacity:.55">Starting camera\u2026</button> <button class="btn ghost" id="camCancel">Cancel</button></div></div>','');
     var v=document.getElementById('camV');
     // BLACK-SELFIE FIX: capturing before the camera delivers its first frame produced an empty black
     // photo (punch went through with no face). Keep Capture disabled until real frames are flowing.
     function camReady(){ var s2=document.getElementById('camSnap'); if(s2&&v.videoWidth>0){ s2.disabled=false; s2.style.opacity=''; s2.innerHTML='📸 Capture'; } }
-    navigator.mediaDevices.getUserMedia({video:{facingMode:'user'}}).then(function(st){ stream=st; v.srcObject=st; v.onloadeddata=camReady; v.onplaying=camReady; setTimeout(camReady,1200); setTimeout(camReady,2500); }).catch(function(){ closeModal(); toast('Camera blocked — pick a photo instead.',true); _pendingSelfieCb=cb; $id('attSelfie').click(); });
+    navigator.mediaDevices.getUserMedia({video:{facingMode:'user'}}).then(function(st){ stream=st; v.srcObject=st; v.onloadeddata=camReady; v.onplaying=camReady; setTimeout(camReady,1200); setTimeout(camReady,2500); }).catch(function(){ if(_poll){ clearInterval(_poll); _poll=null; } closeModal(); toast('Camera blocked — pick a photo instead.',true); useFilePicker(); });
     function stopCam(){ try{ if(stream) stream.getTracks().forEach(function(t){t.stop();}); }catch(e){} }
     var snap=document.getElementById('camSnap'); if(snap) snap.onclick=function(){
       if(!v.videoWidth){ toast('Camera is still starting — wait a second and tap again.',true); return; }
@@ -571,9 +631,16 @@
       c.width=Math.max(1,Math.round(vw*scale)); c.height=Math.max(1,Math.round(vh*scale));
       c.getContext('2d').drawImage(v,0,0,c.width,c.height);
       var d=c.toDataURL('image/jpeg',SELFIE_QUALITY),i=d.indexOf(',');
-      stopCam(); closeModal(); cb(d.slice(i+1));
+      stopCam(); closeModal(); done(d.slice(i+1));
     };
-    var cancel=document.getElementById('camCancel'); if(cancel) cancel.onclick=function(){ stopCam(); closeModal(); };
+    var cancel=document.getElementById('camCancel'); if(cancel) cancel.onclick=function(){ stopCam(); closeModal(); done(null); };
+    /* The × and the backdrop are openModal's own, and neither knows about us. Rather than reach
+       into app.js, notice that the camera window is gone. This also covers any future way of
+       closing a modal without touching this file again. */
+    _poll=setInterval(function(){
+      if(_done){ clearInterval(_poll); _poll=null; return; }
+      if(!document.getElementById('camV')){ stopCam(); done(null); }
+    }, 400);
   }
   function promptEarlyReason(cb){
     openModal('Leaving early?','<div style="font-size:13px;color:#555;margin-bottom:8px">You’ve worked under 4 hours — this will be marked <b>half day</b> and sent for approval. Please add a reason:</div><textarea id="earlyReason" rows="2" placeholder="e.g. doctor appointment" style="width:100%;border:1px solid #d9d9d9;border-radius:8px;padding:8px;font-size:13px"></textarea>','<button class="btn ghost" onclick="closeModal()">Cancel</button> <button class="btn" id="earlyOk">Confirm check-out</button>');
@@ -669,6 +736,15 @@
        Without this, a staff member who taps twice while the camera is open gets TWO punchIds for what
        they intend as one punch — and two different punchIds are, correctly, two different punches as
        far as the server is concerned. The idempotency guard cannot help here; only this can. */
+    /* v333 WATCHDOG — the punch button must never be permanently dead.
+       ATT.busy covers the camera+GPS phase and ATT.sending covers the request. Both are cleared on
+       every path we know about (see the note above captureSelfie for the ones that were missing),
+       but a flag that can only ever be set by a tap and cleared by a callback is one unhandled exit
+       away from bricking attendance for that person until they reinstall the app. So: a stuck flag
+       now expires. Ninety seconds is far longer than any real camera+GPS round, and two minutes is
+       longer than the longest request deadline (30 s) plus its retry. */
+    if(ATT.busy && (!ATT.busyTs || (Date.now()-ATT.busyTs) > 90000)){ ATT.busy=false; }
+    if(ATT.sending && ATT.sendingTs && (Date.now()-ATT.sendingTs) > 120000){ ATT.sending=null; }
     if(ATT.sending || ATT.busy){ toast('Your punch is being sent — one moment…'); return; }
     if(qToday(kind)){ toast('Already saved on this phone — it will send by itself. ✓'); return; }
     /* ============================================================================================
@@ -699,7 +775,14 @@
         var _p=String(_in.checkIn).split(':'), _n=new Date();
         _mins = (_n.getHours()*60 + _n.getMinutes()) - ((+_p[0])*60 + (+_p[1]));
       }
-      if(_mins !== null && _mins < 3){
+      /* `_mins >= 0` is not decoration. The fallback branch above does plain minutes-since-midnight
+         arithmetic, which goes NEGATIVE whenever the check-in time reads later in the day than the
+         clock does — and for a night shift that is the normal case, not an edge case. Janvi Shah's
+         duty is 11:00–08:30: she checks in at 11:00 and punches out at 08:00 the NEXT morning, so
+         the sum is 480 − 660 = −180. Without this guard a negative number is "less than 3" and her
+         Check out button would refuse for ever, every single night. A stale clock on any phone
+         would do the same thing to a day shift. Only a genuinely just-now check-in should block. */
+      if(_mins !== null && _mins >= 0 && _mins < 3){
         toast('You checked in less than 3 minutes ago. Checking out now would record a half day. Tap Check out when you actually leave.', true);
         return;
       }
@@ -711,7 +794,8 @@
     // v242: two-shift staff are no longer asked which shift they're on. The server infers it from the
     // punch time (see pickShift_ in Code.gs), so a 11:56 arrival on the 12:00 shift is simply on time.
     if(kind==='in') ATT.altShift=false;
-    ATT.busy=true;   // v295: covers the camera + GPS phase, before submitMark takes over with ATT.sending
+    ATT.busy=true; ATT.busyTs=Date.now();   // v295: covers the camera + GPS phase, before submitMark takes over with ATT.sending
+                                            // v333: busyTs is what lets the watchdog above tell a live tap from a stuck flag
     startMark(kind);
   }
   function stLabel(s){ return ({present:'Full day',half:'Half day',leave:'Leave',absent:'Absent'})[String(s)]||(s||'Full day'); }
@@ -841,7 +925,7 @@
 
     stagePunch();                 // durable before anything else can go wrong
     ATT.busy=false;               // the camera/GPS phase is over — ATT.sending guards from here
-    ATT.sending=kind;             // paints a disabled "Sending punch…" button instead of a vanishing toast
+    ATT.sending=kind; ATT.sendingTs=Date.now();   // paints a disabled "Sending punch…" button instead of a vanishing toast
     paintMe();                    // button flips and the calendar goes green NOW, not in three minutes
 
     if(!navigator.onLine){ handOff('No internet — punch saved on this phone ✓ It will send by itself.'); return; }
