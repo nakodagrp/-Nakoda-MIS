@@ -20,7 +20,6 @@ var SHELL = [
   './membership.js',
   './bulksend.js',
   './cardadmin.js',
-  './cardbulk.js',
   './tasks.js',
   './calendar.js',
   './attendance.js',
