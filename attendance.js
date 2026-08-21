@@ -71,11 +71,37 @@
      employee's punches are never shown to this one. */
   ATT.q = {waiting:[], dead:[], others:0};
 
+  /* ============================================================================================
+     THESE THREE MUST NOT DEPEND ON api.js.
+
+     v333 added API.token() / API.uid() / API.endpoint() so the punch queue could reach the session.
+     But a phone can easily be running a NEWER attendance.js against an OLDER api.js — the files are
+     uploaded separately, and GitHub Pages serves them with a ten-minute cache, so for a while after
+     a deploy the browser hands out the old one. When that happens all three come back empty, the
+     queued punch has no token and no URL, and it can never be sent: "2 punches saved on this phone"
+     sits there on full 5G with nothing retrying, because nothing CAN.
+
+     So each one now falls back to the underlying source, which is identical in every build ever
+     shipped: the token lives in localStorage['nk_tok'], the employee in localStorage['nk_uid'], and
+     the endpoint in config.js. api.js becomes a convenience, not a dependency. */
   function myEmpId(){
-    try{
-      var id = String((S.user && (S.user.EmpID||S.user.empId)) || (API.uid?API.uid():'') || '');
-      return (id==='anon') ? '' : id;   // api.js uses 'anon' for "nobody signed in" — that is not an employee
-    }catch(e){ return ''; }
+    var id = '';
+    try{ id = String((S.user && (S.user.EmpID || S.user.empId)) || ''); }catch(e){}
+    if(!id){ try{ id = String((API && API.uid) ? API.uid() : ''); }catch(e){} }
+    if(!id){ try{ id = String(localStorage.getItem('nk_uid') || ''); }catch(e){} }
+    return (id === 'anon') ? '' : id;   // api.js uses 'anon' for "nobody signed in" — not an employee
+  }
+  function myToken(){
+    var t = '';
+    try{ t = String((API && API.token) ? API.token() : ''); }catch(e){}
+    if(!t){ try{ t = String(localStorage.getItem('nk_tok') || ''); }catch(e){} }
+    return t;
+  }
+  function myApiUrl(){
+    var u = '';
+    try{ u = String((API && API.endpoint) ? API.endpoint() : ''); }catch(e){}
+    if(!u){ try{ u = String((window.NAKODA_CONFIG && window.NAKODA_CONFIG.API_URL) || ''); }catch(e){} }
+    return u;
   }
   /* The server's refusal codes are precise but not readable at a counter. Say the same thing in
      words the person can act on. */
@@ -114,9 +140,9 @@
     if(_pqBusy) return Promise.resolve();
     _pqBusy=true; _pqBusyTs=Date.now();
     var opts={
-      currentToken: (API.token?API.token():''),
+      currentToken: myToken(),
       currentEmpId: myEmpId(),
-      apiUrl: (API.endpoint?API.endpoint():''),
+      apiUrl: myApiUrl(),
       onEvent: function(evt){
         if(evt.type==='sent'){
           var mine = String(evt.rec.ownerEmpId||'')===myEmpId();
@@ -176,7 +202,7 @@
        so leave them in localStorage and migrate on the `nk-login` event instead. */
     if(!myEmpId()) return Promise.resolve();
     var old=[]; try{ old=JSON.parse(raw)||[]; }catch(e){ old=[]; }
-    var me=myEmpId(), tok=(API.token?API.token():''), url=(API.endpoint?API.endpoint():'');
+    var me=myEmpId(), tok=myToken(), url=myApiUrl();
     var jobs=old.filter(function(p){ return p && p.kind && p.date; }).map(function(p){
       return PQ.put({
         punchId: p.punchId || ('mig'+(p.ts||Date.now())+'-'+Math.random().toString(36).slice(2,8)),
@@ -244,7 +270,8 @@
      one thing that decides people's pay, had the weakest triggers in the app. */
   function pqWake(why){
     if(!PQ) return;
-    PQ.releaseHolds()
+    PQ.repair(myToken(), myEmpId(), myApiUrl())     /* un-strand anything left by an older api.js */
+      .then(function(){ return PQ.releaseHolds(); })
       .then(function(){ return (why==='online'||why==='login') ? PQ.clearCooldowns() : null; })
       .then(function(){ return PQ.registerSync(); })
       .then(function(){ return pqSync(); })
@@ -492,7 +519,7 @@
          and replays its original answer rather than writing the punch twice. */
       if(!PQ) return;
       _pqBusy=false;
-      PQ.releaseHolds().then(PQ.clearCooldowns).then(pqSync).then(function(res){
+      PQ.repair(myToken(), myEmpId(), myApiUrl()).then(PQ.releaseHolds).then(PQ.clearCooldowns).then(pqSync).then(function(res){
         res=res||{sent:0,dead:0,left:0};
         if(res.sent && !res.left) toast('All saved punches sent ✓');
         else if(res.sent) toast(res.sent+' sent ✓ · '+res.left+' still trying.');
@@ -938,8 +965,8 @@
         punchId: _pid,
         ownerEmpId: myEmpId(),
         ownerName: String((S.user&&S.user.FullName)||''),
-        ownerToken: (API.token?API.token():''),
-        apiUrl: (API.endpoint?API.endpoint():''),
+        ownerToken: myToken(),
+        apiUrl: myApiUrl(),
         kind: kind, date: tdy(),
         time: String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'),
         selfie: selfie, lat: c.lat, lng: c.lng,

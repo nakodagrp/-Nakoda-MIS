@@ -408,7 +408,20 @@ table.pm-grid{border-collapse:collapse;font-size:11px;min-width:560px}
 .dept-sub .due{color:#c47f00}.dept-sub .over{color:#DA1017}
 .dept-foot{display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:#8a9099}
 .dept-foot .rev{color:#1a7f37;font-weight:600}
-.wd.wQ{background:#faeeda!important;color:#854F0B!important;border:1.5px dashed #BA7517}   /* offline punch waiting to send */
+/* ============================================================================================
+   v333 — A PUNCH STILL ON THE PHONE IS A DAY THAT COUNTS, AND NOW LOOKS LIKE ONE.
+
+   This rule used to force the square amber with dashed edges, and `!important` beat the green
+   `.wP` underneath it. So the moment somebody punched without signal their day turned YELLOW —
+   the same colour the strip uses for a HALF DAY. Staff read it as "my punch went wrong" or worse
+   "I have been given half a day", and asked for the whole offline system to be removed.
+
+   Nothing was ever wrong. The day is recorded as present from the instant they tap; the queue is
+   only about whether the server has heard about it yet. So the square is now GREEN like any other
+   present day, with a thin ring to say "still travelling". Present is green. Half day is amber.
+   Those two never share a colour again.
+   ============================================================================================ */
+.wd.wQ{box-shadow:inset 0 0 0 2px rgba(255,255,255,.9)}
 .dept-card.clickable{cursor:pointer;transition:border-color .12s,box-shadow .12s}
 .dept-card.clickable:hover{border-color:#c9ced6;box-shadow:0 2px 8px rgba(0,0,0,.06)}
 .dept-card.clickable:active{transform:scale(.985)}

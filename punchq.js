@@ -401,6 +401,41 @@ var Q = {
     }).then(prune).catch(function(){});
   },
 
+  /* ============================================================================================
+     REPAIR — fill in what a stranded record is missing, and let it go again.
+
+     THE BUG THIS EXISTS FOR. A queued record carries its own `ownerToken` and `apiUrl` because the
+     service worker has no localStorage and no config.js. Those two values were read from three
+     helpers added to api.js in v333 — and if the copy of api.js on the device is older than that
+     (not uploaded, or still being served from the browser's HTTP cache after a deploy), both come
+     back EMPTY. flush() then has no URL to post to and no token to post with, so it never even
+     reaches the network: `pick` hands the record over, the guards bounce it, and it is marked
+     "needs owner login" for ever. On the phone this looks like "2 punches saved · will send by
+     itself" sitting there unchanged on full 5G — nothing is retrying, because nothing can.
+
+     Two things fix it. The stager no longer depends on api.js at all (it reads localStorage and
+     config.js directly, which exist in every build). And this repairs the records ALREADY stranded
+     on phones, so nobody has to clear their app data to recover a day's attendance. */
+  repair: function(token, empId, apiUrl){
+    return idbAll().then(function(list){
+      var jobs = [];
+      live(list).forEach(function(r){
+        var changed = false;
+        if(!r.apiUrl && apiUrl){ r.apiUrl = apiUrl; changed = true; }
+        if(!r.ownerEmpId && empId){ r.ownerEmpId = empId; changed = true; }
+        /* Only ever adopt the signed-in token for a punch that has no owner, or whose owner IS the
+           person signed in now. Someone else's punch keeps waiting for them — that rule is the
+           whole point of stamping the owner in the first place and is not relaxed here. */
+        if(!r.ownerToken && token && (!r.ownerEmpId || !empId || String(r.ownerEmpId) === String(empId))){
+          r.ownerToken = token; changed = true;
+        }
+        if(r.needsOwnerLogin && r.ownerToken){ delete r.needsOwnerLogin; changed = true; }
+        if(changed){ delete r.cool; delete r.hold; delete r.holdTs; jobs.push(idbPut(r)); }
+      });
+      return Promise.all(jobs);
+    }).catch(function(){});
+  },
+
   /* Free every "a live attempt is running right now" claim. Called when the page loads and when
      the worker wakes, because at those moments nothing can possibly be in flight. */
   releaseHolds: function(){

@@ -13,6 +13,7 @@ var SHELL = [
   './config.js',
   './api.js',
   './punchq.js',
+  './ops.js',
   './app.js',
   './branches.js',
   './watemplates.js',
