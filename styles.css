@@ -374,6 +374,13 @@ table.pm-grid{border-collapse:collapse;font-size:11px;min-width:560px}
 .addstg{border:1.5px dashed #d7dbe2;border-radius:11px;padding:11px;text-align:center;color:var(--red);font-weight:600;font-size:12.5px;cursor:pointer}
 .pill{display:inline-block;background:#f1effc;color:#5046b8;border-radius:20px;padding:3px 9px;font-size:11px;margin:3px 4px 0 0}
 .pill.ck{background:#eafaf3;color:#1aa37a}
+/* v334: the bulk card screen marks each row ready or not. Green and red, not the default purple. */
+.pill.ok{background:#eafaf3;color:#1a8f4c;font-weight:700}
+.pill.bad{background:#fdecec;color:#b23b3b;font-weight:700}
+/* Row inputs sit inside table cells, so they must not inherit the full-width form styling. */
+.cb-in{width:100%;border:1px solid var(--line);border-radius:6px;padding:6px 8px;font:inherit;font-size:13px;background:#fff}
+.cb-in:focus{outline:none;border-color:#9aa8c8;box-shadow:0 0 0 2px rgba(80,110,190,.12)}
+.cb-del:hover{color:var(--red)}
 .frow{display:flex;align-items:center;gap:8px;padding:8px 9px;border:1px solid var(--line);border-radius:9px;margin-bottom:7px}
 .frow .t{flex:1;font-size:12.5px}
 .frow .ty{font-size:10.5px;color:#888;background:#f3f4f7;border-radius:6px;padding:2px 8px;flex:none}

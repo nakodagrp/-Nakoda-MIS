@@ -60,7 +60,7 @@
     /* v309 — operations. Both queue: a technician records a sample with no signal and it syncs
        later, and a hand delivery can be recorded the same way. saveSample carries a clientId the
        device minted first, so a replay updates its own row instead of creating a second sample. */
-    saveSample:1,sendSampleReport:1,
+    saveSample:1,sendSampleReport:1,issueCards:1,
     /* All four stage moves queue like the rest: a phlebotomist in a stairwell can still complete a
        visit, and it syncs when the signal comes back. */
     saveOrder:1,completeVisit:1,submitResult:1,verifyReport:1,saveLabVisit:1,saveOutsource:1};
@@ -80,7 +80,7 @@
 
      The way back to offline booking is a failed-items tray the desk can see and retry, not a change
      here. Until that exists, this is the honest setting. */
-  var NOQUEUE={login:1,validate:1,logout:1,changePassword:1,resetPassword:1,checkIn:1,checkOut:1,runPayroll:1,approvePayroll:1,confirmAbsent:1,uploadFile:1,importOldCards:1,submitQuiz:1,waTest:1,waSendCard:1,waCardMedia:1,waBulkSend:1,saveWaTemplate:1,waTestTemplate:1,saveOrder:1,saveLabVisit:1};   /* v319: a chair is exclusive too */
+  var NOQUEUE={login:1,validate:1,logout:1,changePassword:1,resetPassword:1,checkIn:1,checkOut:1,runPayroll:1,approvePayroll:1,confirmAbsent:1,uploadFile:1,importOldCards:1,issueCards:1,submitQuiz:1,waTest:1,waSendCard:1,waCardMedia:1,waBulkSend:1,saveWaTemplate:1,waTestTemplate:1,saveOrder:1,saveLabVisit:1};   /* v319: a chair is exclusive too */
   /* ---------------- ATTACHMENTS ----------------------------------------------------
      A phone photo of a report is 4-8 MB. Sent as base64 it grows by a third, so ~10 MB was
      going up a branch connection against a hard 60-second abort — the request was killed
@@ -443,6 +443,12 @@
     upsertCardType:function(data){ return call('upsertCardType',{token:getToken(),data:data}); },
     listCards:function(filter){ filter=filter||{}; var full=!filter.search&&!filter.status&&!filter.branchId&&!filter.typeId; return call('listCards',{token:getToken(),filter:filter}).then(function(r){ if(r.ok&&full) kvSet('cards',r.cards); return r; }).catch(function(){ return kvGet('cards').then(function(c){ return {ok:true,cards:c||[],perms:{},offline:true}; }); }); },
     getCard:function(n){ return call('getCard',{token:getToken(),cardNumber:n}); },
+    /* v334 — issue up to 25 cards in ONE request.
+       Deliberately NOT queueable (it is in NOQUEUE below): a card number is an exclusive claim
+       handed out by the server, so it cannot be minted on the device and replayed later. It also
+       gets its own 60-second deadline because a full batch does more work than a single card. */
+    issueCards:function(data){ return call('issueCards',{token:getToken(),data:data}, 60000)
+      .then(function(r){ if(r&&r.ok) API.refreshCards(); return r; }); },
     issueCard:function(data){ if(navigator.onLine) return call('issueCard',{token:getToken(),data:data}).then(function(r){ if(r.ok) API.refreshCards(); return r; }).catch(function(){ return queueIssue(data); }); return queueIssue(data); },
     renewCard:function(n,img){ var f=function(){ return queueCardOp('renewCard',{cardNumber:n,imageDataUri:img||''},function(){ return patchCard(n,{status:'renewed',_pending:true}); }); }; if(navigator.onLine) return call('renewCard',{token:getToken(),cardNumber:n,imageDataUri:img||''}).then(function(r){ if(r.ok) API.refreshCards(); return r; }).catch(f); return f(); },
     cancelCard:function(n,reason){ var f=function(){ return queueCardOp('cancelCard',{cardNumber:n,reason:reason||''},function(){ return patchCard(n,{status:'cancelled',_pending:true}); }); }; if(navigator.onLine) return call('cancelCard',{token:getToken(),cardNumber:n,reason:reason||''}).then(function(r){ if(r.ok) API.refreshCards(); return r; }).catch(f); return f(); },

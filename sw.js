@@ -4,7 +4,7 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v333';  /* v333: offline punches now sync in the BACKGROUND — the queue moved to IndexedDB and is flushed by the service worker via Background Sync, so a punch made with no signal is sent by the phone itself while the app is closed. Each punch also carries WHOSE it is, so a shared phone can never write one person's punch onto another person's record. punchq.js is new. Includes all of v332. */  /* v316: bulk WhatsApp membership-card send — tick cards or “send unsent”, images uploaded in parallel and cached on the card row, all template sends fired together server-side. Includes all of v308. */  /* v308: expenses file as pending (no self-approval), reject needs a reason, duplicate expense/deposit writes made idempotent, card issuing halved its sheet reads. Includes all of v307. */
+var CACHE_VERSION = 'nakoda-mis-v334';  /* v333: offline punches now sync in the BACKGROUND — the queue moved to IndexedDB and is flushed by the service worker via Background Sync, so a punch made with no signal is sent by the phone itself while the app is closed. Each punch also carries WHOSE it is, so a shared phone can never write one person's punch onto another person's record. punchq.js is new. Includes all of v332. */  /* v316: bulk WhatsApp membership-card send — tick cards or “send unsent”, images uploaded in parallel and cached on the card row, all template sends fired together server-side. Includes all of v308. */  /* v308: expenses file as pending (no self-approval), reject needs a reason, duplicate expense/deposit writes made idempotent, card issuing halved its sheet reads. Includes all of v307. */
 var SHELL = [
   './',
   './index.html',
@@ -20,6 +20,7 @@ var SHELL = [
   './membership.js',
   './bulksend.js',
   './cardadmin.js',
+  './cardbulk.js',
   './tasks.js',
   './calendar.js',
   './attendance.js',

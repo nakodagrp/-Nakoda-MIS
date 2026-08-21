@@ -300,9 +300,31 @@
     return cv;
   }
 
+
+  /* v332b — WHAT ACTUALLY GOES OVER THE WIRE.
+     The tall picture at 1080 wide / q0.90 is ~200 KB; the old front-only card was ~97 KB, and every
+     send carries it twice — phone to Apps Script as base64 (which adds a third), then Apps Script to
+     whatsbizapi. Downscaling to 864 and easing the quality to 0.82 puts it back to ~96 KB with no
+     visible loss on a phone: the benefit text is still crisp, WhatsApp shows it at ~400 px anyway,
+     and tap-to-zoom is 864 wide rather than 1080. The saved PNG stays full size. */
+  var CIMG_SEND_W = 864, CIMG_SEND_Q = 0.82;
+  function cardSendJpeg(canvas){
+    var w = Math.min(CIMG_SEND_W, canvas.width);
+    if(w === canvas.width) return canvas.toDataURL('image/jpeg', CIMG_SEND_Q);
+    var c = document.createElement('canvas');
+    c.width = w; c.height = Math.round(canvas.height * w / canvas.width);
+    var x = c.getContext('2d');
+    if(x.imageSmoothingEnabled !== undefined){ x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high'; }
+    x.drawImage(canvas, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', CIMG_SEND_Q);
+  }
+
   /* ── state ────────────────────────────────────────────────────────────── */
   var TYPES=[], TYPEMAP={}, PRICEMAP={};
-  function setTypes(arr){ TYPES=arr||[]; TYPEMAP={}; TYPES.forEach(function(t){ TYPEMAP[t.typeId]=t; }); }
+  function setTypes(arr){ TYPES=arr||[]; TYPEMAP={}; TYPES.forEach(function(t){ TYPEMAP[t.typeId]=t; });
+    /* v334: the bulk screen (cardbulk.js) needs the same list for its per-row Card type dropdown.
+       Publishing the array we already hold avoids it fetching the types a second time. */
+    try{ window.CARD_TYPES_CACHE=TYPES; }catch(e){} }
   function loadTypes(){
     return API.cachedCardTypes().then(function(c){ if(c&&c.length) setTypes(c);
       return API.listCardTypes().then(function(r){ if(r.ok) setTypes(r.types); return TYPES; }).catch(function(){ return TYPES; });
@@ -319,6 +341,7 @@
         '<button class="btn ghost" id="wabUnsentBtn">📤 Send unsent</button>'+
         '<button class="btn ghost" id="cardPriceBtn">Pricing</button>'+
         '<button class="btn ghost" id="cardTypesBtn">Card types</button>'+
+        '<button class="btn ghost" id="issueBulkBtn">+ Issue many</button>'+   /* v334: bulk screen, cardbulk.js */
         '<button class="btn" id="issueCardBtn">+ Issue card</button></div>'+
       '<div id="cardExpBanner"></div>'+
       '<div class="card"><div class="toolbar">'+
@@ -326,6 +349,8 @@
         '<select id="cardStatus"><option value="">All status</option><option value="active">Active</option><option value="expired">Expired</option><option value="cancelled">Cancelled</option><option value="renewed">Renewed</option></select>'+
       '</div><div id="cardList" class="center-load"><span class="loader dark"></span> Loading…</div></div>';
     document.getElementById('issueCardBtn').onclick=function(){ openIssueCardModal(); };
+    var _bulkBtn=document.getElementById('issueBulkBtn');
+    if(_bulkBtn) _bulkBtn.onclick=function(){ if(window.openCardBulk) window.openCardBulk(); else toast('Bulk screen not loaded — upload cardbulk.js.',true); };
     /* v316: bulk WhatsApp send — all the logic lives in bulksend.js */
     document.getElementById('wabModeBtn').onclick=function(){ if(window.WABulk) WABulk.toggleMode(); };
     document.getElementById('wabUnsentBtn').onclick=function(){ if(window.WABulk) WABulk.sendAllUnsent(); };
@@ -459,7 +484,7 @@
         ap.disabled=true; ap.innerHTML='<span class="loader"></span> Sending…'; st.textContent='Uploading card image & calling WhatsApp…';
         /* JPEG: the picture is now more than twice as tall, and waSendCardCore_ already derives the
            mime from the bytes (the /9j/ check), so this is smaller over a branch line for free. */
-        var b64=cv.toDataURL('image/jpeg',0.9).split(',')[1];
+        var b64=cardSendJpeg(cv).split(',')[1];
         API.waSendCard(c.cardNumber, b64, phone).then(function(rr){
           ap.disabled=false; ap.textContent='🚀 Send via Official API';
           if(rr.ok){ st.innerHTML='<span style="color:#1a7f37">✓ '+esc(rr.message||'Sent!')+'</span>'; toast('Card sent on WhatsApp ✓'); }
@@ -571,7 +596,7 @@
   /* v316: bulksend.js draws cards offscreen with THIS drawing code, so a bulk
      card image can never differ from the one shown in the card popup. */
   window.__nakodaCard={ drawCard:drawCard, newCardCanvas:newCardCanvas,
-                        buildCardImage:buildCardImage,
+                        buildCardImage:buildCardImage, sendJpeg:cardSendJpeg,
                         benefitsFor:function(typeId){ return cardBenefitLines(TYPEMAP[typeId], DEFAULT_BENEFITS); },
                         labPhoneFor:function(branchId){ return branchPhone(branchId); },
                         typeFor:function(id){ return TYPEMAP[id]; } };
