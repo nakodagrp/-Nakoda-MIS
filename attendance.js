@@ -69,7 +69,7 @@
   /* The synchronous snapshot paintMe draws from. IndexedDB is async and painting is not, so the
      screen reads this and pqRefresh keeps it honest. `others` is only ever a COUNT — another
      employee's punches are never shown to this one. */
-  ATT.q = {waiting:[], dead:[], others:0};
+  ATT.q = {waiting:[], dead:[], others:0, photos:[]};
 
   /* ============================================================================================
      THESE THREE MUST NOT DEPEND ON api.js.
@@ -113,6 +113,30 @@
     if(/PUNCH_UNDATED/.test(em))  return 'This saved punch has no usable time, so it could not be recorded automatically.';
     return em;
   }
+  /* ============================================================================================
+     v335 — IS THIS A DEVICE WHOSE FILE INPUT IS A CAMERA?
+
+     <input type="file" accept="image/*" capture="user"> opens the phone's OWN full-screen camera
+     app. On a laptop the same element opens a file browser, which is not what we want to hand
+     somebody instead of a camera — hence this test rather than always using the input.
+
+     Feature-detecting `capture` was tried and rejected: browsers only expose the IDL property on
+     platforms that honour it, so it is FALSE on desktop Chromium — which sounds ideal until you
+     consider what happens if a phone browser ever ships the behaviour without the property. Then
+     every phone in the branches silently falls back to a camera permission prompt they keep
+     denying, which is the bug being fixed. The user agent and the touchscreen are the honest
+     question here: "is this a phone?" — and a browser that does not understand `capture` simply
+     ignores it and shows a file picker, which is a working punch either way.
+     ============================================================================================ */
+  function phoneCam(){
+    try{
+      if(/Android|iPhone|iPod|Silk|Kindle|Windows Phone/i.test(navigator.userAgent||'')) return true;
+      /* iPad, including iPadOS 13+ which reports itself as a Mac — maxTouchPoints gives it away. */
+      if(/iPad/i.test(navigator.userAgent||'')) return true;
+      if(/Macintosh/i.test(navigator.userAgent||'') && (navigator.maxTouchPoints||0) > 1) return true;
+      return false;
+    }catch(e){ return false; }
+  }
   function qToday(kind){
     var t=todayS(), me=myEmpId();
     return (ATT.q.waiting||[]).filter(function(r){ return r.kind===kind && r.date===t && String(r.ownerEmpId||'')===me; })[0] || null;
@@ -123,6 +147,7 @@
   function pqRefresh(repaint){
     if(!PQ) return Promise.resolve();
     return PQ.mine(myEmpId()).then(function(m){
+      m.photos = m.photos || [];   // an older punchq.js on the device does not report photo jobs
       ATT.q = m;
       if(repaint!==false && document.getElementById('attMe')) paintMe();
     }).catch(function(){});
@@ -170,6 +195,14 @@
          killed one second later, this is the only thing that will still get the punch out. */
       return PQ.registerSync();
     }).catch(function(){});
+  }
+  /* v335: the selfie, queued as its own job once the punch has told us which row it belongs to.
+     Same store, same Background Sync wake-up, so it survives the app being closed a second after
+     the shutter — which is what staff actually do. */
+  function pqPhoto(rec){
+    if(!PQ) return Promise.resolve();
+    ATT.q.photos = (ATT.q.photos||[]).concat([rec]);   // paint "photo uploading" immediately
+    return PQ.put(rec).then(function(){ return PQ.registerSync(); }).catch(function(){});
   }
   function pqUnstage(punchId){
     ATT.q.waiting = (ATT.q.waiting||[]).filter(function(r){ return r.punchId!==punchId; });
@@ -457,13 +490,20 @@
         ? '<button class="att-big in" id="attBtn">⊕ Check in</button>'
         : (!rec.checkOut ? '<button class="att-big out" id="attBtn">⊖ Check out</button>' : '<div class="att-done">✓ Done for today</div>');
     }
-    var stat = rec ? ('In '+(rec.checkIn||'—')+(rec.checkOut?(' · Out '+rec.checkOut):'')+(rec.workHours?(' · '+rec.workHours+'h'):'')+(String(rec.late)==='yes'?' · ⚠ late (½ day)':'')+(rec._queued?' · ☁ waiting to send':'')) : 'Not checked in yet';
+    /* v335: for the first half-minute after a punch the live request is very probably still in
+       flight, and telling the person their punch is "waiting to send" during that window is both
+       untrue and exactly the ☁/amber noise this build set out to remove. It reappears the moment
+       the send genuinely hands off to the queue — handOff clears optUntil — and it is never
+       suppressed when there is more than one punch waiting, because then something really is
+       stuck and they need to know. */
+    var _opt = !!(ATT.optUntil && Date.now() < ATT.optUntil && qN === 1);
+    var stat = rec ? ('In '+(rec.checkIn||'—')+(rec.checkOut?(' · Out '+rec.checkOut):'')+(rec.workHours?(' · '+rec.workHours+'h'):'')+(String(rec.late)==='yes'?' · ⚠ late (½ day)':'')+((rec._queued&&!_opt)?' · ☁ waiting to send':'')) : 'Not checked in yet';
     /* v325: a "Send now" the staff member can actually press, instead of watching a number that
        never moves and having no way to ask why.
        v333: the wording is now true. Before this build "will send automatically" was a promise
        nothing kept — the retry was a page timer and the page was frozen. It is Background Sync
        that keeps it, so the line says which phone state it survives. */
-    var qNote = qN ? '<div class="att-note" style="color:#854F0B;font-weight:600">☁ '+qN+' punch'+(qN>1?'es':'')+' saved on this phone — '+
+    var qNote = (qN && !_opt) ? '<div class="att-note" style="color:#854F0B;font-weight:600">☁ '+qN+' punch'+(qN>1?'es':'')+' saved on this phone — '+
         'will send by '+(PQ&&self.SyncManager?'itself, even with the app closed':'itself when you next open the app with internet')+
         '. <span id="attSendNow" style="text-decoration:underline;cursor:pointer;white-space:nowrap">Send now</span></div>' : '';
     /* v333 — PUNCHES THAT COULD NOT BE RECORDED ARE NOW SHOWN, NOT SWALLOWED.
@@ -495,12 +535,19 @@
     // v283: `!rec._local` matters. A record we have just painted optimistically from the punch response has
     // no selfie URL yet — not because the upload failed, but because we have not asked the server again.
     // Without this guard every successful punch would flash "your selfie didn't save" for a second or two.
-    var missingKind = (rec && !rec._local && rec.checkIn && !rec.selfieInUrl && rec.attId) ? 'in' : ((rec && !rec._local && rec.checkOut && !rec.selfieOutUrl && rec.attId) ? 'out' : '');
+    /* v335: the photo now travels a moment behind the punch, so there is a short window in which
+       the row genuinely has no selfie URL and nothing is wrong. This phone is holding the photo
+       job, so it knows the difference — say "uploading", not "didn't save". The red warning is
+       still exactly right once the job is gone and the cell is still empty. */
+    var _phPend = (ATT.q.photos||[]).filter(function(p){ return rec && rec.attId && String(p.attId)===String(rec.attId); }).length > 0;
+    var photoNote = _phPend ? '<div class="att-note" style="color:#5f6672">📷 Photo uploading in the background — you can close the app.</div>' : '';
+    var missingKind = _phPend ? '' : ((rec && !rec._local && rec.checkIn && !rec.selfieInUrl && rec.attId) ? 'in' : ((rec && !rec._local && rec.checkOut && !rec.selfieOutUrl && rec.attId) ? 'out' : ''));
     var missingNote = missingKind ? '<div class="att-note" style="color:#b23b3b;font-weight:600">⚠ Your '+(missingKind==='in'?'check-in':'check-out')+' selfie didn\'t save — <span id="attFixSelfie" style="text-decoration:underline;cursor:pointer">tap to add it</span></div>' : '';
     box.innerHTML='<div class="att-card"><div class="att-day">'+['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][now.getDay()]+', '+now.getDate()+' '+MON[now.getMonth()]+'</div>'+
       '<div class="att-sub">'+esc(dutyTxt)+'</div>'+btn+
       '<div class="att-stat">'+esc(stat)+'</div>'+
       '<div class="att-note">'+[ (needSelfie()?'📷 selfie':''), ('📍 location'+(isFenced()?' verified at your branch':'')) ].filter(Boolean).join(' + ')+' · Late after shift+15 min = half day.</div>'+
+      photoNote+
       missingNote+
       qNote+
       deadNote+
@@ -681,6 +728,34 @@
         if(!chose) done(null);
       }, 400);
     }
+    /* ============================================================================================
+       v335 — ON A PHONE THE CAMERA OPENS, AND NOTHING IS ASKED FIRST.
+
+       THE COMPLAINT. "Don't ask like that — just open camera and take selfie like previous."
+       Every punch on Android was showing an "Add your photo — 📷 Choose or take photo" window
+       before the camera. Two extra taps and a paragraph of English, to take a selfie.
+
+       WHY IT APPEARED. That window is v333's fix for a real desktop bug: on a PC the getUserMedia
+       failure arrives after an async round trip, by which time the browser has withdrawn the
+       transient user activation, and a file dialog opened from code is then refused SILENTLY —
+       the button looked completely dead. The window solves that, because tapping ITS button is a
+       fresh gesture.
+
+       But on Android it fires on nearly every punch, because an INSTALLED PWA has its own camera
+       permission, separate from Chrome's, and Android denies getUserMedia to it far more often
+       than it grants it. So the desktop rescue became the normal mobile experience.
+
+       THE FIX. A phone does not need getUserMedia at all. <input capture="user"> opens the phone's
+       own full-screen camera — shutter button, flip button, the lot — and that is what this app
+       used before v333. So on a phone we go straight there, still inside the original tap where
+       the activation is unquestionably live. getUserMedia and the "Add your photo" window are now
+       only for a desktop browser, which is the only place they were ever needed.
+
+       Everything the v333 note above describes is untouched: done() is still a once-only resolver,
+       the focus watchdog still catches a dismissed picker, and doMark still has its 90-second
+       watchdog. The button cannot go dead on either path.
+       ============================================================================================ */
+    if(phoneCam()){ pickNow(); return; }
     if(!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)){ useFilePicker(); return; }  // fallback to file/camera input
     var stream=null;
     openModal('Take selfie','<div style="text-align:center"><video id="camV" autoplay playsinline muted style="width:100%;max-width:320px;border-radius:10px;background:#000"></video><canvas id="camC" style="display:none"></canvas><div style="margin-top:10px"><button class="btn" id="camSnap" disabled style="opacity:.55">Starting camera\u2026</button> <button class="btn ghost" id="camCancel">Cancel</button></div></div>','');
@@ -893,7 +968,30 @@
     var _tapDate=_tt.getFullYear()+'-'+String(_tt.getMonth()+1).padStart(2,'0')+'-'+String(_tt.getDate()).padStart(2,'0');
     var _tapTime=String(_tt.getHours()).padStart(2,'0')+':'+String(_tt.getMinutes()).padStart(2,'0');
     var _pid=ATT.punchId||(ATT.punchId=punchUuid());
-    var c=ATT.coords||{}, payload={punchId:_pid, selfie:selfie, lat:c.lat, lng:c.lng, noGeo:!!ATT.noGeo, wfh:!!ATT.wfh, altShift:!!ATT.altShift, remark:(kind==='out'?(ATT.outRemark||''):''), tapDate:_tapDate, tapTime:_tapTime};
+    /* ============================================================================================
+       v335 — THE PHOTO NO LONGER HOLDS THE PUNCH UP.
+
+       "It takes too much time to upload attendance." It did, and here is exactly where the time
+       went: apiCheckIn's FIRST act — before it took the lock, before it read the sheet — was to
+       push this base64 photo into Google Drive, with up to three retries and a backoff sleep
+       between them. Nothing about the punch was recorded until Drive answered. On a branch's
+       mobile data that is four to eight seconds of somebody standing at the door watching a
+       spinner, for a file that has no bearing on whether they arrived.
+
+       So the punch now goes out WITHOUT the photo — a few hundred bytes — carrying selfiePending
+       so the server knows one is coming and does not refuse the punch for having no selfie. The
+       photo follows immediately afterwards as its own durable job in the punch queue (queuePhoto
+       below), addressed to the attendance row the punch just created, and delivered by the same
+       Background Sync that has carried offline punches since v333. If the app is killed one second
+       after the shutter, the operating system still delivers it.
+
+       The photo is STILL required and still stored on the phone the instant it is taken — this
+       changes when it travels, not whether. If the punch has to fall back to the queue (no signal,
+       server down) the photo travels inside it exactly as before, because at that point nobody is
+       waiting on a screen and one request is simpler than two.
+       ============================================================================================ */
+    var _photo = selfie || '';
+    var c=ATT.coords||{}, payload={punchId:_pid, selfie:'', selfiePending:(_photo?1:0), lat:c.lat, lng:c.lng, noGeo:!!ATT.noGeo, wfh:!!ATT.wfh, altShift:!!ATT.altShift, remark:(kind==='out'?(ATT.outRemark||''):''), tapDate:_tapDate, tapTime:_tapTime};
     function tdy(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
     /* v283 — WHY THE BUTTON TOOK SO LONG TO CHANGE.
        The punch itself finishes, and then this used to wait for a FULL myAttendance round trip before
@@ -920,8 +1018,31 @@
       }
       if(r&&r.attId) rec.attId=r.attId;
     }
+    /* The punch is recorded and we now know WHICH ROW it went into. Hand the photo to the queue,
+       addressed to that row. From here it is the queue's problem and nobody is waiting on it. */
+    function queuePhoto(r){
+      if(!_photo) return;
+      var attId = (r && r.attId) || '';
+      /* No attId means we cannot say which row the photo belongs to — an old server, or a replay
+         of an answer from before this build. Drop it; the "⚠ selfie didn't save — tap to add it"
+         line on this same screen is the recovery, and it already exists. */
+      if(!attId){ _photo=''; return; }
+      var d=new Date(ATT.tapTs||Date.now());
+      var ph={
+        punchId:'ph_'+_pid, job:'photo',
+        attId:String(attId), kind:kind, selfie:_photo,
+        ts:(ATT.tapTs||Date.now()), date:tdy(),
+        time:String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'),
+        ownerEmpId:myEmpId(), ownerName:String((S.user&&S.user.FullName)||''),
+        ownerToken:myToken(), apiUrl:myApiUrl()
+      };
+      _photo='';
+      pqPhoto(ph).then(function(){ setTimeout(pqSync, 400); });
+    }
     function success(msg, r){
-      ATT.wfh=false; toast(msg);
+      ATT.wfh=false; ATT.optUntil=0; stopFast();
+      toast(msg);
+      queuePhoto(r);                                       // v335: the photo goes on its own way
       applyLocalPunch(r); paintMe();                       // instant — the button flips now, not in five seconds
       API.myAttendance(ymNow()).then(function(x){ if(x&&x.ok){ ATT.recs=mergeServerRecs(x.records); paintMe(); } });   // reconcile quietly
     }
@@ -983,7 +1104,7 @@
        operating system through Background Sync, so this hand-off is real even if the app is
        closed one second later — which is exactly what staff do after punching in. */
     function handOff(msg, isErr){
-      ATT.sending=null; ATT.wfh=false; releaseStaged();
+      ATT.sending=null; ATT.wfh=false; ATT.optUntil=0; stopFast(); releaseStaged();
       toast(msg, !!isErr); paintMe();
       setTimeout(pqSync, 3000);   // don't make them wait for the next tick
     }
@@ -992,6 +1113,36 @@
     ATT.busy=false;               // the camera/GPS phase is over — ATT.sending guards from here
     ATT.sending=kind; ATT.sendingTs=Date.now();   // paints a disabled "Sending punch…" button instead of a vanishing toast
     paintMe();                    // button flips and the calendar goes green NOW, not in three minutes
+
+    /* ============================================================================================
+       v335 — THE SCREEN IS FINISHED IN ABOUT A SECOND, WHATEVER THE SERVER IS DOING.
+
+       Taking the Drive upload out of the request (see the note on `payload` above) made the punch
+       itself fast. This removes the second half of the wait, which was here in the app: the button
+       showed a disabled "Sending punch…" until the reply came back, so however quick the server
+       got, a weak signal still left somebody watching a spinner.
+
+       That wait buys nothing any more. By the time this line runs the punch is already written to
+       this phone's IndexedDB queue and the operating system has been asked to deliver it, so it
+       will be recorded whether this page survives the next second or not. After FAST_MS we simply
+       stop waiting and paint the punch as made, at the time it was actually tapped. The request
+       carries on in the background and, when it lands, repaints with the server's own time.
+
+       THIS IS A DISPLAY CHANGE, NOT AN ACCOUNTING ONE. Nothing is decided here. The server still
+       records the punch, the 15-minutes-late rule is untouched, and a punch the server refuses
+       comes straight back off this screen with its reason — the identical behaviour an offline
+       punch has always had. What it removes is a spinner that was telling the staff member
+       nothing they needed to know.
+       ============================================================================================ */
+    var FAST_MS = 1200;
+    var _fastT = setTimeout(function(){
+      if(ATT.sending !== kind) return;              // the reply already landed — nothing to do
+      ATT.sending = null;
+      ATT.optUntil = Date.now() + 30000;            // don't say "waiting to send" about a punch that is in flight
+      applyLocalPunch(kind==='in' ? {checkIn:_tapTime, status:'present'} : {checkOut:_tapTime});
+      paintMe();
+    }, FAST_MS);
+    function stopFast(){ if(_fastT){ clearTimeout(_fastT); _fastT=null; } }
 
     if(!navigator.onLine){ handOff('No internet — punch saved on this phone ✓ It will send by itself.'); return; }
     var tries=0, _forceFull=false, _resent=false;
@@ -1018,7 +1169,7 @@
         if(r&&r.wfhPrompt){
           // Not at the branch. The punch is not valid as it stands, so take the staged copy back out —
           // answering "Yes, work from home" re-enters submitMark and stages a fresh one.
-          dropStaged(); ATT.sending=null; paintMe();
+          dropStaged(); ATT.sending=null; ATT.optUntil=0; stopFast(); paintMe();
           promptWfh(r, function(yes){ if(yes){ ATT.wfh=true; submitMark(kind, selfie); } else { ATT.wfh=false; toast('You are not at the centre — '+(kind==='in'?'check-in':'check-out')+' not allowed.',true); paintMe(); } });
           return;
         }
@@ -1043,7 +1194,7 @@
            recorded as sent" — too old to date, no usable time, dated in the future, or a check-out
            at the same minute as the check-in. Retrying any of them for ever would be pointless. */
         if(em && /PUNCH_TOO_OLD|PUNCH_UNDATED|PUNCH_FUTURE|PUNCH_TOO_SOON|PUNCH_MONTH_CLOSED|not scheduled to work|already worked .*sundays|alternate sunday limit|selfie is required|not authorised|please check in first/i.test(em)){
-          dropStaged(); ATT.sending=null; toast(_plainPunchError(em), true); paintMe(); return;
+          dropStaged(); ATT.sending=null; ATT.optUntil=0; stopFast(); _photo=''; toast(_plainPunchError(em), true); paintMe(); return;
         }
         // Anything else (session expired, a Drive hiccup, an unexpected server error) is potentially
         // recoverable — keep the punch queued rather than throwing away someone's day.

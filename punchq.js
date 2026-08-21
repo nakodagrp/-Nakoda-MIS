@@ -72,6 +72,31 @@ var MAX_LIVE = 30;              /* live (not yet accepted) punches kept on the d
 var HOLD_MS  = 120000;          /* a "live attempt in flight" claim older than this is wreckage */
 var DEAD_KEEP_MS = 30*864e5;    /* show an unrecordable punch for 30 days, then stop nagging */
 var SYNC_TAG = 'nakoda-punch-sync';
+/* ============================================================================================
+   v335 — THIS QUEUE NOW ALSO CARRIES PHOTOS.
+
+   WHY. Up to v334 the selfie travelled INSIDE the punch, and the server pushed it into Google
+   Drive as the very first thing apiCheckIn did — before the lock, before it read the sheet, with
+   up to three retries. So the punch was not recorded at all until Drive answered, and the staff
+   member stood watching a spinner for four to eight seconds on a branch connection. "It takes too
+   much time to upload attendance."
+
+   WHAT CHANGED. The punch now goes out on its own — a few hundred bytes, no Drive — and the photo
+   follows as a SEPARATE job in this same queue, addressed to the attendance row the punch just
+   created (attId) and delivered through the existing attachSelfie endpoint. It is the identical
+   mechanism that has always carried an offline punch: written to IndexedDB before anything can go
+   wrong, sent by the service worker through Background Sync, so it survives the app being closed
+   one second after the shutter — which is exactly what people do.
+
+   A photo job is marked job:'photo' and lives beside the punches. Three rules keep it in its place:
+     • it is picked LAST, so a punch never waits behind a photo;
+     • it never counts as a "punch saved on this phone", so it cannot alarm anybody;
+     • it is never parked as `dead`. A punch is somebody's pay and must never disappear silently;
+       a photo that truly cannot be delivered is simply dropped, and the attendance screen's own
+       "⚠ selfie didn't save — tap to add it" line (which has existed since v200) is a better
+       recovery than a red note nobody can act on.
+   ============================================================================================ */
+var PHOTO_MAX_TRIES = 8;
 
 /* ---------------------------------------------------------------- IndexedDB */
 var _db = null;
@@ -108,7 +133,11 @@ function idbDel(punchId){
 
 /* ---------------------------------------------------------------- helpers */
 function isDead(r){ return !!(r && r.dead); }
+function isPhoto(r){ return !!(r && r.job === 'photo'); }
 function live(list){ return (list||[]).filter(function(r){ return !isDead(r); }); }
+/* Everything in this queue that is an actual PUNCH. Used everywhere a count or a limit is about
+   somebody's attendance rather than about a file upload. */
+function punches(list){ return live(list).filter(function(r){ return !isPhoto(r); }); }
 function held(r, now){ return !!(r && r.hold && r.holdTs && (now - r.holdTs) < HOLD_MS); }
 function byOldest(a,b){ return (a.ts||0) - (b.ts||0); }
 
@@ -147,22 +176,27 @@ function plainReason(code, raw){
    stale-hold problem is solved where it belongs, by held() timing out. */
 function pick(list, now){
   var q = live(list).slice().sort(byOldest);
+  var photo = null;
   for(var i=0;i<q.length;i++){
     var it = q[i];
     if(held(it, now)) continue;              /* a live attempt owns this punch right now */
     if(it.cool && now < it.cool) continue;   /* failed moments ago — give another punch a turn */
     if(it.needsOwnerLogin && !it.relayable) continue;   /* waiting for its owner to sign in again */
+    /* v335: a photo is remembered but set aside. Punches are attendance and go first, always —
+       on a bad connection there may only be time for one request, and it must not be a JPEG. */
+    if(isPhoto(it)){ if(!photo) photo = it; continue; }
     if(it.kind === 'out'){
       var blocked = false;
       for(var j=0;j<q.length;j++){
         var o = q[j];
+        if(isPhoto(o)) continue;             /* a photo job carries kind too — it blocks nothing */
         if(o.kind==='in' && o.date===it.date && String(o.ownerEmpId||'')===String(it.ownerEmpId||'')){ blocked = true; break; }
       }
       if(blocked) continue;
     }
     return it;
   }
-  return null;
+  return photo;                              /* nothing but photos left — now they get their turn */
 }
 
 /* ---------------------------------------------------------------- network
@@ -189,6 +223,11 @@ function payloadOf(rec, token, relayFor){
     data: {
       punchId: rec.punchId,
       selfie:  rec.selfie || '',
+      /* v335: normally a queued punch carries its photo inline — nobody is watching a screen for
+         it, so one request is simpler than two. This flag only matters for the rare record that
+         was staged without one, and it says "a photo is coming separately" rather than "there is
+         no photo", which is the difference between a recorded punch and a refused one. */
+      selfiePending: (!rec.selfie && rec.selfiePending) ? 1 : 0,
       lat: rec.lat, lng: rec.lng,
       noGeo: !!rec.noGeo, wfh: !!rec.wfh, altShift: !!rec.altShift,
       remark: rec.remark || '',
@@ -235,15 +274,22 @@ function flush(opts){
          written onto another person's record. */
       var useToken = rec.ownerToken || '';
       var relayFor = '';
-      if(!useToken && opts.currentToken && rec.relayable){ useToken = opts.currentToken; relayFor = rec.ownerEmpId; }
+      if(!useToken && opts.currentToken && rec.relayable && !isPhoto(rec)){ useToken = opts.currentToken; relayFor = rec.ownerEmpId; }
+      /* v335: attachSelfie has no relay path — it writes to the row it is given and checks that the
+         caller owns it. A photo whose owner's session is gone therefore cannot be delivered by
+         anybody else, and holding it for ever would only clutter the phone. Drop it and let the
+         "tap to add it" line on the owner's own screen be the recovery. */
+      if(isPhoto(rec) && !useToken) return idbDel(rec.punchId);
       if(!useToken){
         return markKeep(rec, 'needs owner login', {needsOwnerLogin:1});
       }
 
       rec.hold = 1; rec.holdTs = Date.now();
       return idbPut(rec).then(function(){
+        if(isPhoto(rec)) return post(apiUrl, 'attachSelfie', {token:useToken, attId:rec.attId, kind:rec.kind, base64:rec.selfie||''}, 60000);
         return post(apiUrl, rec.kind==='in' ? 'checkIn' : 'checkOut', payloadOf(rec, useToken, relayFor), 45000);
       }).then(function(r){
+        if(isPhoto(rec)) return settlePhoto(rec, r);
         return settle(rec, r, opts, relayFor);
       }, function(){
         /* No reply at all. The punch may well have landed — the replay is idempotent on punchId,
@@ -280,12 +326,48 @@ function flush(opts){
     return idbPut(rec).catch(function(){});
   }
 
+  /* ---------------------------------------------------------------- a photo, not a punch
+     Deliberately much blunter than settle(). Nothing here affects whether a day was worked — the
+     attendance row already exists and is already correct. So a photo is delivered if it can be,
+     retried a handful of times if the network is against it, and otherwise dropped. It is never
+     marked `dead`, because a red "this could not be recorded" note about a JPEG would frighten a
+     staff member about their pay over something that does not touch it. */
+  function settlePhoto(rec, r){
+    var em = String((r && r.error) || '');
+    if(r && r.ok){
+      sent++;
+      emit(opts, {type:'photo', rec:rec, result:r});
+      return idbDel(rec.punchId);
+    }
+    /* The row is gone, or this session does not own it. Retrying cannot change either. */
+    if(/not found|not authoris|missing selfie data/i.test(em)) return idbDel(rec.punchId);
+    if((rec.tries||0) + 1 >= PHOTO_MAX_TRIES) return idbDel(rec.punchId);
+    return markKeep(rec, em || 'photo upload failed', {});
+  }
+
+  /* The punch was already recorded WITHOUT its photo — the live attempt sent the photo separately
+     and its reply was lost, so this queued copy is a replay. The photo is still sitting on this
+     phone and the row is still blank, so hand it to a photo job rather than throwing it away with
+     the punch record. */
+  function handPhoto(rec, attId){
+    var ph = {
+      punchId: 'ph_' + rec.punchId, job: 'photo',
+      attId: String(attId), kind: rec.kind, selfie: rec.selfie,
+      ts: rec.ts || Date.now(), date: rec.date, time: rec.time,
+      ownerEmpId: rec.ownerEmpId, ownerName: rec.ownerName,
+      ownerToken: rec.ownerToken, apiUrl: rec.apiUrl
+    };
+    return idbPut(ph).then(function(){ return idbDel(rec.punchId); }, function(){ return idbDel(rec.punchId); });
+  }
+
   function settle(rec, r, opts, relayFor){
     var em = String((r && r.error) || '');
 
     if(r && r.ok){
       sent++;
       emit(opts, {type:'sent', rec:rec, result:r, relayed:!!relayFor});
+      /* v335: the server recorded this punch but is still waiting for its photo. */
+      if(rec.selfie && r.selfiePending && r.attId) return handPhoto(rec, r.attId);
       return idbDel(rec.punchId);
     }
     /* Punched from outside the branch. Re-send once as work-from-home, which routes it to the
@@ -347,7 +429,10 @@ function prune(){
     list.filter(isDead).forEach(function(r){
       if(r.dismissed || (r.deadAt && now - r.deadAt > DEAD_KEEP_MS)) jobs.push(idbDel(r.punchId));
     });
-    var l = live(list).sort(byOldest);
+    /* v335: photos are excluded from this cap deliberately. The cap exists to notice a phone that
+       has stopped being able to send ATTENDANCE, and counting JPEGs towards it would retire real
+       punches to make room for pictures. */
+    var l = punches(list).sort(byOldest);
     while(l.length > MAX_LIVE){
       var r = l.shift();
       r.dead = 1; r.deadCode = 'DEVICE_FULL';
@@ -369,7 +454,9 @@ var Q = {
   prune: prune,
   pick: pick,
   isDead: isDead,
+  isPhoto: isPhoto,
   live: live,
+  punches: punches,
 
   /* Everything the staff member is waiting on, for THIS employee. Another person's punches are
      deliberately not counted — they are not this person's business and must not appear on their
@@ -378,16 +465,20 @@ var Q = {
     return idbAll().then(function(list){
       var me = String(empId||'');
       return {
-        waiting: live(list).filter(function(r){ return String(r.ownerEmpId||'')===me; }),
+        /* v335: `waiting` is PUNCHES only. A photo still on its way is not a punch waiting to be
+           sent, and showing it as one would put "☁ 1 punch saved on this phone" under a punch
+           that has already been recorded — the exact thing this build set out to stop. */
+        waiting: punches(list).filter(function(r){ return String(r.ownerEmpId||'')===me; }),
+        photos:  live(list).filter(function(r){ return isPhoto(r) && String(r.ownerEmpId||'')===me; }),
         dead:    list.filter(function(r){ return isDead(r) && !r.dismissed && String(r.ownerEmpId||'')===me; }),
-        others:  live(list).filter(function(r){ return String(r.ownerEmpId||'')!==me; }).length
+        others:  punches(list).filter(function(r){ return String(r.ownerEmpId||'')!==me; }).length
       };
     });
   },
 
   todayFor: function(empId, kind, dateStr){
     return idbAll().then(function(list){
-      return live(list).filter(function(r){
+      return punches(list).filter(function(r){
         return String(r.ownerEmpId||'')===String(empId||'') && r.kind===kind && r.date===dateStr;
       })[0] || null;
     });
