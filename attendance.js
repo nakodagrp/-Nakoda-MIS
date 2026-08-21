@@ -41,125 +41,155 @@
   // the same physical punch arriving twice and answer with the original result instead of writing it again.
   function punchUuid(){ return 'p'+Date.now().toString(36)+'-'+'xxxxxxxx'.replace(/x/g,function(){ return (Math.random()*16|0).toString(16); }); }
 
-  /* ---------- offline punch queue (v201) ----------
-     No internet at punch time? The punch (selfie + GPS + ORIGINAL tap time) is saved on the phone and
-     synced automatically when the network returns. The server records the original tap time, so
-     late/half-day stays fair, and notes "Offline punch · synced HH:mm" for the manager. */
-  function pq(){ try{ return JSON.parse(localStorage.getItem('nk_att_q')||'[]'); }catch(e){ return []; } }
-  var PQ_MAX = 8, PQ_HOLD_MS = 120000;
-  /* v325 — TWO FIXES IN ONE FUNCTION.
-     (a) `q.slice(0,8)` kept the OLDEST eight. Once eight punches were stuck, the punch someone
-         had just made was thrown away the instant it was saved — no error, no message, and the
-         button had already gone green. It now keeps the NEWEST eight: today always survives.
-     (b) A selfie is ~90 KB of base64, so a full queue can hit the browser's storage quota. The
-         old code swallowed that failure silently and the punch was simply gone. Now, if the write
-         is refused, it drops the oldest entry and tries again until it fits — so the punch that
-         matters most is the last thing to be given up, never the first. */
-  function pqSave(q){
-    var arr=(q||[]).slice(-PQ_MAX);
-    for(var n=arr.length; n>0; n--){
-      try{ localStorage.setItem('nk_att_q', JSON.stringify(arr.slice(-n))); return true; }catch(e){}
-    }
-    try{ localStorage.setItem('nk_att_q','[]'); }catch(e){}
-    return false;
+  /* ============================================================================================
+     OFFLINE PUNCH QUEUE — v333 rewrite (was v201/v282/v295/v325)
+
+     The queue itself now lives in punchq.js, in IndexedDB, because the SERVICE WORKER has to be
+     able to read it. Everything below is the screen's side of that: a synchronous snapshot to
+     paint from, and the triggers that ask for a flush.
+
+     WHAT CHANGED AND WHY — the three faults that produced every symptom from the branches:
+
+       1. "Will send automatically when internet returns" was never implemented. The retry was a
+          setInterval inside this page, and phones freeze pages. Punch, pocket the phone, and no
+          code is left running to notice the network. Background Sync (sw.js) now does it from
+          the operating system, with the app closed. These foreground triggers stay as the
+          fallback for iOS, which has no Background Sync.
+
+       2. A queued punch did not record WHOSE it was, so it was flushed under whoever happened to
+          be logged in. On a shared branch phone that wrote Ankita's punch and Ankita's selfie
+          onto Bhavesh's record. Every punch is now stamped with its owner at tap time.
+
+       3. Anything the server refused was eventually deleted after 12 tries, in silence, and the
+          day quietly turned red. Nothing is deleted in silence any more — a punch that genuinely
+          cannot be recorded is shown on this screen with the reason, to be handed to a manager.
+     ============================================================================================ */
+  var PQ = (typeof self!=='undefined' && self.NKPunchQ) ? self.NKPunchQ : null;
+
+  /* The synchronous snapshot paintMe draws from. IndexedDB is async and painting is not, so the
+     screen reads this and pqRefresh keeps it honest. `others` is only ever a COUNT — another
+     employee's punches are never shown to this one. */
+  ATT.q = {waiting:[], dead:[], others:0};
+
+  function myEmpId(){
+    try{
+      var id = String((S.user && (S.user.EmpID||S.user.empId)) || (API.uid?API.uid():'') || '');
+      return (id==='anon') ? '' : id;   // api.js uses 'anon' for "nobody signed in" — that is not an employee
+    }catch(e){ return ''; }
   }
-  /* A hold means "a live attempt is in flight for this exact punch right now". It is only ever
-     true for the seconds a submit is running, so anything older than two minutes is the wreckage
-     of an attempt that never finished — the phone locked, the staff member switched apps, Android
-     dropped the tab. Before this, such a punch was skipped by pqPick for ever. */
-  function pqHeld(it, now){ return !!(it && it.hold && it.holdTs && (now-it.holdTs) < PQ_HOLD_MS); }
-  /* A fresh page load means nothing can possibly be in flight. Wipe every hold, including the
-     legacy ones that carry no timestamp — this is what releases the punches stuck on phones today. */
-  function pqReleaseStaleHolds(){
-    var q=pq(), ch=false, now=Date.now();
-    q.forEach(function(p){ if(p.hold && !pqHeld(p,now)){ delete p.hold; delete p.holdTs; ch=true; } });
-    if(ch) pqSave(q);
-    return ch;
+  /* The server's refusal codes are precise but not readable at a counter. Say the same thing in
+     words the person can act on. */
+  function _plainPunchError(em){
+    em=String(em||'');
+    if(/PUNCH_TOO_SOON/.test(em)) return 'That would record a check-out at the same time as your check-in, so it was not saved. Punch out when you actually leave.';
+    if(/PUNCH_MONTH_CLOSED/.test(em)) return String(em).replace(/^.*PUNCH_MONTH_CLOSED:\s*/,'');
+    if(/PUNCH_FUTURE|PUNCH_TOO_OLD/.test(em)) return 'The date and time on this phone are wrong, so this punch could not be recorded. Please fix the phone clock.';
+    if(/PUNCH_UNDATED/.test(em))  return 'This saved punch has no usable time, so it could not be recorded automatically.';
+    return em;
   }
-  /* A cool-off exists because a send failed. When the connection comes back that reason is gone,
-     so waiting out the remaining fifteen minutes helps nobody. */
-  function pqClearCooldowns(){
-    var q=pq(), ch=false;
-    q.forEach(function(p){ if(p.cool){ delete p.cool; ch=true; } });
-    if(ch) pqSave(q);
-    return ch;
+  function qToday(kind){
+    var t=todayS(), me=myEmpId();
+    return (ATT.q.waiting||[]).filter(function(r){ return r.kind===kind && r.date===t && String(r.ownerEmpId||'')===me; })[0] || null;
   }
-  function pqToday(kind){ var t=todayS(); return pq().filter(function(p){ return p.date===t && p.kind===kind; })[0]; }
-  function pqDrop(item){ pqSave(pq().filter(function(p){ return p.ts!==item.ts; })); }
+  function qWaitingCount(){ return (ATT.q.waiting||[]).length; }
+
+  /* Reload the snapshot from IndexedDB, then repaint if the screen is open. */
+  function pqRefresh(repaint){
+    if(!PQ) return Promise.resolve();
+    return PQ.mine(myEmpId()).then(function(m){
+      ATT.q = m;
+      if(repaint!==false && document.getElementById('attMe')) paintMe();
+    }).catch(function(){});
+  }
+
+  /* Ask for a flush. Always passes the CURRENT session as well, which is what allows a punch
+     whose owner has logged out to be relayed under this login but recorded against its real
+     owner — see the relay note in punchq.js. */
   var _pqBusy=false, _pqBusyTs=0;
-  /* v282 (bug C): pqSync used to process q[0] and ONLY q[0]. A check-in that could not land — a lapsed
-     token, a Drive hiccup — sat at the head being retried up to 12 times, and the check-out queued behind
-     it could never be attempted. The trapped check-out was then rejected with "Please check in first",
-     which is not on the permanent-failure list, so it burned its own 12 tries and was dropped too. Both
-     punches for the day vanished and the day rendered as Absent.
-     Now we pick the first item that is actually ELIGIBLE, and a failure puts that one item into a short
-     backoff so the next cycle moves on to a different punch instead of hammering the same one.
-     The one ordering rule that genuinely matters is kept: a check-out may not be sent while its OWN day's
-     check-in is still waiting in the queue. A different day never blocks anything. */
-  function pqPick(q){
-    var now=Date.now();
-    for(var i=0;i<q.length;i++){
-      var it=q[i];
-      if(it.kind==='out'){
-        var blocked=false;
-        /* v325: `pqHeld` was `q[j].hold`-blind here too. A check-in frozen by a stale hold blocked
-           its own check-out for ever, so one interrupted tap cost the whole day. A check-in that is
-           genuinely pending still blocks — that ordering rule is real and stays. */
-        for(var j=0;j<q.length;j++){ if(q[j].kind==='in' && q[j].date===it.date && !(q[j].hold && !pqHeld(q[j],now))){ blocked=true; break; } }
-        if(blocked) continue;   // its own check-in has not landed yet — this one genuinely has to wait
-      }
-      if(pqHeld(it,now)) continue;           // v295: submitMark is attempting this exact punch live right now
-                                             // v325: …but only for two minutes. A hold left behind by a
-                                             // killed page used to park the punch here permanently.
-      if(it.cool && now<it.cool) continue;   // failed very recently — let another punch have a turn
-      return it;
-    }
-    return null;
-  }
-  /* Park a failing item for a while (growing with each attempt, capped) so it stops starving the others. */
-  function pqCool(item, tries){
-    var q=pq(), it=q.filter(function(p){ return p.ts===item.ts; })[0];
-    if(it){ it.cool=Date.now()+Math.min(15*60000, 60000*Math.max(1,tries||1)); pqSave(q); }
-  }
   function pqSync(){
-    /* v325 watchdog. _pqBusy is cleared in both the .then and the .catch, but if the promise never
-       settles at all the flag stayed true and the queue stopped for the rest of the session. */
+    if(!PQ) return Promise.resolve();
+    /* Watchdog: if a flush promise never settles at all the flag would stay true and the queue
+       would stop for the rest of the session. */
     if(_pqBusy && (Date.now()-_pqBusyTs) > 90000) _pqBusy=false;
-    if(_pqBusy || !navigator.onLine) return;
-    var q=pq(); if(!q.length) return;
-    var item=pqPick(q); if(!item) return;   // everything is either blocked or cooling down
+    if(_pqBusy) return Promise.resolve();
     _pqBusy=true; _pqBusyTs=Date.now();
-    var payload={punchId:item.punchId||'', selfie:item.selfie, lat:item.lat, lng:item.lng, noGeo:!!item.noGeo, wfh:!!item.wfh, altShift:!!item.altShift, remark:item.remark||'', clientDate:item.date, clientTime:item.time, offline:1};
-    var call;
-    try{ call=(item.kind==='in')?API.checkIn(payload):API.checkOut(payload); }
-    catch(e){ _pqBusy=false; pqCool(item,1); return; }   /* v325: a synchronous throw used to wedge the queue */
-    call.then(function(r){
+    var opts={
+      currentToken: (API.token?API.token():''),
+      currentEmpId: myEmpId(),
+      apiUrl: (API.endpoint?API.endpoint():''),
+      onEvent: function(evt){
+        if(evt.type==='sent'){
+          var mine = String(evt.rec.ownerEmpId||'')===myEmpId();
+          if(mine) toast('Saved punch sent ✓ '+(evt.rec.kind==='in'?'In ':'Out ')+evt.rec.time);
+        }
+      }
+    };
+    return PQ.flush(opts).then(function(res){
       _pqBusy=false;
-      var em=String((r&&r.error)||'');
-      if(r&&r.ok){ pqDrop(item); toast('Offline punch sent ✓ '+(item.kind==='in'?'In ':'Out ')+item.time); refreshAfterSync(); pqSync(); return; }
-      if(r&&r.wfhPrompt){ item.wfh=true; var q2=pq(); q2.forEach(function(p){ if(p.ts===item.ts) p.wfh=true; }); pqSave(q2); pqSync(); return; }   // punched from outside the branch — send as WFH (goes for approval)
-      if(/already checked/i.test(em)){ pqDrop(item); refreshAfterSync(); pqSync(); return; }   // an earlier tap already landed
-      if(/server busy/i.test(em)) return;   // v202: lock held right now — keep the punch, next cycle will land it
-      // v225: ONLY drop a saved punch when the server rejection is PERMANENT — one that can never succeed on
-      // retry (Sunday-not-scheduled, alternate-Sunday limit, missing selfie). Previously ANY error string
-      // deleted the punch, so a transient "Session expired" (token lapsed while the phone was offline for
-      // hours) or a brief Drive/server hiccup silently lost the whole day — this is the blank-day bug.
-      if(em && /not scheduled to work|already worked .*sundays|alternate sunday limit|selfie is required/i.test(em)){
-        pqDrop(item); toast('Saved punch could not be accepted: '+em, true); refreshAfterSync(); pqSync(); return;
-      }
-      if(em){
-        // Recoverable (session expired, Drive hiccup, transient server error): KEEP the punch and retry next
-        // cycle instead of deleting it. A bounded attempt counter stops a genuine poison item from blocking
-        // the queue head forever; re-logging in refreshes the token so a kept "session expired" punch lands.
-        var q3=pq(), it3=q3.filter(function(p){ return p.ts===item.ts; })[0];
-        if(it3){ it3.tries=(it3.tries||0)+1; pqSave(q3); }
-        if(it3 && it3.tries>=12){ pqDrop(item); toast('A saved punch kept failing and was removed: '+em, true); refreshAfterSync(); pqSync(); return; }
-        if(/session expired|not signed in|please log ?in/i.test(em)){ toast('Your saved punch will send after you log in again.', true); }
-        pqCool(item, it3?it3.tries:1);   // v282: back this one off so a different punch gets attempted next cycle
-        pqSync();                        // …and try that different punch right now
-        return;
-      }
-    }).catch(function(){ _pqBusy=false; pqCool(item,1); });   // still no (or flaky) internet — keep it, try again later
+      return pqRefresh().then(function(){
+        if(res.sent) refreshAfterSync();
+        return res;
+      });
+    }, function(){ _pqBusy=false; });
+  }
+
+  /* Put a punch into the queue. Called from submitMark BEFORE the network is touched, so the
+     punch is durable from the instant it is made. `hold` marks it as "a live attempt is running
+     right now" so a background flush does not race the foreground one. */
+  function pqStage(rec){
+    if(!PQ) return Promise.resolve();
+    ATT.q.waiting = (ATT.q.waiting||[]).concat([rec]);   // paint from it immediately
+    return PQ.put(rec).then(function(){
+      /* Register the OS-level wake-up as soon as there is something to send. If the app is
+         killed one second later, this is the only thing that will still get the punch out. */
+      return PQ.registerSync();
+    }).catch(function(){});
+  }
+  function pqUnstage(punchId){
+    ATT.q.waiting = (ATT.q.waiting||[]).filter(function(r){ return r.punchId!==punchId; });
+    return PQ ? PQ.del(punchId).catch(function(){}) : Promise.resolve();
+  }
+  function pqRelease(punchId){
+    if(!PQ) return Promise.resolve();
+    return PQ.all().then(function(list){
+      var r=list.filter(function(x){ return x.punchId===punchId; })[0];
+      if(!r) return;
+      delete r.hold; delete r.holdTs;
+      return PQ.put(r);
+    }).then(function(){ return PQ.registerSync(); }).catch(function(){});
+  }
+
+  /* ---------- one-time migration off localStorage ----------
+     Phones updating from v325 are carrying punches in localStorage `nk_att_q`. Those records
+     have no owner, because nothing recorded one — that is the bug. We can only safely attribute
+     them to the person signed in on this device NOW, which is right in the overwhelming majority
+     of cases (one phone, one person) and is the same assumption the old code made implicitly on
+     every single flush. The difference is that from here on the attribution is FIXED at tap time
+     and can never drift to somebody else. */
+  function pqMigrateLegacy(){
+    if(!PQ) return Promise.resolve();
+    var raw;
+    try{ raw = localStorage.getItem('nk_att_q'); }catch(e){ return Promise.resolve(); }
+    if(!raw) return Promise.resolve();
+    /* Nobody is signed in yet — which happens on a cold open of the login screen. Stamping the
+       punches with an empty owner here would be the very mistake this release exists to remove,
+       so leave them in localStorage and migrate on the `nk-login` event instead. */
+    if(!myEmpId()) return Promise.resolve();
+    var old=[]; try{ old=JSON.parse(raw)||[]; }catch(e){ old=[]; }
+    var me=myEmpId(), tok=(API.token?API.token():''), url=(API.endpoint?API.endpoint():'');
+    var jobs=old.filter(function(p){ return p && p.kind && p.date; }).map(function(p){
+      return PQ.put({
+        punchId: p.punchId || ('mig'+(p.ts||Date.now())+'-'+Math.random().toString(36).slice(2,8)),
+        ownerEmpId: me, ownerToken: tok, apiUrl: url,
+        kind: p.kind, date: p.date, time: p.time, ts: p.ts || Date.now(),
+        selfie: p.selfie||'', lat: p.lat, lng: p.lng,
+        noGeo: !!p.noGeo, wfh: !!p.wfh, altShift: !!p.altShift, remark: p.remark||'',
+        migrated: 1
+      }).catch(function(){});
+    });
+    return Promise.all(jobs).then(function(){
+      try{ localStorage.removeItem('nk_att_q'); }catch(e){}
+    }).catch(function(){});
   }
   /* ============================================================================================
      v295 — THE BUTTON THAT FLIPPED BACK.
@@ -195,12 +225,53 @@
     return recs;
   }
   function refreshAfterSync(){ API.myAttendance(ymNow()).then(function(x){ if(x&&x.ok){ ATT.recs=mergeServerRecs(x.records); if(document.getElementById('attMe')) paintMe(); } }); }
-  /* v325. On load nothing can be in flight, so free every punch a killed page left behind — this is
-     what unsticks the phones that are already carrying a backlog. On `online`, drop the cool-offs too:
-     they exist because the connection failed, and the connection has just come back. */
-  try{ pqReleaseStaleHolds(); }catch(e){}
-  try{ window.addEventListener('online', function(){ pqReleaseStaleHolds(); pqClearCooldowns(); setTimeout(pqSync, 1500); }); }catch(e){}
-  try{ setInterval(pqSync, 60000); }catch(e){}
+  /* ============================================================================================
+     WHEN THE QUEUE ACTUALLY GETS FLUSHED — v333
+
+     The real work is done by Background Sync in the service worker: the operating system wakes
+     the worker when connectivity returns, with the app closed and the phone in a pocket. That is
+     the fix for "it doesn't send by itself", and nothing on this page is required for it.
+
+     Everything below is the FALLBACK, and it exists for one specific reason: iOS has no
+     Background Sync at all. On an iPhone the only moments code can run are moments the app is
+     actually on screen, so every one of them is used.
+
+     v325 had just two: a 60-second interval, and the `online` event. Both are near-useless in
+     practice — the interval only ticks while the tab is unfrozen, and `online` fires only on a
+     transition, which never happens on the far more common Indian-branch case of a phone that
+     kept a cell connection the whole time and simply had no usable throughput. Note that api.js
+     has had `focus` + 30s + `online` on its generic outbox for a long time; the punch queue, the
+     one thing that decides people's pay, had the weakest triggers in the app. */
+  function pqWake(why){
+    if(!PQ) return;
+    PQ.releaseHolds()
+      .then(function(){ return (why==='online'||why==='login') ? PQ.clearCooldowns() : null; })
+      .then(function(){ return PQ.registerSync(); })
+      .then(function(){ return pqSync(); })
+      .catch(function(){});
+  }
+  try{ pqMigrateLegacy().then(function(){ pqRefresh(); pqWake('load'); }); }catch(e){}
+  try{
+    /* The connection came back. Cool-offs exist because a send failed, and that reason is gone. */
+    window.addEventListener('online', function(){ setTimeout(function(){ pqWake('online'); }, 1200); });
+    /* THE ONE THAT MATTERS ON iOS. A phone coming out of a pocket fires visibilitychange, not
+       `online` and not a timer — the timer was frozen the whole time it was in there. */
+    document.addEventListener('visibilitychange', function(){ if(!document.hidden) pqWake('visible'); });
+    window.addEventListener('pageshow', function(){ pqWake('pageshow'); });
+    window.addEventListener('focus', function(){ pqWake('focus'); });
+    /* Signing in is what unblocks a punch that was waiting for its owner to come back — and it is
+       also the first moment we know who to attribute a punch left over from v325 to. */
+    window.addEventListener('nk-login', function(){
+      pqMigrateLegacy().then(function(){ pqRefresh(); pqWake('login'); });
+    });
+    /* The worker flushed something while we were idle — repaint so the ☁ disappears. */
+    if(navigator.serviceWorker){
+      navigator.serviceWorker.addEventListener('message', function(e){
+        if(e.data && e.data.type==='PUNCH_SYNCED'){ pqRefresh(); if(e.data.sent) refreshAfterSync(); }
+      });
+    }
+  }catch(e){}
+  try{ setInterval(function(){ if(!document.hidden) pqWake('tick'); }, 45000); }catch(e){}
 
   function renderAttendance(){
     var v=$id('page-attendance');
@@ -335,7 +406,7 @@
     warmGeo();   // start GPS early so the fix is ready before the punch button is tapped
     var rec=todayRec(), now=new Date();
     /* v201: a punch saved on the phone counts as done locally — no double punching, clear "waiting" label */
-    var qIn=pqToday('in'), qOut=pqToday('out'), qN=pq().length;
+    var qIn=qToday('in'), qOut=qToday('out'), qN=qWaitingCount();
     if(!rec && qIn) rec={checkIn:qIn.time, checkOut:(qOut?qOut.time:''), _queued:true};
     else if(rec && rec.checkIn && !rec.checkOut && qOut) rec={checkIn:rec.checkIn, checkOut:qOut.time, attId:rec.attId, selfieInUrl:rec.selfieInUrl, selfieOutUrl:'x', _queued:true};
     var dutyTxt=(S.user&&S.user.DutyStart)?('Shift '+fmtDutyTime(S.user.DutyStart)+(S.user.DutyEnd?('–'+fmtDutyTime(S.user.DutyEnd)):'')+((S.user.AltDutyStart)?(' (or alt shift '+fmtDutyTime(S.user.AltDutyStart)+(S.user.AltDutyEnd?('–'+fmtDutyTime(S.user.AltDutyEnd)):'')+')'):'')):'';
@@ -354,8 +425,27 @@
     }
     var stat = rec ? ('In '+(rec.checkIn||'—')+(rec.checkOut?(' · Out '+rec.checkOut):'')+(rec.workHours?(' · '+rec.workHours+'h'):'')+(String(rec.late)==='yes'?' · ⚠ late (½ day)':'')+(rec._queued?' · ☁ waiting to send':'')) : 'Not checked in yet';
     /* v325: a "Send now" the staff member can actually press, instead of watching a number that
-       never moves and having no way to ask why. */
-    var qNote = qN ? '<div class="att-note" style="color:#854F0B;font-weight:600">☁ '+qN+' punch'+(qN>1?'es':'')+' saved on phone — will send automatically when internet returns. <span id="attSendNow" style="text-decoration:underline;cursor:pointer;white-space:nowrap">Send now</span></div>' : '';
+       never moves and having no way to ask why.
+       v333: the wording is now true. Before this build "will send automatically" was a promise
+       nothing kept — the retry was a page timer and the page was frozen. It is Background Sync
+       that keeps it, so the line says which phone state it survives. */
+    var qNote = qN ? '<div class="att-note" style="color:#854F0B;font-weight:600">☁ '+qN+' punch'+(qN>1?'es':'')+' saved on this phone — '+
+        'will send by '+(PQ&&self.SyncManager?'itself, even with the app closed':'itself when you next open the app with internet')+
+        '. <span id="attSendNow" style="text-decoration:underline;cursor:pointer;white-space:nowrap">Send now</span></div>' : '';
+    /* v333 — PUNCHES THAT COULD NOT BE RECORDED ARE NOW SHOWN, NOT SWALLOWED.
+       v325 counted a punch's failures and, on the twelfth, deleted it with a toast that was gone
+       in three seconds. If the staff member was not looking at the screen at that exact moment —
+       and they were not, because the retry ran in the background — the punch simply ceased to
+       exist and the day turned red with no explanation anybody could act on. That is the "shows
+       P and later shows L" report. A punch that genuinely cannot be recorded now stays on this
+       screen, with its date, its time and the reason, until it is handed to a manager. */
+    var deadNote='';
+    (ATT.q.dead||[]).forEach(function(d){
+      deadNote += '<div class="att-note" style="color:#b23b3b;font-weight:700;text-align:left;border:1px solid #f3c9c9;background:#fdf3f3;border-radius:8px;padding:8px 10px;margin-top:8px">'+
+        '⚠ '+esc(d.kind==='in'?'Check-in':'Check-out')+' of '+esc(d.date)+' '+esc(d.time||'')+' was not recorded<br>'+
+        '<span style="font-weight:500;color:#7a4a4a">'+esc(d.deadReason||'')+'</span><br>'+
+        '<span class="attDeadOk" data-p="'+esc(d.punchId)+'" style="text-decoration:underline;cursor:pointer;font-weight:600">I have told my manager — hide this</span></div>';
+    });
     // Alternate Sunday counter
     var sundayNote='';
     var sw__=String((S.user&&S.user.SundayWork)||'').toLowerCase().trim();
@@ -379,26 +469,31 @@
       '<div class="att-note">'+[ (needSelfie()?'📷 selfie':''), ('📍 location'+(isFenced()?' verified at your branch':'')) ].filter(Boolean).join(' + ')+' · Late after shift+15 min = half day.</div>'+
       missingNote+
       qNote+
+      deadNote+
       sundayNote+'</div>'+
       monthStrip();
     if(!ATT.sending) pqSync();   // v201: any saved punches get a sync chance every time this screen paints
     var b=$id('attBtn'); if(b && !ATT.sending) b.onclick=function(){ doMark(inb?'in':'out'); };
+    box.querySelectorAll('.attDeadOk').forEach(function(el){
+      el.onclick=function(){ if(PQ) PQ.dismiss(el.getAttribute('data-p')).then(function(){ pqRefresh(); }); };
+    });
     var sn=$id('attSendNow'); if(sn) sn.onclick=function(){
       if(!navigator.onLine){ toast('Still no internet — they will send by themselves the moment it returns.', true); return; }
       sn.textContent='Sending…';
-      var before=pq().length;
       /* Force the queue wide open: free anything held or cooling, and clear the busy flag in case a
          previous attempt never settled. Re-sending is harmless — the server recognises the punchId
          and replays its original answer rather than writing the punch twice. */
-      try{ pqReleaseStaleHolds(); pqClearCooldowns(); }catch(e){}
-      _pqBusy=false; pqSync();
-      setTimeout(function(){
-        var left=pq().length;
-        if(!left) toast('All saved punches sent ✓');
-        else if(left<before) toast((before-left)+' sent ✓ · '+left+' still trying.');
-        else toast(left+' punch'+(left>1?'es':'')+' still waiting — retrying in the background.', true);
-        paintMe();
-      }, 5000);
+      if(!PQ) return;
+      _pqBusy=false;
+      PQ.releaseHolds().then(PQ.clearCooldowns).then(pqSync).then(function(res){
+        res=res||{sent:0,dead:0,left:0};
+        if(res.sent && !res.left) toast('All saved punches sent ✓');
+        else if(res.sent) toast(res.sent+' sent ✓ · '+res.left+' still trying.');
+        else if(res.dead) toast('A saved punch could not be recorded — see the red note above.', true);
+        else if(res.left) toast(res.left+' punch'+(res.left>1?'es':'')+' still waiting — the phone will keep trying by itself.', true);
+        else toast('Nothing left to send ✓');
+        pqRefresh();
+      }).catch(function(){ paintMe(); });
     };
     var fix=$id('attFixSelfie'); if(fix) fix.onclick=function(){
       fix.textContent='Opening camera…';
@@ -412,7 +507,13 @@
   }
   function monthStrip(){
     var by={}; (ATT.recs||[]).forEach(function(r){ by[r.date]=r; });
-    pq().forEach(function(p){ if(!by[p.date]) by[p.date]={date:p.date, status:'present', checkIn:p.time, _queued:true}; });   // v201: phone-saved punch shows as pending P
+    /* v201: phone-saved punch shows as pending P.
+       v333: only THIS employee's queued punches. On a shared branch phone the queue can be
+       holding a colleague's punch, and painting it here told the wrong person they had worked
+       that day. `waiting` is already filtered to the signed-in employee; dead punches are
+       deliberately excluded, because a punch that could not be recorded is not a day worked —
+       the red note above the strip is what explains that day instead. */
+    (ATT.q.waiting||[]).forEach(function(p){ if(!by[p.date]) by[p.date]={date:p.date, status:'present', checkIn:p.time, _queued:true}; });
     var sundayOn=['every','alternate'].indexOf(String((S.user&&S.user.SundayWork)||'').toLowerCase().trim())>=0;   // do they work Sundays?
     var punchExempt=String((S.user&&S.user.PunchRequired)||'').toLowerCase().trim()==='no';   // partners/exempt aren't expected to punch → never mark their blank days Absent
     var now=new Date(), y=now.getFullYear(), m=now.getMonth(), days=new Date(y,m+1,0).getDate(), cells='';
@@ -569,7 +670,40 @@
        they intend as one punch — and two different punchIds are, correctly, two different punches as
        far as the server is concerned. The idempotency guard cannot help here; only this can. */
     if(ATT.sending || ATT.busy){ toast('Your punch is being sent — one moment…'); return; }
-    if(pqToday(kind)){ toast('Already saved on phone — will send automatically when internet returns. ✓'); return; }
+    if(qToday(kind)){ toast('Already saved on this phone — it will send by itself. ✓'); return; }
+    /* ============================================================================================
+       v333 — THE SAME-MINUTE CHECK-OUT.
+
+       Two of yesterday's approve cards read "In 12:04 · Out 12:04" and "In 11:07 · Out 11:07",
+       both auto-marked "Early out (under 4h) — half day". Half a day of pay each, for a check-out
+       nobody meant to make.
+
+       There are two ways to arrive there and this guards the one that starts on the phone. With
+       no internet, the check-in is staged locally and the button flips to "Check out" INSTANTLY
+       (v295 made it optimistic, correctly — the old three-minute wait is what made people tap
+       repeatedly). But an instant flip also invites the next tap: the staff member sees a red
+       "Check out" where they expected confirmation, taps it to find out what it does, and the
+       day is gone. Nothing anywhere refused it, and the server auto-approves an early-out without
+       asking a manager.
+
+       The second way in — a STALE queued check-out flushing on top of today's check-in — is
+       fixed on the server (PUNCH_TOO_SOON), because only the server knows the recorded check-in
+       time. Both ends are needed; neither alone is enough.
+       ============================================================================================ */
+    if(kind==='out'){
+      var _in = qToday('in') || todayRec();
+      var _inTs = _in && (_in.ts || null);
+      var _mins = null;
+      if(_inTs) _mins = (Date.now() - _inTs)/60000;
+      else if(_in && _in.checkIn && /^\d{1,2}:\d{2}$/.test(String(_in.checkIn))){
+        var _p=String(_in.checkIn).split(':'), _n=new Date();
+        _mins = (_n.getHours()*60 + _n.getMinutes()) - ((+_p[0])*60 + (+_p[1]));
+      }
+      if(_mins !== null && _mins < 3){
+        toast('You checked in less than 3 minutes ago. Checking out now would record a half day. Tap Check out when you actually leave.', true);
+        return;
+      }
+    }
     ATT.kind=kind; ATT.outRemark=''; ATT.tapTs=Date.now();   // remember the REAL tap time for offline punches; under 4 hours auto-marks half day on the server — no reason prompt
     // v282: one id per TAP. Every retry, every WFH re-submit and every queue replay reuses it, so the
     // server can tell "the same punch arriving twice" apart from "the user punched twice".
@@ -668,32 +802,41 @@
        nowhere but in a pending network request.
        ============================================================================================ */
     var _staged=false;
+    /* v333: the record is stamped with WHO tapped and with the token they were holding at that
+       moment. Those two fields are the whole reason a shared branch phone can no longer post one
+       person's punch onto another person's record: the queue sends it as its owner or not at all.
+       apiUrl travels with it too, because the service worker that will eventually send it has no
+       access to config.js. */
     function stagePunch(){
       if(_staged) return;
-      if(pq().filter(function(p){ return p.punchId===_pid; })[0]){ _staged=true; return; }   // this exact tap is already queued — never queue it twice
+      _staged=true;
       var d=new Date(ATT.tapTs||Date.now());
-      var q=pq(); q.push({ts:Date.now(), punchId:_pid, kind:kind, date:tdy(), time:String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'),
-        selfie:selfie, lat:c.lat, lng:c.lng, noGeo:!!ATT.noGeo, wfh:!!ATT.wfh, altShift:!!ATT.altShift, remark:(kind==='out'?(ATT.outRemark||''):''),
-        hold:1, holdTs:Date.now()});   // hold = a live attempt is in flight right now; pqSync must not send the same punch alongside it.
-                                     // v325: holdTs is what lets the queue tell a live attempt from one that died mid-flight.
-      pqSave(q); _staged=true;
+      pqStage({
+        ts: (ATT.tapTs||Date.now()),
+        punchId: _pid,
+        ownerEmpId: myEmpId(),
+        ownerName: String((S.user&&S.user.FullName)||''),
+        ownerToken: (API.token?API.token():''),
+        apiUrl: (API.endpoint?API.endpoint():''),
+        kind: kind, date: tdy(),
+        time: String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'),
+        selfie: selfie, lat: c.lat, lng: c.lng,
+        noGeo: !!ATT.noGeo, wfh: !!ATT.wfh, altShift: !!ATT.altShift,
+        remark: (kind==='out'?(ATT.outRemark||''):''),
+        hold: 1, holdTs: Date.now()   // a live attempt is in flight; a background flush must not race it
+      });
     }
     /* The live attempt is over and did not land it — hand the punch back to the background queue. */
-    function releaseStaged(){
-      var q=pq(), it=q.filter(function(p){ return p.punchId===_pid; })[0];
-      if(it){ delete it.hold; delete it.holdTs; pqSave(q); }
-      _staged=false;
-    }
+    function releaseStaged(){ pqRelease(_pid); _staged=false; }
     /* The punch is settled (landed, or permanently rejected) — the queued copy has no further job. */
-    function dropStaged(){
-      pqSave(pq().filter(function(p){ return p.punchId!==_pid; }));
-      _staged=false;
-    }
-    /* Stop the live attempt and leave it to the queue, which retries by itself every minute. */
+    function dropStaged(){ pqUnstage(_pid); _staged=false; }
+    /* Stop the live attempt and leave it to the queue. From v333 that queue is flushed by the
+       operating system through Background Sync, so this hand-off is real even if the app is
+       closed one second later — which is exactly what staff do after punching in. */
     function handOff(msg, isErr){
       ATT.sending=null; ATT.wfh=false; releaseStaged();
       toast(msg, !!isErr); paintMe();
-      setTimeout(pqSync, 3000);   // don't make them wait for the next 60-second tick
+      setTimeout(pqSync, 3000);   // don't make them wait for the next tick
     }
 
     stagePunch();                 // durable before anything else can go wrong
@@ -701,7 +844,7 @@
     ATT.sending=kind;             // paints a disabled "Sending punch…" button instead of a vanishing toast
     paintMe();                    // button flips and the calendar goes green NOW, not in three minutes
 
-    if(!navigator.onLine){ handOff('No internet — punch saved on phone ✓ It will send automatically.'); return; }
+    if(!navigator.onLine){ handOff('No internet — punch saved on this phone ✓ It will send by itself.'); return; }
     var tries=0, _forceFull=false, _resent=false;
     function attempt(){
       tries++;
@@ -747,8 +890,11 @@
            come back OUT of the queue, otherwise the phone would retry a punch the server will keep
            refusing until the attempt counter finally drops it 12 tries later. Removing the staged copy
            also reverts the optimistic paint, so the button correctly goes back to "Check in". */
-        if(em && /not scheduled to work|already worked .*sundays|alternate sunday limit|selfie is required|not authorised|please check in first/i.test(em)){
-          dropStaged(); ATT.sending=null; toast(em, true); paintMe(); return;
+        /* v333: the server's new PUNCH_* codes join this list. They mean "this punch can never be
+           recorded as sent" — too old to date, no usable time, dated in the future, or a check-out
+           at the same minute as the check-in. Retrying any of them for ever would be pointless. */
+        if(em && /PUNCH_TOO_OLD|PUNCH_UNDATED|PUNCH_FUTURE|PUNCH_TOO_SOON|PUNCH_MONTH_CLOSED|not scheduled to work|already worked .*sundays|alternate sunday limit|selfie is required|not authorised|please check in first/i.test(em)){
+          dropStaged(); ATT.sending=null; toast(_plainPunchError(em), true); paintMe(); return;
         }
         // Anything else (session expired, a Drive hiccup, an unexpected server error) is potentially
         // recoverable — keep the punch queued rather than throwing away someone's day.

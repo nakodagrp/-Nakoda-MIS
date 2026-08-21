@@ -277,6 +277,11 @@
           setToken(r.token);
           return adoptUser(r.me||r.user).then(function(){
             if(r.perms){ kvSet('meta',{roles:r.roles||[],branches:r.branches||[]}); kvSet('me',r.me||r.user); kvSet('perms',r.perms); }
+            /* v333: a punch may have been waiting on this very phone for its owner to sign in
+               again (they logged out before the network came back, which kills their token).
+               Signing in is the event that unblocks it, so say so out loud and let the punch
+               queue react — rather than making them wait for the next 45-second tick. */
+            try{ window.dispatchEvent(new CustomEvent('nk-login',{detail:{empId:curUid()}})); }catch(e){}
             return r;
           });
         }
@@ -293,7 +298,24 @@
     /* v187: fire-and-forget ping that wakes the Apps Script container while the user is still
        typing their password — first real call (login) then lands on a warm server. */
     warm:function(){ try{ return call('validate',{token:''}).catch(function(){}); }catch(e){ return Promise.resolve(); } },
-    logout:function(){ var t=getToken(); setToken(''); return call('logout',{token:t}).catch(function(){return {ok:true};}); },
+    /* v333 — FLUSH BEFORE THE SESSION IS DESTROYED.
+       apiLogout deletes the session row on the server, so the moment this returns, every punch
+       still sitting on this phone under that token is unsendable as its owner. app.js calls this
+       and then immediately reloads the page, which aborts anything the page had in flight — so
+       the flush is handed to the SERVICE WORKER instead. Its waitUntil keeps it alive across the
+       reload, and it is holding the token that is about to be revoked, so the punches go out as
+       the right person on their way out of the door.
+       This is belt and braces: if the phone is offline at logout (the usual case, since that is
+       why the punch is queued at all), punchq.js's relay path still lands it correctly later. */
+    logout:function(){
+      var t=getToken(), me=curUid();
+      try{
+        if(navigator.serviceWorker && navigator.serviceWorker.controller)
+          navigator.serviceWorker.controller.postMessage({type:'FLUSH_PUNCHES', token:t, empId:me, apiUrl:apiUrl()});
+      }catch(e){}
+      setToken('');
+      return call('logout',{token:t}).catch(function(){return {ok:true};});
+    },
     changePassword:function(oldPw,newPw){
       if(!navigator.onLine) return Promise.resolve({ok:false,error:'Changing password needs an internet connection.'});
       return call('changePassword',{token:getToken(),oldPw:oldPw,newPw:newPw});
@@ -663,6 +685,22 @@
 
     syncOutbox:syncOutbox,
     pending:function(){ return obAll().then(function(i){return i.length;}); },
+
+    /* ---------------------------------------------------------------- v333
+       The punch queue (punchq.js) has to run in the SERVICE WORKER as well as the page, so it
+       cannot go through call() at all — it builds its own request. To do that it needs three
+       facts this closure has been keeping to itself: the endpoint, the current token, and who
+       the current token belongs to.
+
+       That last one is the point. Until v333 a queued punch was sent with whatever token
+       happened to be in localStorage when it finally flushed — i.e. whoever was logged in at
+       that moment — because nothing recorded whose punch it was. On a shared branch phone that
+       wrote one person's punch, and one person's selfie, onto another person's attendance
+       record. Exposing the employee id here is what lets a punch be STAMPED with its owner at
+       tap time and refuse to be sent as anybody else. */
+    token:function(){ return getToken(); },
+    uid:function(){ return curUid(); },
+    endpoint:function(){ return apiUrl(); },
     /* v284: this used to clear eight named keys and leave the whole rc: read cache and 'myatt' behind,
        so the next person to sign in on this device was shown the previous person's data. Clearing the
        store outright is the only version of this that cannot rot as new cached reads get added later. */
