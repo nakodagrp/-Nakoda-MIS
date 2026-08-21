@@ -4,7 +4,7 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v335';  /* v335: the camera opens straight away on a phone — no "Add your photo" box — and a punch no longer waits for Google Drive. The selfie is delivered a moment AFTER the punch, through the same queue and the same Background Sync, so the screen is finished in about a second instead of four to eight. Includes all of v334. */  /* v333: offline punches now sync in the BACKGROUND — the queue moved to IndexedDB and is flushed by the service worker via Background Sync, so a punch made with no signal is sent by the phone itself while the app is closed. Each punch also carries WHOSE it is, so a shared phone can never write one person's punch onto another person's record. punchq.js is new. Includes all of v332. */  /* v316: bulk WhatsApp membership-card send — tick cards or “send unsent”, images uploaded in parallel and cached on the card row, all template sends fired together server-side. Includes all of v308. */  /* v308: expenses file as pending (no self-approval), reject needs a reason, duplicate expense/deposit writes made idempotent, card issuing halved its sheet reads. Includes all of v307. */
+var CACHE_VERSION = 'nakoda-mis-v332d';  /* v332d: QR codes may name their branch in words (pal / udhna / nvs), card picture trimmed to 864px so the send carries the same weight as the old front-only card. */  /* v332: the WhatsApp/card picture is now card front + benefits + card no. + lab no. in one image — membership.js, bulksend.js. */  /* v316: bulk WhatsApp membership-card send — tick cards or “send unsent”, images uploaded in parallel and cached on the card row, all template sends fired together server-side. Includes all of v308. */  /* v308: expenses file as pending (no self-approval), reject needs a reason, duplicate expense/deposit writes made idempotent, card issuing halved its sheet reads. Includes all of v307. */
 var SHELL = [
   './',
   './index.html',
@@ -12,8 +12,6 @@ var SHELL = [
   './styles.css',
   './config.js',
   './api.js',
-  './punchq.js',
-  './ops.js',
   './app.js',
   './branches.js',
   './watemplates.js',
@@ -48,7 +46,7 @@ var SHELL = [
 ];
 /* The minimum set needed to render a styled, working login screen. These are cached all-or-nothing,
    so a device can NEVER end up with index.html but a missing styles.css (the broken unstyled state). */
-var CRITICAL = ['./','./index.html','./styles.css','./manifest.webmanifest','./config.js','./api.js','./punchq.js','./app.js'];
+var CRITICAL = ['./','./index.html','./styles.css','./manifest.webmanifest','./config.js','./api.js','./app.js'];
 var OPTIONAL = SHELL.filter(function(u){ return CRITICAL.indexOf(u)<0; });
 
 /* ============================================================ v288 — WHY BUMPING THE VERSION DIDN'T WORK
@@ -167,78 +165,3 @@ self.addEventListener('fetch', function(e){
 
 /* v307: the push + notificationclick handlers were removed with the notification system.
    Nothing sends web-push to this worker any more. */
-
-/* ============================================================ v333 — BACKGROUND PUNCH SYNC
-
-   THE BUG THIS FIXES. The attendance screen has promised, since v201, that a punch made with no
-   internet "will send automatically when internet returns". It never did. The retry was a
-   setInterval living inside the PAGE, and a page is exactly the thing a phone stops running: on
-   Android a backgrounded tab is frozen within minutes, and on iOS the web view is suspended the
-   moment the screen locks. The staff member punches in, reads "saved on phone", pockets the
-   phone, and from that instant there is no code left alive to notice the network coming back.
-   The queue moved only when somebody re-opened the app AND navigated to Attendance — usually the
-   next morning, which is exactly when a stale punch-out landed on top of a fresh punch-in and
-   produced "In 12:04 · Out 12:04 — half day".
-
-   THE FIX. The queue now lives in IndexedDB, which a service worker can read, and this worker
-   asks the operating system to be woken when connectivity returns. Android/Chrome delivers that
-   as a `sync` event, with the app closed and the phone asleep. If anything is still queued when
-   the flush finishes, we REJECT the event: that is the documented way to tell the browser "not
-   done — wake me again", and it schedules another attempt with backoff, for hours, by itself.
-
-   iOS has no Background Sync at all. Nothing here helps an iPhone, which is why attendance.js
-   also flushes on every visibilitychange, pageshow, focus, online event and login. Between the
-   two, every phone in the branches is covered by at least one of them.
-
-   The punch queue deliberately does NOT go through api.js. That file is not available in a
-   worker, and its generic outbox deletes an item on any logical rejection so the queue can never
-   jam (see the v317 note there) — sane for a task update, catastrophic for somebody's pay.
-   ============================================================ */
-var PUNCHQ_OK = false;
-try{ importScripts('./punchq.js'); PUNCHQ_OK = !!self.NKPunchQ; }catch(e){ PUNCHQ_OK = false; }
-
-function tellClients_(msg){
-  return self.clients.matchAll({includeUncontrolled:true, type:'window'}).then(function(cs){
-    cs.forEach(function(c){ try{ c.postMessage(msg); }catch(e){} });
-  }).catch(function(){});
-}
-
-/* Runs with no page open, so there is no "currently logged-in user" to relay under. Every punch
-   is sent with the token its own owner was holding when they tapped — which is the normal case
-   and the only one that needs no human present. A punch whose owner has since logged out is left
-   for the page to relay, because only the page knows who is signed in now. */
-function flushPunches_(){
-  if(!PUNCHQ_OK || !self.NKPunchQ) return Promise.reject(new Error('punch queue unavailable'));
-  var Q = self.NKPunchQ;
-  return Q.releaseHolds().then(function(){ return Q.flush({}); }).then(function(res){
-    if(res.sent || res.dead) tellClients_({type:'PUNCH_SYNCED', sent:res.sent, dead:res.dead, left:res.left});
-    /* Still holding punches? Reject, and the browser schedules another wake-up for us. */
-    if(res.left > 0) throw new Error('punches still queued: ' + res.left);
-    return res;
-  });
-}
-
-self.addEventListener('sync', function(e){
-  if(e.tag === 'nakoda-punch-sync') e.waitUntil(flushPunches_());
-});
-
-/* Periodic Background Sync, where the browser grants it (an installed PWA that the person uses
-   often). This is the safety net for a punch whose one-shot sync was exhausted — for instance a
-   phone that stayed offline all evening. Harmless where unsupported: the event simply never fires. */
-self.addEventListener('periodicsync', function(e){
-  if(e.tag === 'nakoda-punch-periodic') e.waitUntil(flushPunches_().catch(function(){}));
-});
-
-/* The page can also ask for a flush directly — used the moment somebody logs in, so a punch that
-   was waiting for its owner to come back goes out at once instead of on the next timer. */
-self.addEventListener('message', function(e){
-  if(e.data && e.data.type === 'FLUSH_PUNCHES'){
-    e.waitUntil(
-      (PUNCHQ_OK && self.NKPunchQ
-        ? self.NKPunchQ.flush({currentToken:e.data.token||'', currentEmpId:e.data.empId||'', apiUrl:e.data.apiUrl||''})
-        : Promise.resolve({sent:0,dead:0,left:0})
-      ).then(function(res){ return tellClients_({type:'PUNCH_SYNCED', sent:res.sent, dead:res.dead, left:res.left}); })
-       .catch(function(){})
-    );
-  }
-});

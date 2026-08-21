@@ -218,7 +218,7 @@
            as PNG that is about 1.6 MB each, and base64 adds a third on top. v332's waCardMedia
            reads the mime off the bytes, so this is ~200 KB instead. */
         var b64;
-        try{ b64 = cv.toDataURL('image/jpeg', 0.9).split(',')[1]; }
+        try{ b64 = (draw.sendJpeg ? draw.sendJpeg(cv) : cv.toDataURL('image/jpeg', 0.82)).split(',')[1]; }
         catch(e){ failed[it.cardNumber] = 'Could not read the card image.'; return resolve(); }
         API.waCardMedia(it.cardNumber, b64).then(function(r){
           if(r && r.ok) media[it.cardNumber] = r.url; else failed[it.cardNumber] = (r && r.error) || 'Image upload failed.';

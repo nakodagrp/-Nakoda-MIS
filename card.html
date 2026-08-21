@@ -516,6 +516,25 @@
     return cv;
   }
 
+
+  /* v332b — WHAT ACTUALLY GOES OVER THE WIRE.
+     The tall picture at 1080 wide / q0.90 is ~200 KB; the old front-only card was ~97 KB, and every
+     send carries it twice — phone to Apps Script as base64 (which adds a third), then Apps Script to
+     whatsbizapi. Downscaling to 864 and easing the quality to 0.82 puts it back to ~96 KB with no
+     visible loss on a phone: the benefit text is still crisp, WhatsApp shows it at ~400 px anyway,
+     and tap-to-zoom is 864 wide rather than 1080. The saved PNG stays full size. */
+  var CIMG_SEND_W = 864, CIMG_SEND_Q = 0.82;
+  function cardSendJpeg(canvas){
+    var w = Math.min(CIMG_SEND_W, canvas.width);
+    if(w === canvas.width) return canvas.toDataURL('image/jpeg', CIMG_SEND_Q);
+    var c = document.createElement('canvas');
+    c.width = w; c.height = Math.round(canvas.height * w / canvas.width);
+    var x = c.getContext('2d');
+    if(x.imageSmoothingEnabled !== undefined){ x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high'; }
+    x.drawImage(canvas, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', CIMG_SEND_Q);
+  }
+
   /* Fonts must be ready before the card is drawn or the first paint uses a
      fallback face and the text sits at the wrong width. */
   function fontsReady(){
@@ -722,11 +741,15 @@
          number and the lab number along the bottom. It is the same image on the screen, in the
          gallery and on WhatsApp — a member who forwards it to a relative forwards the offer too. */
       var full = buildCardImage(CARD, TYPEROW, { benefits: benefitList(), labPhone: labNumber() });
-      IMG_PNG = full.toDataURL('image/png');
-      IMG_JPG = full.toDataURL('image/jpeg', 0.9);     /* smaller — what goes to WhatsApp */
-      $('cardImg').src = IMG_PNG;
+      /* v332b: order matters. The JPEG is what the send needs, so it is made first and autoSend()
+         fires immediately; the full-size PNG for "Save my card" is encoded afterwards, off the
+         critical path — it used to cost the send a few hundred milliseconds on a slow phone for a
+         file nobody had asked for yet. */
+      IMG_JPG = cardSendJpeg(full);
+      $('cardImg').src = IMG_JPG;
       if(labNumber()) show($('savenum'));
       autoSend();          /* v327: starts here and is never waited on */
+      setTimeout(function(){ try{ IMG_PNG = full.toDataURL('image/png'); }catch(e){} }, 0);
     });
   }
 
@@ -738,15 +761,16 @@
   }
 
   $('save').addEventListener('click', function(){
-    if(!IMG_PNG) return;
-    var fname = 'Nakoda-' + (TYPEROW.name||'Card') + '-' + CARD.cardNumber + '.png';
-    var blob = dataUriToBlob(IMG_PNG);
+    var src = IMG_PNG || IMG_JPG;        /* v332b: the PNG is encoded a beat later — never block on it */
+    if(!src) return;
+    var fname = 'Nakoda-' + (TYPEROW.name||'Card') + '-' + CARD.cardNumber + (IMG_PNG ? '.png' : '.jpg');
+    var blob = dataUriToBlob(src);
     var done = function(){ revealWa(); };
 
     /* Phones: the share sheet is the only route that offers "Save to Photos".
        Desktop and anything without it: ordinary download. */
     if(navigator.canShare && window.File){
-      var file = new File([blob], fname, {type:'image/png'});
+      var file = new File([blob], fname, {type:blob.type});
       if(navigator.canShare({files:[file]})){
         navigator.share({files:[file], title:'Nakoda Membership Card'})
           .then(done).catch(function(){ download(blob, fname); done(); });

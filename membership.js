@@ -321,10 +321,7 @@
 
   /* ── state ────────────────────────────────────────────────────────────── */
   var TYPES=[], TYPEMAP={}, PRICEMAP={};
-  function setTypes(arr){ TYPES=arr||[]; TYPEMAP={}; TYPES.forEach(function(t){ TYPEMAP[t.typeId]=t; });
-    /* v334: the bulk screen (cardbulk.js) needs the same list for its per-row Card type dropdown.
-       Publishing the array we already hold avoids it fetching the types a second time. */
-    try{ window.CARD_TYPES_CACHE=TYPES; }catch(e){} }
+  function setTypes(arr){ TYPES=arr||[]; TYPEMAP={}; TYPES.forEach(function(t){ TYPEMAP[t.typeId]=t; }); }
   function loadTypes(){
     return API.cachedCardTypes().then(function(c){ if(c&&c.length) setTypes(c);
       return API.listCardTypes().then(function(r){ if(r.ok) setTypes(r.types); return TYPES; }).catch(function(){ return TYPES; });
@@ -341,7 +338,6 @@
         '<button class="btn ghost" id="wabUnsentBtn">📤 Send unsent</button>'+
         '<button class="btn ghost" id="cardPriceBtn">Pricing</button>'+
         '<button class="btn ghost" id="cardTypesBtn">Card types</button>'+
-        '<button class="btn ghost" id="issueBulkBtn">+ Issue many</button>'+   /* v334: bulk screen, cardbulk.js */
         '<button class="btn" id="issueCardBtn">+ Issue card</button></div>'+
       '<div id="cardExpBanner"></div>'+
       '<div class="card"><div class="toolbar">'+
@@ -349,8 +345,6 @@
         '<select id="cardStatus"><option value="">All status</option><option value="active">Active</option><option value="expired">Expired</option><option value="cancelled">Cancelled</option><option value="renewed">Renewed</option></select>'+
       '</div><div id="cardList" class="center-load"><span class="loader dark"></span> Loading…</div></div>';
     document.getElementById('issueCardBtn').onclick=function(){ openIssueCardModal(); };
-    var _bulkBtn=document.getElementById('issueBulkBtn');
-    if(_bulkBtn) _bulkBtn.onclick=function(){ if(window.openCardBulk) window.openCardBulk(); else toast('Bulk screen not loaded — upload cardbulk.js.',true); };
     /* v316: bulk WhatsApp send — all the logic lives in bulksend.js */
     document.getElementById('wabModeBtn').onclick=function(){ if(window.WABulk) WABulk.toggleMode(); };
     document.getElementById('wabUnsentBtn').onclick=function(){ if(window.WABulk) WABulk.sendAllUnsent(); };
