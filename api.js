@@ -49,7 +49,7 @@
   var WRITES={createEmployee:1,updateEmployee:1,setStatus:1,resetPassword:1,changePassword:1,createBranch:1,updateBranch:1,
     upsertCardType:1,issueCard:1,renewCard:1,cancelCard:1,setCardPrice:1,markCardSent:1,markCardActivated:1,
     createTask:1,updateTask:1,setTaskStatus:1,deleteTask:1,createCalEntry:1,updateCalEntry:1,saveRecurring:1,setRecurringActive:1,
-    checkIn:1,checkOut:1,setAttendance:1,applyLeave:1,setLeave:1,cancelLeave:1,saveHoliday:1,savePolicy:1,ackPolicy:1,submitClaim:1,setClaim:1,runPayroll:1,approvePayroll:1,confirmAbsent:1,
+    checkIn:1,checkOut:1,setAttendance:1,overrideAttendance:1,applyLeave:1,setLeave:1,cancelLeave:1,saveHoliday:1,savePolicy:1,ackPolicy:1,submitClaim:1,setClaim:1,runPayroll:1,approvePayroll:1,confirmAbsent:1,
     saveDaily:1,verifyDaily:1,rejectDaily:1,addLedger:1,setLedger:1,saveInvoice:1,recordPayment:1,saveBankRows:1,saveBankRule:1,
     saveDeposit:1,verifyDeposit:1,rejectDeposit:1,
     saveItem:1,deleteItem:1,saveVendor:1,deleteVendor:1,saveConsumption:1,saveManualConsumption:1,raiseIndent:1,advanceIndent:1,saveAudit:1,approveAudit:1,
@@ -535,6 +535,10 @@
     staffMonthAttendance:function(empId,ym){ return call('staffMonthAttendance',{token:getToken(),empId:empId,ym:ym}); },
     monthlyAttendance:function(branch,ym){ return call('monthlyAttendance',{token:getToken(),branch:branch,ym:ym}); },
     setAttendance:function(attId,d){ return call('setAttendance',{token:getToken(),attId:attId,data:d}); },
+    /* v338: converts a day to Present (or any status) even when no Attendance row exists yet — unlike
+       setAttendance above, which needs attId (an existing row). Restricted server-side to Operations
+       Manager / MIS / Director (Code.gs apiOverrideAttendance) — the client only builds the request. */
+    overrideAttendance:function(empId,date,d){ return call('overrideAttendance',{token:getToken(),empId:empId,date:date,data:d}); },
     applyLeave:function(d){ return call('applyLeave',{token:getToken(),data:d}); },
     cachedMyLeaves:function(){ return kvGet('myleaves'); },
     myLeaves:function(){ return call('myLeaves',{token:getToken()}).then(function(r){ if(r.ok) kvSet('myleaves',r); return r; }).catch(function(){ return kvGet('myleaves').then(function(x){ return x||{ok:true,leaves:[],balance:{},offline:true}; }); }); },

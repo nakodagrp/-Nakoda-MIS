@@ -1248,9 +1248,51 @@
   }
   function notPunchedLabel(status){ return status==='leave'?'On leave':(status==='absent'?'Absent':'Not punched'); }
   function notPunchedColor(status){ return status==='leave'?['#e9f1fb','#185FA5']:(status==='absent'?['#fdecec','#b23b3b']:['#f1efe8','#5f5e5a']); }
+  /* v338 — owner-requested authority: Operations Manager / MIS / Director can convert a day that
+     shows Absent/Leave/not-punched to Present (or any status), with a reason. Deliberately narrower
+     than canApprove() (which also lets HR and Branch Managers approve a pending punch) — this
+     rewrites attendance HISTORY, so it stays with the three roles the owner named, matching
+     attOverrideAllowed_ in Code.gs (the server enforces this independently; this is just the UI gate). */
+  function canOverrideAtt(){ return S.user && ['Operations Manager','MIS','Director'].indexOf(String(S.user.Role))>=0; }
+  function openOverrideModal(empId, name, date){
+    openModal('Change attendance status',
+      '<div style="text-align:left">'+
+        '<div style="font-size:13px;color:#555;margin-bottom:12px">'+esc(name)+' · '+esc(date)+'</div>'+
+        '<div class="field"><label>New status</label>'+
+          '<select id="ovStatus" style="width:100%;border:1px solid #d9d9d9;border-radius:8px;padding:8px">'+
+            '<option value="present">Present</option><option value="half">Half day</option>'+
+            '<option value="leave">Leave</option><option value="absent">Absent</option>'+
+          '</select></div>'+
+        '<div class="field"><label>Check-in time (optional — e.g. 08:55)</label>'+
+          '<input id="ovCheckIn" placeholder="HH:MM" style="width:100%;border:1px solid #d9d9d9;border-radius:8px;padding:8px;box-sizing:border-box"></div>'+
+        '<div class="field"><label>Reason (required — saved to the audit log)</label>'+
+          '<textarea id="ovReason" rows="3" style="width:100%;border:1px solid #d9d9d9;border-radius:8px;padding:8px;box-sizing:border-box" placeholder="e.g. Punch-in sync bug — selfie confirms she was on-site at 08:55"></textarea></div>'+
+        '<div id="ovMsg" style="color:#b23b3b;font-size:12px;min-height:16px"></div>'+
+      '</div>',
+      '<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="ovSubmit">Save</button>');
+    var btn=document.getElementById('ovSubmit');
+    if(btn) btn.onclick=function(){
+      var status=document.getElementById('ovStatus').value;
+      var checkIn=String(document.getElementById('ovCheckIn').value||'').trim();
+      var reason=String(document.getElementById('ovReason').value||'').trim();
+      var msg=document.getElementById('ovMsg');
+      if(/^\d{1,2}:\d{2}$/.test(checkIn)){ var p=checkIn.split(':'); checkIn=String(p[0]).padStart(2,'0')+':'+p[1]; }
+      else if(checkIn){ msg.textContent='Check-in time must look like 08:55, or leave it blank.'; return; }
+      if(!reason){ msg.textContent='A reason is required.'; return; }
+      btn.disabled=true; btn.textContent='Saving…';
+      API.overrideAttendance(empId, date, {status:status, checkIn:checkIn, reason:reason}).then(function(r){
+        if(!r||!r.ok){ msg.textContent=(r&&r.error)||'Could not save.'; btn.disabled=false; btn.textContent='Save'; return; }
+        closeModal();
+        toast((r.offline?'Saved on this phone — will send when online. ':'')+name+' marked '+stLabel(status).toLowerCase()+' for '+date+'.');
+        loadApprove(_approveCache.date||todayS(), ($id('attApDateTo')||{}).value||'');   // refresh the list this button lives on
+      }).catch(function(){ msg.textContent='Network error — please try again.'; btn.disabled=false; btn.textContent='Save'; });
+    };
+  }
   function renderNotPunched(){
     var box=$id('attApprove'); if(!box) return;
     var list=_approveCache.notPunched||[];
+    var ovDate=_approveCache.date||todayS();
+    var canOv=canOverrideAtt();
     var rows=list.map(function(e){
       var col=notPunchedColor(e.status);
       return '<div class="att-row" style="align-items:center">'+
@@ -1260,10 +1302,14 @@
           '<div class="att-m">ID '+esc(e.empId||'')+(e.branch?(' · '+esc(e.branch)):'')+(e.phone?(' · '+esc(e.phone)):'')+'</div>'+
         '</div>'+
         '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:'+col[0]+';color:'+col[1]+';flex-shrink:0">'+esc(notPunchedLabel(e.status))+'</span>'+
+        (canOv?('<button class="btn sm ghost attOvBtn" data-emp="'+esc(e.empId)+'" data-name="'+esc(e.name)+'" style="flex-shrink:0;margin-left:8px">Change status…</button>'):'')+
         '</div>';
     }).join('');
-    box.innerHTML='<div class="empty" style="text-align:left;padding:6px 2px 10px;font-size:12px;color:#888">Not punched today — '+list.length+'. Tap L again to go back.</div>'+
-      (list.length?rows:'<div class="empty">Everyone active has punched in today.</div>');
+    box.innerHTML='<div class="empty" style="text-align:left;padding:6px 2px 10px;font-size:12px;color:#888">Not punched '+(ovDate===todayS()?'today':('on '+ovDate))+' — '+list.length+'. Tap L again to go back.</div>'+
+      (list.length?rows:'<div class="empty">Everyone active has punched in for this date.</div>');
+    if(canOv) box.querySelectorAll('.attOvBtn').forEach(function(b){
+      b.onclick=function(){ openOverrideModal(b.getAttribute('data-emp'), b.getAttribute('data-name'), ovDate); };
+    });
   }
   function renderApproveRecs(recs){
     var box=$id('attApprove'); if(!box) return;

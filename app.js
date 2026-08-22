@@ -118,7 +118,14 @@ function initInstall(){
    copy, or the upload never landed. APP_BUILD is stamped into the page title tooltip and shown in the
    ⋯ More sheet, and the service worker is asked separately which version IT is serving. When those two
    disagree, the cache is stale; when both are old, the upload did not reach the server. */
-var APP_BUILD='v294';
+/* v338: was stuck at 'v294' while sw.js's CACHE_VERSION moved on to v332d over many deploys — the two
+   are separate hardcoded strings with no build step tying them together, so the "which build am I on"
+   self-check (paintBuildStamp below) could never show ✓ up to date even on a phone running the very
+   latest files; it always read "⚠ mismatch". That silently defeated the one indicator meant to tell
+   someone their app is stale, which matters a lot here: staff who assumed the mismatch banner was just
+   always-on noise had no reliable signal to go tap "Check update" after a real deploy. Bump this to
+   match sw.js's CACHE_VERSION on every deploy that changes sw.js — the two must always agree. */
+var APP_BUILD='v338';
 window.APP_BUILD=APP_BUILD;
 window.SW_BUILD='?';
 try{
