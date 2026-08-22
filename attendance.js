@@ -542,7 +542,13 @@
     var _phPend = (ATT.q.photos||[]).filter(function(p){ return rec && rec.attId && String(p.attId)===String(rec.attId); }).length > 0;
     var photoNote = _phPend ? '<div class="att-note" style="color:#5f6672">📷 Photo uploading in the background — you can close the app.</div>' : '';
     var missingKind = _phPend ? '' : ((rec && !rec._local && rec.checkIn && !rec.selfieInUrl && rec.attId) ? 'in' : ((rec && !rec._local && rec.checkOut && !rec.selfieOutUrl && rec.attId) ? 'out' : ''));
-    var missingNote = missingKind ? '<div class="att-note" style="color:#b23b3b;font-weight:600">⚠ Your '+(missingKind==='in'?'check-in':'check-out')+' selfie didn\'t save — <span id="attFixSelfie" style="text-decoration:underline;cursor:pointer">tap to add it</span></div>' : '';
+    /* v339: same "photo missing" case as before (nothing about when a punch is blocked changes, and
+       the fix is still captureSelfie → API.attachSelfie below) — just impossible to miss instead of a
+       small red line low on the card. Punch time/location were never at risk either way. */
+    var missingNote = missingKind ? '<div class="att-note" style="margin-top:8px;border:1px solid #f5c56b;background:#fff8ea;border-radius:10px;padding:10px 12px;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">'+
+      '<span style="font-weight:700;color:#8a5a00">📷 Your '+(missingKind==='in'?'check-in':'check-out')+' photo is missing</span>'+
+      '<span id="attFixSelfie" style="flex:none;background:#E4292E;color:#fff;font-weight:700;font-size:12.5px;padding:8px 16px;border-radius:999px;cursor:pointer;white-space:nowrap">📷 Add photo now</span>'+
+      '</div>' : '';
     box.innerHTML='<div class="att-card"><div class="att-day">'+['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][now.getDay()]+', '+now.getDate()+' '+MON[now.getMonth()]+'</div>'+
       '<div class="att-sub">'+esc(dutyTxt)+'</div>'+btn+
       '<div class="att-stat">'+esc(stat)+'</div>'+

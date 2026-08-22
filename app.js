@@ -125,7 +125,7 @@ function initInstall(){
    someone their app is stale, which matters a lot here: staff who assumed the mismatch banner was just
    always-on noise had no reliable signal to go tap "Check update" after a real deploy. Bump this to
    match sw.js's CACHE_VERSION on every deploy that changes sw.js — the two must always agree. */
-var APP_BUILD='v338';
+var APP_BUILD='v339';
 window.APP_BUILD=APP_BUILD;
 window.SW_BUILD='?';
 try{
