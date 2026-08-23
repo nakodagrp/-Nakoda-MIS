@@ -19,7 +19,10 @@ var SHELL = [
 ];
 /* The minimum set needed to render a styled, working login screen. These are cached all-or-nothing,
    so a device can NEVER end up with index.html but a missing styles.css (the broken unstyled state). */
-var CRITICAL = ['./','./index.html','./styles.css','./manifest.webmanifest','./config.js','./api.js','./app.js'];
+/* v341: api.js and app.js are gone — they live inside nakoda.bundle.js now. Leaving them here
+   would be fatal, not cosmetic: CRITICAL is all-or-nothing, so one 404 makes install() REJECT
+   and the new version would never activate. */
+var CRITICAL = ['./','./index.html','./styles.css','./manifest.webmanifest','./config.js','./nakoda.bundle.js'];
 var OPTIONAL = SHELL.filter(function(u){ return CRITICAL.indexOf(u)<0; });
 
 /* ============================================================ v288 — WHY BUMPING THE VERSION DIDN'T WORK
