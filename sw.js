@@ -4,45 +4,18 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v339';  /* v339: apiCheckIn/apiCheckOut backend fix for the selfiePending punch protocol (Code.gs — see the v339 header comment there) plus a more visible "photo missing — tap to add it" banner in attendance.js. Also carries v338: attendance override authority (Operations Manager/MIS/Director can convert Absent/Leave to Present, with a reason) added to the "not punched" list in attendance.js — see openOverrideModal/canOverrideAtt. Also fixes app.js's APP_BUILD, which had drifted out of sync with this CACHE_VERSION since v294 and made the "which build am I on" self-check always show a false mismatch. */  /* v332d: QR codes may name their branch in words (pal / udhna / nvs), card picture trimmed to 864px so the send carries the same weight as the old front-only card. */  /* v332: the WhatsApp/card picture is now card front + benefits + card no. + lab no. in one image — membership.js, bulksend.js. */  /* v316: bulk WhatsApp membership-card send — tick cards or “send unsent”, images uploaded in parallel and cached on the card row, all template sends fired together server-side. Includes all of v308. */  /* v308: expenses file as pending (no self-approval), reject needs a reason, duplicate expense/deposit writes made idempotent, card issuing halved its sheet reads. Includes all of v307. */
+var CACHE_VERSION = 'nakoda-mis-v341';  /* v341: ONE BUNDLED SCRIPT — the thirty module files are now served as nakoda.bundle.js, so publishing an update means uploading three files instead of thirty and no file can be silently left behind. config.js stays separate (it holds the live /exec URL). Also carries v340: PATIENT CRM (patients.js + Code_PatientCRM.gs) replaces the Sales CRM — patient database, follow-up calling with tag-driven intervals, bulk branch-wise import, hand-offs into the existing Collect-sample and Issue-card modals, and a per-person performance dashboard. Also carries v339: apiCheckIn/apiCheckOut backend fix for the selfiePending punch protocol (Code.gs — see the v339 header comment there) plus a more visible "photo missing — tap to add it" banner in attendance.js. Also carries v338: attendance override authority (Operations Manager/MIS/Director can convert Absent/Leave to Present, with a reason) added to the "not punched" list in attendance.js — see openOverrideModal/canOverrideAtt. Also fixes app.js's APP_BUILD, which had drifted out of sync with this CACHE_VERSION since v294 and made the "which build am I on" self-check always show a false mismatch. */  /* v332d: QR codes may name their branch in words (pal / udhna / nvs), card picture trimmed to 864px so the send carries the same weight as the old front-only card. */  /* v332: the WhatsApp/card picture is now card front + benefits + card no. + lab no. in one image — membership.js, bulksend.js. */  /* v316: bulk WhatsApp membership-card send — tick cards or “send unsent”, images uploaded in parallel and cached on the card row, all template sends fired together server-side. Includes all of v308. */  /* v308: expenses file as pending (no self-approval), reject needs a reason, duplicate expense/deposit writes made idempotent, card issuing halved its sheet reads. Includes all of v307. */
 var SHELL = [
-  './',
   './index.html',
   './manifest.webmanifest',
   './styles.css',
   './config.js',
-  './api.js',
-  './app.js',
-  './branches.js',
-  './watemplates.js',
-  './membership.js',
-  './bulksend.js',
-  './cardadmin.js',
-  './tasks.js',
-  './calendar.js',
-  './attendance.js',
-  './hrmodules.js',
-  './leave.js',
-  './accounts.js',
-  './training.js',
-  './assets.js',
-  './inventory.js',
-  './stockauto.js',
-  './purchase.js',
-  './payreq.js',
-  './combo.js',
-  './recurring.js',
-  './finance.js',
-  './statementtable.js',
-  './partnerreview.js',
-  './bankpreview.js',
-  './quicklog.js',
-  './extras.js',
+  './nakoda.bundle.js',
   './icons/login-logo.png',
   './icons/logo-white.png',
   './icons/icon-192.png',
   './icons/icon-512.png',
-  './icons/favicon.png'
+  './icons/favicon.png',
 ];
 /* The minimum set needed to render a styled, working login screen. These are cached all-or-nothing,
    so a device can NEVER end up with index.html but a missing styles.css (the broken unstyled state). */

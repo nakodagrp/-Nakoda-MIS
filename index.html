@@ -92,6 +92,9 @@
       <div class="nav-item" data-page="attendance"><span class="ic">&#128338;</span> Attendance</div>
       <div class="nav-item hidden" data-page="recurring"><span class="ic">&#128257;</span> Recurring Tasks</div>
       <div class="nav-item hidden" data-page="taskmon"><span class="ic">&#128203;</span> Follow-ups</div>
+      <div class="nav-group">Patients</div>
+      <div class="nav-item" data-page="patients"><span class="ic">&#9742;</span> Patient CRM</div>
+      <div class="nav-item hidden" data-page="crmperf"><span class="ic">&#9636;</span> CRM Performance</div>
       <div class="nav-group">Operations</div>
       <div class="nav-item hidden" data-page="ops"><span class="ic">&#129514;</span> Sample Collection</div>
       <div class="nav-group">HR</div>
@@ -158,6 +161,8 @@
       <div id="page-recurring" class="hidden"></div>
       <div id="page-taskmon" class="hidden"></div>
       <div id="page-ops" class="hidden"></div>
+      <div id="page-patients" class="hidden"></div>
+      <div id="page-crmperf" class="hidden"></div>
 
       <div id="page-employees" class="hidden">
         <div class="page-head"><h1>Employees</h1><div class="spacer"></div><button class="btn ghost" id="empFormPdfBtn">📄 Blank form PDF</button> <button class="btn" id="addEmpBtn">+ Add Staff</button></div>
@@ -209,37 +214,15 @@
 <!-- v188: xlsx library removed from startup (≈900KB!) — accounts.js now loads it on demand.
      All scripts run with defer: the splash/login paints first, scripts parse without blocking,
      execution order is preserved. -->
+<!-- v341 — ONE BUNDLED SCRIPT INSTEAD OF THIRTY.
+     nakoda.bundle.js is every module joined in exactly the order they used to load in.
+     Publishing an update no longer means dragging thirty files and counting them: one
+     file cannot be half-uploaded. The individual .js files are still the real sources —
+     the bundle is rebuilt from them whenever one changes.
+
+     config.js stays separate on purpose: it holds this installation's live /exec address
+     and must never be overwritten by an update. -->
 <script defer src="config.js"></script>
-<script defer src="api.js"></script>
-<!-- v333: the offline punch queue. Loaded here for the page and imported by sw.js for the
-     service worker, so the SAME queue is flushed whether or not the app is open. -->
-<script defer src="punchq.js"></script>
-<script defer src="app.js"></script>
-<script defer src="branches.js"></script>
-<script defer src="watemplates.js"></script>
-<script defer src="membership.js"></script>
-<script defer src="bulksend.js"></script>
-<script defer src="cardadmin.js"></script>
-<script defer src="tasks.js"></script>
-<script defer src="calendar.js"></script>
-<script defer src="attendance.js"></script>
-<script defer src="hrmodules.js"></script>
-<script defer src="leave.js"></script>
-<script defer src="accounts.js"></script>
-<script defer src="training.js"></script>
-<script defer src="assets.js"></script>
-<script defer src="inventory.js"></script>
-<script defer src="stockauto.js"></script>
-<script defer src="purchase.js"></script>
-<script defer src="payreq.js"></script>
-<script defer src="combo.js"></script>
-<script defer src="recurring.js"></script>
-<script defer src="finance.js"></script>
-<script defer src="statementtable.js"></script>
-<script defer src="partnerreview.js"></script>
-<script defer src="bankpreview.js"></script>
-<script defer src="ops.js"></script>
-<script defer src="quicklog.js"></script>
-<script defer src="extras.js"></script>
+<script defer src="nakoda.bundle.js"></script>
 </body>
 </html>
