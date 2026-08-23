@@ -1,9 +1,7 @@
 /* ============================================================================================
- *  NAKODA MIS — bundled application script   ·   build v342
- *
- *  29 source files, joined in exactly the order index.html used to load them. Same code, same
- *  order, same behaviour — one file so an upload cannot be half done.
- *  DO NOT EDIT — generated. config.js is deliberately not included (it holds the live /exec URL).
+ *  NAKODA MIS — bundled application script   ·   build v344
+ *  29 source files, joined in the order index.html loaded them.
+ *  DO NOT EDIT — generated. config.js is not included (it holds the live /exec URL).
  * ============================================================================================ */
 
 
@@ -517,6 +515,10 @@
     qcInvItems:function(){ return call('qcInvItems',{token:getToken()}); },
     logRepeat:function(d){ return call('logRepeat',{token:getToken(),data:d}); },
     financeDashboard:function(ym,branch){ return call('financeDashboard',{token:getToken(),ym:ym||'',branch:branch||''}); },
+    /* v343: UNUSED. The Log call / Log meeting / Log activity tiles that called this were
+       removed from the dashboard — nothing in the app writes to Activity_Log any more. The
+       server action and the sheet's history are both untouched, so this still works if it is
+       ever wanted again. Left here deliberately rather than deleted. */
     quickLog:function(d){ return call('quickLog',{token:getToken(),data:d}); },
     /* v307: getKpiConfig / saveKpiTarget / saveWeights removed with the KPI & Scoring page. The saved
        targets still drive the profile KPI box server-side; they are just not editable in the app. */
@@ -14202,14 +14204,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
         '</div><div id="pf_auto" class="msg ok" style="margin-top:8px;font-size:12px"></div></div>'+
         '<div class="field full"><label>Next call date</label><input id="pf_next" type="date" value="'+esc(d10(p.nextCallAt))+'"></div>'+
         (isNew?'<div class="field full"><label>First note</label><textarea id="pf_note" rows="2" placeholder="Thyroid profile done 12 Aug. Call back after Diwali."></textarea></div>':'')+
-        '<div class="field full"><label>Membership card</label><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
-          '<select id="pf_card" style="flex:1;min-width:170px">'+
-          ['none','pending','issued'].map(function(s){
-            var lbl={none:'None',pending:'Interested — pending',issued:'Issued'}[s];
-            return '<option value="'+s+'"'+((p.cardStatus||'none')===s?' selected':'')+'>'+lbl+'</option>';
-          }).join('')+'</select>'+
-          ((p.cardStatus==='issued')?'':'<button type="button" class="btn ghost sm" id="pf_issue" style="color:#8C6B1F;border-color:#DFC98D;white-space:nowrap">◆ Issue card now</button>')+
-        '</div></div>'+
+        '<div class="field full"><label>Membership card</label><div id="pf_cardwrap"></div></div>'+
         /* full width: a name like JITENDRAKUMAR K MEHTA (Director) does not fit in half a row */
         '<div class="field full"><label>Assign to</label><select id="pf_assign">'+peopleOptions(p.assignedToEmpId||me())+'</select></div>'+
       '</div>';
@@ -14218,6 +14213,55 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
         '<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="pf_save">'+(isNew?'Save patient':'Save changes')+'</button>');
 
       var chosen=curTag;
+
+      /* ---- the membership-card field ----
+         Someone who already holds a live card does not need a status dropdown or an Issue button:
+         they need to see WHICH card they hold. So this field has two faces. With a card, it shows
+         the card — type, number, validity — and nothing to press. Without one, it shows the three
+         statuses and the Issue button.
+
+         CARD holds what will actually be saved, so the form does not have to read a <select> that
+         may not be on screen. */
+      var CARD = { status:(p.cardStatus||'none'), number:(p.cardNumber||''),
+                   typeName:(p.cardTypeName||''), expiry:(p.cardExpiry||'') };
+
+      function paintCardField(){
+        var w=$id('pf_cardwrap'); if(!w) return;
+
+        if(CARD.status==='issued' && (CARD.number || CARD.typeName)){
+          var bits=[];
+          if(CARD.typeName) bits.push('<b style="text-transform:uppercase;letter-spacing:.04em">'+esc(CARD.typeName)+'</b>');
+          if(CARD.number)   bits.push(esc(CARD.number));
+          if(CARD.expiry)   bits.push('valid to '+esc(niceDate(CARD.expiry)));
+          w.innerHTML='<div style="display:flex;gap:9px;align-items:center;background:#F7EFD8;border:1px solid #DFC98D;border-radius:10px;padding:10px 12px">'+
+            '<span style="font-size:17px;color:#8C6B1F">◆</span>'+
+            '<div style="flex:1;min-width:0;font-size:13px;color:#6E5416;line-height:1.45">'+bits.join(' · ')+'</div>'+
+            '<span style="font-size:9.5px;font-weight:700;letter-spacing:.05em;color:#3B6D11;background:#EAF3DE;border-radius:11px;padding:2px 8px;white-space:nowrap">HAS A CARD</span>'+
+          '</div>';
+          return;
+        }
+
+        /* Marked issued but with no card number to show — an old row, or a card that was cancelled.
+           Fall back to the dropdown rather than displaying an empty gold box, and treat it as
+           "wants a card", which is the truth. */
+        if(CARD.status==='issued') CARD.status='pending';
+
+        w.innerHTML='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'+
+          '<select id="pf_card" style="flex:1;min-width:170px">'+
+            ['none','pending'].map(function(s){
+              var lbl={none:'No card',pending:'Interested — wants a card'}[s];
+              return '<option value="'+s+'"'+(CARD.status===s?' selected':'')+'>'+lbl+'</option>';
+            }).join('')+
+          '</select>'+
+          '<button type="button" class="btn ghost sm" id="pf_issue" style="color:#8C6B1F;border-color:#DFC98D;white-space:nowrap">◆ Issue card now</button>'+
+        '</div>';
+
+        var sel=$id('pf_card');
+        if(sel) sel.onchange=function(){ CARD.status=sel.value; };
+        var ib=$id('pf_issue');
+        if(ib) ib.onclick=function(){ saveThen(function(pid){ handOffCard(pid, null, function(){ load(); }); }); };
+      }
+
       function paintAuto(){
         var box=$id('pf_auto'); if(!box) return;
         var n=nextFromTag(chosen, todayStr());
@@ -14242,6 +14286,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
         };
       });
       paintAuto();
+      paintCardField();
 
       /* ---- look the number up in what the business already knows ----
          Cards and past samples are keyed by mobile, so typing ten digits should fill in the name
@@ -14273,12 +14318,18 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
             bits.push('<div style="font-weight:600;color:#A32D2D">Already on your calling list as '+esc(r.patient.name)+'.</div>'+
               '<button type="button" class="btn ghost sm" id="pf_open" style="margin-top:6px">Open that patient instead</button>');
           }
+          /* A live card takes over the Membership card field above — the card itself, no dropdown
+             and no Issue button. Showing it twice would just be noise, so it is not repeated here. */
           if(r.activeCard){
             var c=r.activeCard;
-            bits.push('<div style="margin-top:'+(bits.length?'8px':'0')+'"><span style="background:#F7EFD8;color:#8C6B1F;border-radius:11px;font-size:9.5px;padding:2px 8px;font-weight:700">◆ HAS A CARD</span> '+
-              esc(c.cardNumber)+(c.expiryDate?(' · valid to '+esc(niceDate(c.expiryDate))):'')+(c.status?(' · '+esc(c.status)):'')+'</div>');
-          } else if(r.cards && r.cards.length){
-            bits.push('<div style="margin-top:8px;font-size:12px;color:#686868">Had '+r.cards.length+' card(s) before, none active now.</div>');
+            CARD.status='issued'; CARD.number=c.cardNumber||'';
+            CARD.typeName=c.typeName||''; CARD.expiry=c.expiryDate||'';
+            paintCardField();
+          } else if(r.expiredCard){
+            var ec=r.expiredCard;
+            bits.push('<div style="margin-top:'+(bits.length?'8px':'0')+';font-size:12.5px;color:#A32D2D">'+
+              'Had a '+esc(ec.typeName||'card')+(ec.expiryDate?(' that expired '+esc(niceDate(ec.expiryDate))):'')+
+              ' — due a renewal.</div>');
           }
           if(r.visits){
             bits.push('<div style="margin-top:8px;font-size:12.5px">'+
@@ -14319,7 +14370,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
         if(num && num.length!==10){ toast('Enter a valid 10-digit mobile number.',true); return; }
         var data={ patientId:p.patientId||'', name:name, number:num,
           address:(val('pf_addr')||'').trim(), tag:chosen,
-          nextCallAt:val('pf_next')||'', cardStatus:$id('pf_card').value,
+          nextCallAt:val('pf_next')||'', cardStatus:CARD.status, cardNumber:CARD.number,
           assignedToEmpId:$id('pf_assign').value||'' };
         var brSel=$id('pf_branch'); if(brSel) data.branchId=brSel.value;
         var noteEl=$id('pf_note'); if(noteEl) data.note=(noteEl.value||'').trim();
@@ -14339,7 +14390,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
         var data={
           patientId:p.patientId||'', name:name, number:num,
           address:(val('pf_addr')||'').trim(), tag:chosen,
-          nextCallAt:val('pf_next')||'', cardStatus:$id('pf_card').value,
+          nextCallAt:val('pf_next')||'', cardStatus:CARD.status, cardNumber:CARD.number,
           assignedToEmpId:$id('pf_assign').value||''
         };
         var brSel=$id('pf_branch'); if(brSel) data.branchId=brSel.value;
@@ -15003,88 +15054,76 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
 
 /* ==== quicklog.js ========================================================= */
 /* ============================================================
- *  Quick log — role-aware one-tap activity tiles on the dashboard.
- *  Logs to Activity_Log, which feeds the Activity scorecard + scores.
+ *  Operations tiles on the dashboard.
  *  window.renderQuickLog(host)
+ *
+ *  v343 — THE ACTIVITY-LOG TILES ARE GONE.
+ *
+ *  This file used to render a strip of "Log call / Log meeting / Log activity" buttons (a
+ *  per-role list, with those three as the fallback for any role not named). Tapping one opened a
+ *  small form and wrote a row to the Activity_Log sheet.
+ *
+ *  Nobody used them, and nothing showed the result: Activity_Log is read only by the staff
+ *  performance scorecard, and staffperf.js is not loaded by this app. So the tiles wrote to a
+ *  sheet no screen displays. Removed at the Director's instruction.
+ *
+ *  WHAT IS DELIBERATELY KEPT. Three tiles that were never activity logs at all — they open real
+ *  operational forms and are the ones a desk reaches for all day:
+ *      Collect sample     -> the phlebotomist diary
+ *      Outsource          -> the outsourcing form
+ *      Order to delivery  -> the counter's lab-visit diary
+ *  Each only appears for someone allowed to use it, exactly as before.
+ *
+ *  If every tile is hidden for this user, the block renders nothing at all rather than an empty
+ *  heading over an empty row.
+ *
+ *  The server still has its quickLog action and the Activity_Log sheet still holds its history —
+ *  nothing was deleted there, so no redeploy is needed and no past record was lost. Nothing in
+ *  the app writes to it any more.
  * ============================================================ */
 (function(){
-  function $id(i){ return document.getElementById(i); }
-  var TILES={
-    'Telecaller':[['call','Log call','📞'],['meeting','Log meeting','👥'],['lead','Add lead','➕'],['followup','Follow-up','🔁']],
-    'CRM':[['call','Log call','📞'],['counsel','Counsel done','💬'],['appointment','Book appt','📅'],['card','Issue card','🏷']],
-    'Sales Executive':[['visit','Log visit','🚗'],['meeting','Log meeting','👥'],['doctor','Add doctor','➕']],
-    'Area Sales Manager':[['visit','Log visit','🚗'],['empanel','Empanel','🤝']],
-    'Marketing Manager':[['lead','Add lead','➕'],['campaign','Campaign note','📣']],
-    'Content Creator':[['reel','Log reel','🎬'],['post','Log post','🖼']],
-    'Survey Person':[['survey','Camp survey','📋'],['lead','Add lead','➕']],
-    'Franchisee Manager':[['lead','Franchise lead','➕'],['meeting','Log meeting','👥'],['visit','Site visit','🚗']],
-    'Phlebotomist':[['sample','Sample collected','🩸'],['homevisit','Home visit','🏠']],
-    'Round Person':[['pickup','Pickup done','📦'],['homevisit','Home visit','🏠']],
-    'Lab Technician':[['processed','Sample processed','🧪'],['qc','QC done','✅']],
-    'Pathologist':[['report','Report verified','📄'],['critical','Critical value','⚠']],
-    'QC Manager':[['qccheck','QC check','✅']],
-    'Branch Manager':[['dailyentry','Daily entry','📊'],['lead','Add lead','➕']],
-    'Accounts':[['verify','Verify collection','📊'],['invoice','Create invoice','🧾']],
-    'Logistics':[['order','Give order','🚚'],['grn','Receive (GRN)','📦']],
-    'HR':[['onboard','Add employee','👤']],
-    'Admin':[['assetcheck','Asset check','🛠']]
-  };
-  function tilesFor(role){ return TILES[role]||[['call','Log call','📞'],['meeting','Log meeting','👥'],['note','Log activity','📝']]; }
-  window.renderQuickLog=function(host){
-    if(!host) return; var role=(window.S&&S.user&&S.user.Role)||''; var t=tilesFor(role);
-    /* v309: "Collect sample" is the first tile for anyone who can record a collection. It is NOT an
-       activity-log tile — it opens the real collection form, so it is rendered separately and never
-       reaches openLog(). Technicians live on the dashboard, which is why it sits here as well as in
-       the sidebar. */
-    /* v318: the Collect sample tile now opens the diary popup — choose the phlebotomist, see his
-       month, click a free time. The old counter form is on the Sample collection page as "Walk-in". */
-    var opsTile=(window.opsCanOrder && window.opsCanOrder() && window.openBookCollection)
-      ? '<button class="btn ghost ql-tile ql-ops" id="qlCollect" style="flex:0 0 auto;display:flex;flex-direction:column;gap:4px;padding:11px 14px;height:auto;min-width:84px;align-items:center;"><span style="font-size:20px">\uD83E\uDDEA</span><span style="font-size:11px">Collect sample</span></button>'
-      : '';
-    /* v314: the home-visit door, beside the walk-in one. Same record, different entry. */
-    /* v319: the Order to delivery tile opens the counter's 5-minute diary. */
-    /* v321: a third operations tile — Outsource. */
-    /* v322 — THE ID CLASH THAT ATE THE OUTCOME. This tile was id="qlOut", and so is the Outcome
-       dropdown inside the quick-log popup below. Both live in the document at once — the tile on the
-       dashboard, the popup appended after it — so getElementById('qlOut') found the BUTTON, read
-       .value off it, got undefined, and every call a CRM logged saved with a blank outcome. Nothing
-       looked wrong on screen, which is why it went unnoticed. Both are renamed to something that
-       says what it is, so neither can be reached by accident again. */
-    var outTile=(window.opsCanOrder && window.opsCanOrder() && window.openOutsource)
-      ? '<button class="btn ghost ql-tile ql-ops" id="qlOutsourceTile" style="flex:0 0 auto;display:flex;flex-direction:column;gap:4px;padding:11px 14px;height:auto;min-width:84px;align-items:center;"><span style="font-size:20px">\uD83D\uDD2C</span><span style="font-size:11px">Outsource</span></button>'
-      : '';
-    var ordTile=(window.opsCanOrder && window.opsCanOrder() && window.openBookLabVisit)
-      ? '<button class="btn ghost ql-tile ql-ops" id="qlOrder" style="flex:0 0 auto;display:flex;flex-direction:column;gap:4px;padding:11px 14px;height:auto;min-width:84px;align-items:center;"><span style="font-size:20px">\uD83C\uDFE0</span><span style="font-size:11px">Order to delivery</span></button>'
-      : '';
-    /* v323: Outsource sits immediately beside Collect sample. Those are the two a desk reaches for
-       all day; Order to delivery is the occasional one and moves behind them. The strip scrolls
-       horizontally on a phone, so the tile that is used most must not be the one that has to be
-       scrolled to. Order matters here and nowhere else — nothing about the tiles themselves changed. */
-    host.innerHTML='<div class="section-label">Quick log <span class="muted" style="font-weight:400;font-size:11px">· counts to your score</span></div>'+
-      '<div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;-webkit-overflow-scrolling:touch;">'+opsTile+outTile+ordTile+
-      t.map(function(x){ return '<button class="btn ghost ql-tile" data-t="'+esc(x[0])+'" data-l="'+esc(x[1])+'" style="flex:0 0 auto;display:flex;flex-direction:column;gap:4px;padding:11px 14px;height:auto;min-width:84px;align-items:center;"><span style="font-size:20px">'+x[2]+'</span><span style="font-size:11px">'+esc(x[1])+'</span></button>'; }).join('')+
-      '</div>';
-    host.querySelectorAll('.ql-tile[data-t]').forEach(function(b){ b.onclick=function(){ openLog(b.getAttribute('data-t'),b.getAttribute('data-l')); }; });
-    var qc=document.getElementById('qlCollect');
-    if(qc) qc.onclick=function(){ window.openBookCollection(function(){ if(window.renderDashboard) try{ window.renderDashboard(); }catch(e){} }); };
-    var qo=document.getElementById('qlOrder');
-    if(qo) qo.onclick=function(){ window.openBookLabVisit(function(){ if(window.renderDashboard) try{ window.renderDashboard(); }catch(e){} }); };
-    var qu=document.getElementById('qlOutsourceTile');
-    if(qu) qu.onclick=function(){ window.openOutsource(function(){ if(window.renderDashboard) try{ window.renderDashboard(); }catch(e){} }); };
-  };
-  function openLog(type,label){
-    var isCM=/call|meeting|visit|followup/i.test(type);
-    var body='<div class="grid2">'+
-      '<div class="field full"><label>Lead / contact <span class="muted">(optional)</span></label><input id="qlEnt" class="in" placeholder="name or number"></div>'+
-      (isCM?'<div class="field"><label>Outcome</label><select id="qlOutcome" class="in"><option value="">—</option><option>Connected</option><option>No answer</option><option>Follow-up set</option><option>Converted</option></select></div>':'')+
-      '<div class="field"><label>Count</label><input id="qlCnt" class="in" type="number" value="1"></div>'+
-      '<div class="field full"><label>Note</label><input id="qlNote" class="in"></div>'+
-    '</div><div id="qlMsg"></div>';
-    openModal(label, body, '<button class="btn" id="qlSave">Save</button>');
-    $id('qlSave').onclick=function(){ var b=this; b.disabled=true;
-      API.quickLog({type:type,entity:$id('qlEnt').value.trim(),outcome:($id('qlOutcome')?$id('qlOutcome').value:''),count:+$id('qlCnt').value||1,note:$id('qlNote').value.trim()}).then(function(r){
-        if(r&&r.ok){ closeModal(); toast('Logged'); } else { b.disabled=false; $id('qlMsg').innerHTML='<div class="msg error">'+esc((r&&r.error)||'Failed')+'</div>'; } }); };
+
+  function tile(id, icon, label){
+    return '<button class="btn ghost ql-tile ql-ops" id="' + id + '" ' +
+           'style="flex:0 0 auto;display:flex;flex-direction:column;gap:4px;padding:11px 14px;' +
+           'height:auto;min-width:84px;align-items:center;">' +
+           '<span style="font-size:20px">' + icon + '</span>' +
+           '<span style="font-size:11px">' + label + '</span></button>';
   }
+
+  window.renderQuickLog = function(host){
+    if(!host) return;
+
+    var canOps = !!(window.opsCanOrder && window.opsCanOrder());
+
+    /* v323: Outsource sits immediately beside Collect sample — those are the two a desk reaches
+       for all day. Order to delivery is the occasional one and goes behind them. The strip scrolls
+       sideways on a phone, so the most-used tile must not be the one you have to scroll to. */
+    var tiles = '';
+    if(canOps && window.openBookCollection) tiles += tile('qlCollect', '🧪', 'Collect sample');
+    if(canOps && window.openOutsource)      tiles += tile('qlOutsourceTile', '🔬', 'Outsource');
+    if(canOps && window.openBookLabVisit)   tiles += tile('qlOrder', '🏠', 'Order to delivery');
+
+    if(!tiles){ host.innerHTML = ''; return; }
+
+    host.innerHTML =
+      '<div class="section-label">Operations</div>' +
+      '<div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;-webkit-overflow-scrolling:touch;">' +
+        tiles +
+      '</div>';
+
+    function after(){ if(window.renderDashboard){ try{ window.renderDashboard(); }catch(e){} } }
+
+    var qc = document.getElementById('qlCollect');
+    if(qc) qc.onclick = function(){ window.openBookCollection(after); };
+
+    var qu = document.getElementById('qlOutsourceTile');
+    if(qu) qu.onclick = function(){ window.openOutsource(after); };
+
+    var qo = document.getElementById('qlOrder');
+    if(qo) qo.onclick = function(){ window.openBookLabVisit(after); };
+  };
+
 })();
 
 
