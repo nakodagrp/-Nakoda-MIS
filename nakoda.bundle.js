@@ -1553,7 +1553,7 @@ function initInstall(){
    someone their app is stale, which matters a lot here: staff who assumed the mismatch banner was just
    always-on noise had no reliable signal to go tap "Check update" after a real deploy. Bump this to
    match sw.js's CACHE_VERSION on every deploy that changes sw.js — the two must always agree. */
-var APP_BUILD='v345';   /* v345: was still 'v339', six deploys behind sw.js's CACHE_VERSION — the same drift v339 itself
+var APP_BUILD='v346';   /* v345: was still 'v339', six deploys behind sw.js's CACHE_VERSION — the same drift v339 itself
    warned about ("bump this on every deploy that changes sw.js"). That's fixed here again; it's a one-line manual
    step with nothing enforcing it, so it's worth checking on every future bundle build too. */
 window.APP_BUILD=APP_BUILD;
@@ -13950,6 +13950,12 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     'Old data': { bg:'#EFF1F3', fg:'#5C646E', pill:'#686868' }
   };
   var OUTLABEL = { answered:'Answered', no_answer:'No answer', busy:'Busy', wrong_number:'Wrong number' };
+  /* v346: 'lost' is deliberately NOT in OUTLABEL. That object drives the row of four outcome
+     buttons, and Lost lead is not a fifth call result — it is a decision never to contact this
+     person again. It gets its own full-width tile below the row, in red, so it cannot be hit by
+     somebody aiming for "Wrong number". OUTLABEL_ALL is what the call history reads. */
+  var OUTLABEL_ALL = { answered:'Answered', no_answer:'No answer', busy:'Busy',
+                       wrong_number:'Wrong number', lost:'LOST LEAD' };
   var TABS = [['cold','Cold leads'],['mine','My leads'],['followups','Follow-ups'],['card','Pending card']];
 
   /* ---------------- small helpers ---------------- */
@@ -14460,7 +14466,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     var events=[];
     (r.calls||[]).forEach(function(x){
       events.push({ at:x.startedAt, kind:'call', by:x.empId,
-        title:'Call — '+(OUTLABEL[x.outcome]||x.outcome)+(x.seconds?(' · '+mmss(x.seconds)):'')+
+        title:'Call — '+(OUTLABEL_ALL[x.outcome]||x.outcome)+(x.seconds?(' · '+mmss(x.seconds)):'')+
               (x.nextCallAt?(' · next '+niceDate(x.nextCallAt)):''),
         body:x.note||'' });
     });
@@ -14575,10 +14581,14 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
             var on=(k===chosen);
             return '<div class="pc-oc" data-o="'+k+'" style="cursor:pointer;border:1px solid '+(on?'#1a7f37':'#ecedf0')+';background:'+(on?'#EAF6EE':'#fff')+';color:'+(on?'#3B6D11':'#5a5a5a')+';font-weight:'+(on?'700':'400')+';border-radius:9px;padding:8px 4px;text-align:center;font-size:11px">'+esc(OUTLABEL[k])+'</div>';
           }).join('')+
+          /* Spans the whole row (grid-column 1/-1) and sits under the four, so it reads as a
+             separate decision rather than a fifth option. Same .pc-oc class, so the existing
+             handler selects it with no extra wiring. */
+          '<div class="pc-oc" data-o="lost" style="grid-column:1/-1;cursor:pointer;border:1px solid '+(chosen==='lost'?'#b23b3b':'#f0d6d6')+';background:'+(chosen==='lost'?'#FDECEC':'#fff')+';color:'+(chosen==='lost'?'#8f2f2f':'#b23b3b')+';font-weight:'+(chosen==='lost'?'700':'600')+';border-radius:9px;padding:9px 4px;text-align:center;font-size:11px;margin-top:2px">\u26D4 Lost lead — never contact again</div>'+
         '</div></div>'+
       '<div class="grid2">'+
         '<div class="field"><label>Talk time</label><input id="pc_secs" placeholder="4m 10s"></div>'+
-        '<div class="field"><label>Next call date</label><input id="pc_next" type="date" value="'+esc(nextFromTag(p.tag, todayStr()))+'"></div>'+
+        '<div class="field"><label>Next call date <span style="color:#b23b3b">*</span></label><input id="pc_next" type="date" value="'+esc(nextFromTag(p.tag, todayStr()))+'"></div>'+
       '</div>'+
       '<div class="msg ok" id="pc_auto" style="font-size:12px"></div>'+
       '<div class="field full" style="margin-top:11px"><label>Notes</label><textarea id="pc_note" rows="2" placeholder="Booked full body check-up for 2 Sept."></textarea></div>'+
@@ -14607,6 +14617,14 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
 
     function paintAuto(){
       var box=$id('pc_auto');
+      if(chosen==='lost'){
+        box.className='msg'; box.style.background='#FDECEC'; box.style.color='#8f2f2f';
+        box.innerHTML='\u26D4 <b>This person will not be contacted again.</b> They disappear from every '+
+                      'calling list, and WhatsApp messages to '+esc(p.number||'their number')+' \u2014 including '+
+                      'membership cards and bulk sends \u2014 will be refused. Reversible: log another call '+
+                      'with a different outcome.';
+        return;
+      }
       if(chosen!=='answered'){
         box.className='msg'; box.style.background='#EFF1F3'; box.style.color='#5C646E';
         box.innerHTML='Could not speak to them — the follow-up date is left as it was.';
@@ -14623,15 +14641,22 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
       el.onclick=function(){
         chosen=el.getAttribute('data-o');
         document.querySelectorAll('#pc_out .pc-oc').forEach(function(x){
+          var isLost=(x.getAttribute('data-o')==='lost');
           var on=(x.getAttribute('data-o')===chosen);
-          x.style.borderColor=on?'#1a7f37':'#ecedf0';
-          x.style.background=on?'#EAF6EE':'#fff';
-          x.style.color=on?'#3B6D11':'#5a5a5a';
-          x.style.fontWeight=on?'700':'400';
+          x.style.borderColor = on ? (isLost?'#b23b3b':'#1a7f37') : (isLost?'#f0d6d6':'#ecedf0');
+          x.style.background  = on ? (isLost?'#FDECEC':'#EAF6EE') : '#fff';
+          x.style.color       = on ? (isLost?'#8f2f2f':'#3B6D11') : (isLost?'#b23b3b':'#5a5a5a');
+          x.style.fontWeight  = on ? '700' : (isLost?'600':'400');
         });
         var nx=$id('pc_next');
-        if(chosen!=='answered') nx.value=d10(p.nextCallAt)||'';
-        else nx.value=nextFromTag(p.tag, todayStr());
+        /* A lost lead has no next call, so the field is emptied and disabled rather than left
+           holding a date that would never be used and would look like a scheduled follow-up. */
+        if(chosen==='lost'){ nx.value=''; nx.disabled=true; nx.style.background='#f3f4f6'; }
+        else {
+          nx.disabled=false; nx.style.background='';
+          if(chosen!=='answered') nx.value=d10(p.nextCallAt)||'';
+          else nx.value=nextFromTag(p.tag, todayStr());
+        }
         paintAuto();
       };
     });
@@ -14657,6 +14682,16 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     };
 
     $id('pc_save').onclick=function(){
+      /* v346: the next call date is required. It was optional, and a caller who skipped it after
+         "no answer" left the OLD date in place — usually already overdue — so the patient sat at
+         the top of Follow-ups permanently, was called again, and still gained no date. Checked
+         here as well as on the server so the caller is told before the request goes out, and so
+         it still holds when the write is queued offline. */
+      if(chosen!=='lost' && !val('pc_next')){
+        toast('Please set the next call date before saving.', true);
+        var nxf=$id('pc_next'); if(nxf){ nxf.style.borderColor='#b23b3b'; try{ nxf.focus(); }catch(e){} }
+        return;
+      }
       var btn=$id('pc_save'); btn.disabled=true; btn.innerHTML='<span class="loader"></span>';
       API.pcLogCall({
         callId:callId, patientId:p.patientId, outcome:chosen,
