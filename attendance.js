@@ -153,9 +153,9 @@
     }).catch(function(){});
   }
 
-  /* Ask for a flush. Always passes the CURRENT session as well, which is what allows a punch
-     whose owner has logged out to be relayed under this login but recorded against its real
-     owner — see the relay note in punchq.js. */
+  /* Ask for a flush. Always passes the CURRENT session as well, which is what lets a punch whose
+     stored token has expired (queued long enough to log out) adopt a fresh one the moment its
+     owner signs back in on this same phone — see the v345 note in punchq.js. */
   var _pqBusy=false, _pqBusyTs=0;
   function pqSync(){
     if(!PQ) return Promise.resolve();
@@ -171,7 +171,10 @@
       onEvent: function(evt){
         if(evt.type==='sent'){
           var mine = String(evt.rec.ownerEmpId||'')===myEmpId();
-          if(mine) toast('Saved punch sent ✓ '+(evt.rec.kind==='in'?'In ':'Out ')+evt.rec.time);
+          if(mine){
+            applyPunchToRecs(evt.rec.kind, evt.result);   // v345: see the note above applyPunchToRecs — this is the line that closes the gap
+            toast('Saved punch sent ✓ '+(evt.rec.kind==='in'?'In ':'Out ')+evt.rec.time);
+          }
         }
       }
     };
@@ -283,6 +286,40 @@
     if(!srv.status && loc.status) srv.status=loc.status;
     return recs;
   }
+  /* ============================================================================================
+     v345 — THE OTHER HALF OF THE FLIP-BACK BUG.
+
+     mergeServerRecs (above) protects every path that reads FROM the server. It cannot protect
+     against a gap that never touches the server at all: the moment a background queue flush
+     confirms a punch, punchq.js deletes it from IndexedDB — so it vanishes from ATT.q.waiting —
+     and only AFTER that does pqSync() go and ask the server to confirm it into ATT.recs. Between
+     those two steps there is a real, repaintable instant where the punch lives in NEITHER place:
+     todayRec() (from ATT.recs) finds nothing, and qToday('in') (from the now-empty queue) finds
+     nothing either. paintMe() reads exactly that in-between moment as "not checked in yet" and
+     draws the green Check-in button — which is the bug reported from the branches: a punch that
+     read correctly for a few seconds, then silently reverted.
+
+     THE FIX. Write the confirmed punch into ATT.recs the INSTANT the queue reports it sent —
+     inside pqSync()'s onEvent, synchronously with the same event that removes it from the queue —
+     rather than waiting for the separate server round-trip. applyLocalPunch (inside submitMark,
+     the live-send path) now shares this same function, so there is one place, not two, that knows
+     how to fold a punch response into today's row. */
+  function applyPunchToRecs(kind, r){
+    var t=todayS(), recs=(ATT.recs||[]), rec=null;
+    for(var i=0;i<recs.length;i++){ if(String(recs[i].date).slice(0,10)===t){ rec=recs[i]; break; } }
+    if(!rec){ rec={date:t}; recs.push(rec); ATT.recs=recs; }
+    rec._local=true;   // marks this as not-yet-confirmed: paintMe must not read a missing selfie URL as "selfie failed to save"
+    if(kind==='in'){
+      rec.checkIn=(r&&r.checkIn)||rec.checkIn||'✓';
+      rec.status=(r&&r.status)||rec.status||'present';
+      if(r&&r.late) rec.late='yes';
+    } else {
+      rec.checkOut=(r&&r.checkOut)||rec.checkOut||'✓';
+      if(r&&r.workHours) rec.workHours=r.workHours;
+      if(r&&r.half) rec.status='half';
+    }
+    if(r&&r.attId) rec.attId=r.attId;
+  }
   function refreshAfterSync(){ API.myAttendance(ymNow()).then(function(x){ if(x&&x.ok){ ATT.recs=mergeServerRecs(x.records); if(document.getElementById('attMe')) paintMe(); } }); }
   /* ============================================================================================
      WHEN THE QUEUE ACTUALLY GETS FLUSHED — v333
@@ -314,6 +351,10 @@
   try{
     /* The connection came back. Cool-offs exist because a send failed, and that reason is gone. */
     window.addEventListener('online', function(){ setTimeout(function(){ pqWake('online'); }, 1200); });
+    /* v345: paint the "You're offline" note the instant the phone actually goes offline, rather
+       than waiting for whatever the next unrelated repaint happens to be. Nothing to sync here —
+       going offline never needs pqWake — just make the screen honest immediately if it's open. */
+    window.addEventListener('offline', function(){ if(document.getElementById('attMe')) paintMe(); });
     /* THE ONE THAT MATTERS ON iOS. A phone coming out of a pocket fires visibilitychange, not
        `online` and not a timer — the timer was frozen the whole time it was in there. */
     document.addEventListener('visibilitychange', function(){ if(!document.hidden) pqWake('visible'); });
@@ -503,9 +544,17 @@
        v333: the wording is now true. Before this build "will send automatically" was a promise
        nothing kept — the retry was a page timer and the page was frozen. It is Background Sync
        that keeps it, so the line says which phone state it survives. */
-    var qNote = (qN && !_opt) ? '<div class="att-note" style="color:#854F0B;font-weight:600">☁ '+qN+' punch'+(qN>1?'es':'')+' saved on this phone — '+
-        'will send by '+(PQ&&self.SyncManager?'itself, even with the app closed':'itself when you next open the app with internet')+
-        '. <span id="attSendNow" style="text-decoration:underline;cursor:pointer;white-space:nowrap">Send now</span></div>' : '';
+    /* v345: a plain, hard-to-miss line when the device genuinely has no connection — the previous
+       single wording ("☁ waiting to send") reads as background noise and staff reported not
+       noticing it. Online-but-still-queued (normal, and usually brief) keeps the original note
+       with its "Send now" link, which is nothing to press while there is no connection to send on. */
+    var qNote = (qN && !_opt) ? (
+      !navigator.onLine
+        ? '<div class="att-note" style="color:#8a5a00;font-weight:600;text-align:left;background:#FEF3E2;border:1px solid #f5c56b;border-radius:9px;padding:9px 11px;margin-top:8px">📶 <b>You\'re offline.</b> '+qN+' punch'+(qN>1?'es':'')+' saved on this phone — it will send by itself the moment you\'re back online. You don\'t need to do anything.</div>'
+        : '<div class="att-note" style="color:#854F0B;font-weight:600">☁ '+qN+' punch'+(qN>1?'es':'')+' saved on this phone — '+
+          'will send by '+(PQ&&self.SyncManager?'itself, even with the app closed':'itself when you next open the app with internet')+
+          '. <span id="attSendNow" style="text-decoration:underline;cursor:pointer;white-space:nowrap">Send now</span></div>'
+    ) : '';
     /* v333 — PUNCHES THAT COULD NOT BE RECORDED ARE NOW SHOWN, NOT SWALLOWED.
        v325 counted a punch's failures and, on the twelfth, deleted it with a toast that was gone
        in three seconds. If the staff member was not looking at the screen at that exact moment —
@@ -1008,22 +1057,7 @@
        again, which is how the same punch ended up being sent two and three times.
        The punch response already tells us everything the button needs (checkIn/checkOut/late/half), so we
        now paint from it IMMEDIATELY and let the authoritative refresh land quietly afterwards. */
-    function applyLocalPunch(r){
-      var t=todayS(), recs=(ATT.recs||[]), rec=null;
-      for(var i=0;i<recs.length;i++){ if(String(recs[i].date).slice(0,10)===t){ rec=recs[i]; break; } }
-      if(!rec){ rec={date:t}; recs.push(rec); ATT.recs=recs; }
-      rec._local=true;   // marks this as not-yet-confirmed: paintMe must not read a missing selfie URL as "selfie failed to save"
-      if(kind==='in'){
-        rec.checkIn=(r&&r.checkIn)||rec.checkIn||'✓';
-        rec.status=(r&&r.status)||rec.status||'present';
-        if(r&&r.late) rec.late='yes';
-      } else {
-        rec.checkOut=(r&&r.checkOut)||rec.checkOut||'✓';
-        if(r&&r.workHours) rec.workHours=r.workHours;
-        if(r&&r.half) rec.status='half';
-      }
-      if(r&&r.attId) rec.attId=r.attId;
-    }
+    function applyLocalPunch(r){ applyPunchToRecs(kind, r); }   // v345: shared with pqSync's onEvent — see the note above applyPunchToRecs
     /* The punch is recorded and we now know WHICH ROW it went into. Hand the photo to the queue,
        addressed to that row. From here it is the queue's problem and nobody is waiting on it. */
     function queuePhoto(r){

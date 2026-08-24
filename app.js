@@ -125,7 +125,9 @@ function initInstall(){
    someone their app is stale, which matters a lot here: staff who assumed the mismatch banner was just
    always-on noise had no reliable signal to go tap "Check update" after a real deploy. Bump this to
    match sw.js's CACHE_VERSION on every deploy that changes sw.js — the two must always agree. */
-var APP_BUILD='v339';
+var APP_BUILD='v345';   /* v345: was still 'v339', six deploys behind sw.js's CACHE_VERSION — the same drift v339 itself
+   warned about ("bump this on every deploy that changes sw.js"). That's fixed here again; it's a one-line manual
+   step with nothing enforcing it, so it's worth checking on every future bundle build too. */
 window.APP_BUILD=APP_BUILD;
 window.SW_BUILD='?';
 try{
@@ -342,6 +344,13 @@ function applyPerms(){
   var canOps=window.opsCanSee ? window.opsCanSee()
     : ((S.perms.level==='SUPER')||S.perms.canViewAll||S.perms.level==='BRANCH_MGR'||S.perms.level==='BRANCH_VIEW');
   document.querySelectorAll('[data-page="ops"]').forEach(function(n){ n.classList.toggle('hidden',!canOps); });
+  /* pc1 — Patient CRM. The calling desk is open to everyone who is signed in: a branch manager,
+     a technician covering the phone, or a CRM executive all work the same list, scoped to their
+     own branch by the server. CRM performance is management-only and mirrors pcCanSeeAllPeople_
+     in Code_PatientCRM.gs — if either list changes, change both. */
+  var canCrmPerf=(S.perms.level==='SUPER')||S.perms.canViewAll||S.perms.level==='HR_ADMIN'||
+                 S.perms.level==='BRANCH_MGR'||(S.user && String(S.user.Role)==='Operations Manager');
+  document.querySelectorAll('[data-page="crmperf"]').forEach(function(n){ n.classList.toggle('hidden',!canCrmPerf); });
   var canMD=(S.perms.level==='SUPER')||(S.user && ['Director','Executive Assistant'].indexOf(S.user.Role)>=0);
   document.querySelectorAll('[data-page="mdinbox"]').forEach(function(n){ n.classList.toggle('hidden',!canMD); });
   /* v197: consultant — bare menu: Dashboard + My Profile ONLY (runs last so it overrides the grants
@@ -379,7 +388,7 @@ var currentPage='dashboard';
 function go(page){
   currentPage=page;
   document.querySelectorAll('.nav-item').forEach(function(n){ n.classList.toggle('active', n.getAttribute('data-page')===page); });
-  ['dashboard','tasks','calendar','attendance','leave','field','policy','training','assets','fixedassets','inventory','payreq','payroll','accounts','recurring','taskmon','employees','profile','branches','watemplates','cards','cardstatus','suggest','mdinbox','ops'].forEach(function(p){ var el=$('page-'+p); if(el) el.classList.toggle('hidden',p!==page); });
+  ['dashboard','tasks','calendar','attendance','leave','field','policy','training','assets','fixedassets','inventory','payreq','payroll','accounts','recurring','taskmon','employees','profile','branches','watemplates','cards','cardstatus','suggest','mdinbox','ops','patients','crmperf'].forEach(function(p){ var el=$('page-'+p); if(el) el.classList.toggle('hidden',p!==page); });
   if(page==='dashboard') loadDashboard();
   if(page==='tasks' && window.renderMyTasks) window.renderMyTasks();
   if(page==='calendar' && window.renderCalendar) window.renderCalendar();
@@ -399,6 +408,9 @@ function go(page){
   if(page==='recurring' && window.renderRecurring) window.renderRecurring();
   if(page==='taskmon' && window.renderTaskMonitor) window.renderTaskMonitor();
   if(page==='ops' && window.renderOps) window.renderOps();
+  /* pc1 — Patient CRM replaces the Sales CRM. */
+  if(page==='patients' && window.renderPatientCRM) window.renderPatientCRM();
+  if(page==='crmperf' && window.renderCrmPerf) window.renderCrmPerf();
   if(page==='employees') loadEmployees();
   if(page==='profile') loadProfile();
   if(page==='branches' && window.renderBranches) window.renderBranches();
@@ -409,7 +421,7 @@ function go(page){
 }
 
 /* ---------- mobile bottom navigation + "More" sheet ---------- */
-var NAVDEF=[['dashboard','▦','Home'],['tasks','✓','Tasks'],['calendar','📅','Calendar'],['attendance','🕒','Attend'],['ops','🧪','Samples'],['recurring','🔁','Recurring'],['taskmon','📋','Follow-ups'],['employees','👥','Staff'],['leave','🌴','Leave'],['field','🚗','Field'],['policy','📋','Policy'],['training','🎓','Training'],['assets','🗂','Information'],['fixedassets','🛠','Asset Mgmt'],['inventory','📦','Inventory'],['payreq','🧾','Payments'],['payroll','💰','Payroll'],['accounts','📊','Accounts'],['cards','🏷','Cards'],['cardstatus','✅','Status'],['suggest','✉','Suggest'],['mdinbox','📨','MD Inbox'],['branches','🏢','Branches'],['watemplates','💬','WA Templates'],['profile','⚙','Profile']];
+var NAVDEF=[['dashboard','▦','Home'],['tasks','✓','Tasks'],['patients','☎','Patients'],['calendar','📅','Calendar'],['attendance','🕒','Attend'],['ops','🧪','Samples'],['crmperf','▤','CRM perf'],['recurring','🔁','Recurring'],['taskmon','📋','Follow-ups'],['employees','👥','Staff'],['leave','🌴','Leave'],['field','🚗','Field'],['policy','📋','Policy'],['training','🎓','Training'],['assets','🗂','Information'],['fixedassets','🛠','Asset Mgmt'],['inventory','📦','Inventory'],['payreq','🧾','Payments'],['payroll','💰','Payroll'],['accounts','📊','Accounts'],['cards','🏷','Cards'],['cardstatus','✅','Status'],['suggest','✉','Suggest'],['mdinbox','📨','MD Inbox'],['branches','🏢','Branches'],['watemplates','💬','WA Templates'],['profile','⚙','Profile']];
 function visibleNav(){ return NAVDEF.filter(function(d){ var el=document.querySelector('.nav-item[data-page="'+d[0]+'"]'); return el && !el.classList.contains('hidden'); }); }
 function navBtn(d){ return '<button data-page="'+d[0]+'"><span class="ic">'+d[1]+'</span><span>'+d[2]+'</span></button>'; }
 function buildMobileBottomNav(){
@@ -800,6 +812,9 @@ function renderDashboard(){
   $('dashExtra').innerHTML=html;
   /* v277: the inline cardYm picker is gone — the header month drives this section (see bindApp). */
   /* v307: Star performers board removed (it lived in staffperf.js, deleted with Staff Performance). */
+  /* pc1 — the Patient CRM bar sits above the quick-log tiles: call queue, dialer shortcut,
+     issue a card, add a patient. The two things that make money, on the screen everyone lands on. */
+  if(window.renderPatientBar){ try{ window.renderPatientBar(document.getElementById('quickLog')); }catch(_){} }
   if(window.renderQuickLog){ try{ window.renderQuickLog(document.getElementById('quickLog')); }catch(_){} }
   var dashBr=(S.perms&&S.perms.canViewAll)?(($('dashBranch')||{}).value||''):'';
   /* v315: the main dashboard carries the lab-arrivals trend. The five-stage pipeline card moved to

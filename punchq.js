@@ -63,6 +63,19 @@
  *  NOTHING IS EVER DELETED QUIETLY. A punch leaves this queue in exactly two ways: the server
  *  accepted it, or it is parked as `dead` with a reason the staff member and their manager can
  *  read. A day's attendance is somebody's pay; it does not get to vanish.
+ *
+ *  ============================ v345 — THE RELAY PATH IS GONE ============================
+ *
+ *  Point 2 above (owner-stamping) stays: every record is still stamped with who tapped it and
+ *  their token, because the service worker has no localStorage and needs its own copy of both to
+ *  send anything at all. What's gone is everything built on top of that for a phone shared
+ *  between two employees — a punch being "relayed" under someone else's live session and
+ *  addressed back to its real owner (relayFor/relayable/needsOwnerLogin). Confirmed: every device
+ *  running this app is one phone, one employee, always. So a record now simply uses its own
+ *  stored token, and if that has gone stale (a session that expired while the punch sat queued)
+ *  it falls back to whatever session is currently signed in — which can only ever be the same
+ *  person, logging back in on their own phone. Simpler code, same guarantee: nothing is ever
+ *  sent under the wrong name, because there is no longer a second name it could be sent under.
  * ============================================================================================ */
 (function(GLOBAL){
 'use strict';
@@ -181,7 +194,6 @@ function pick(list, now){
     var it = q[i];
     if(held(it, now)) continue;              /* a live attempt owns this punch right now */
     if(it.cool && now < it.cool) continue;   /* failed moments ago — give another punch a turn */
-    if(it.needsOwnerLogin && !it.relayable) continue;   /* waiting for its owner to sign in again */
     /* v335: a photo is remembered but set aside. Punches are attendance and go first, always —
        on a bad connection there may only be time for one request, and it must not be a JPEG. */
     if(isPhoto(it)){ if(!photo) photo = it; continue; }
@@ -217,8 +229,8 @@ function post(apiUrl, action, payload, timeoutMs){
           function(e){ if(to) clearTimeout(to); throw e; });
 }
 
-function payloadOf(rec, token, relayFor){
-  var p = {
+function payloadOf(rec, token){
+  return {
     token: token,
     data: {
       punchId: rec.punchId,
@@ -235,12 +247,10 @@ function payloadOf(rec, token, relayFor){
       offline: 1
     }
   };
-  if(relayFor) p.data.relayFor = String(relayFor);
-  return p;
 }
 
 /* ---------------------------------------------------------------- flush
-   opts: { currentToken, currentEmpId, apiUrl, onEvent(evt) }
+   opts: { currentToken, apiUrl, onEvent(evt) }
    Resolves { sent, dead, left, stalled }. It NEVER rejects — the caller decides what a leftover
    means (the service worker rejects its sync event so the OS schedules another attempt). */
 function flush(opts){
@@ -249,48 +259,37 @@ function flush(opts){
 
   function step(){
     return idbAll().then(function(list){
-      var now = Date.now();
-
-      /* Mark anything the owner must sign in for as relayable when we DO hold a valid session
-         for somebody else on this device — that is what lets Ankita's punch go out today,
-         under Ankita's name, from a phone Bhavesh is now holding. */
-      var canRelay = !!(opts.currentToken && opts.currentEmpId);
-      var changed = [];
-      live(list).forEach(function(r){
-        var want = canRelay && String(r.ownerEmpId||'') !== '' ;
-        if(!!r.relayable !== !!want){ r.relayable = want; changed.push(r); }
-      });
-
-      var rec = pick(list, now);
-      if(!rec){ return Promise.all(changed.map(idbPut)).then(function(){ return null; }); }
-      return Promise.all(changed.map(idbPut)).then(function(){ return rec; });
+      return pick(list, Date.now());
     }).then(function(rec){
       if(!rec) return;
 
       var apiUrl = rec.apiUrl || opts.apiUrl;
       if(!apiUrl){ stalled = true; return; }
 
-      /* Always the OWNER's token first. This is the line that stops one person's punch being
-         written onto another person's record. */
-      var useToken = rec.ownerToken || '';
-      var relayFor = '';
-      if(!useToken && opts.currentToken && rec.relayable && !isPhoto(rec)){ useToken = opts.currentToken; relayFor = rec.ownerEmpId; }
-      /* v335: attachSelfie has no relay path — it writes to the row it is given and checks that the
-         caller owns it. A photo whose owner's session is gone therefore cannot be delivered by
-         anybody else, and holding it for ever would only clutter the phone. Drop it and let the
-         "tap to add it" line on the owner's own screen be the recovery. */
+      /* v345 — SIMPLIFIED. This queue used to carry a "relay" path for a shared branch phone: a
+         punch could be handed off and sent under whoever else was signed in on that device, then
+         addressed back to its real owner. Every device is now confirmed one phone, one employee,
+         always — so that entire mechanism (relayFor, relayable, needsOwnerLogin) is gone. A record
+         uses its own stored token, and if that has gone stale the CURRENT session's token is used
+         instead: it can only ever be the same person, logging back in on their own phone. See
+         settle()'s SESSION_GONE branch for where a fresh token gets adopted and saved back. */
+      var useToken = rec.ownerToken || opts.currentToken || '';
+      /* v335: attachSelfie writes to the row it is given and checks that the caller owns it. A
+         photo with no usable session cannot be delivered by anybody else, and holding it forever
+         would only clutter the phone. Drop it and let the "tap to add it" line on the owner's own
+         screen be the recovery. */
       if(isPhoto(rec) && !useToken) return idbDel(rec.punchId);
       if(!useToken){
-        return markKeep(rec, 'needs owner login', {needsOwnerLogin:1});
+        return markKeep(rec, 'no session yet', {});
       }
 
       rec.hold = 1; rec.holdTs = Date.now();
       return idbPut(rec).then(function(){
         if(isPhoto(rec)) return post(apiUrl, 'attachSelfie', {token:useToken, attId:rec.attId, kind:rec.kind, base64:rec.selfie||''}, 60000);
-        return post(apiUrl, rec.kind==='in' ? 'checkIn' : 'checkOut', payloadOf(rec, useToken, relayFor), 45000);
+        return post(apiUrl, rec.kind==='in' ? 'checkIn' : 'checkOut', payloadOf(rec, useToken), 45000);
       }).then(function(r){
         if(isPhoto(rec)) return settlePhoto(rec, r);
-        return settle(rec, r, opts, relayFor);
+        return settle(rec, r, opts);
       }, function(){
         /* No reply at all. The punch may well have landed — the replay is idempotent on punchId,
            so keeping it can never double-punch. Stop the pass; the connection is not there. */
@@ -360,12 +359,12 @@ function flush(opts){
     return idbPut(ph).then(function(){ return idbDel(rec.punchId); }, function(){ return idbDel(rec.punchId); });
   }
 
-  function settle(rec, r, opts, relayFor){
+  function settle(rec, r, opts){
     var em = String((r && r.error) || '');
 
     if(r && r.ok){
       sent++;
-      emit(opts, {type:'sent', rec:rec, result:r, relayed:!!relayFor});
+      emit(opts, {type:'sent', rec:rec, result:r});
       /* v335: the server recorded this punch but is still waiting for its photo. */
       if(rec.selfie && r.selfiePending && r.attId) return handPhoto(rec, r.attId);
       return idbDel(rec.punchId);
@@ -388,22 +387,18 @@ function flush(opts){
     /* Permanently unrecordable. Park it WITH ITS REASON — never delete it in silence. */
     if(PERMANENT.test(em)){ return markDead(rec, em, em); }
 
-    /* The owner's session is gone (they logged out). If someone else is signed in here, relay it
-       under their token but addressed to the owner, so it still lands today, on the right record.
-       If nobody is signed in, hold it until its owner signs in on this phone. */
+    /* v345 — SIMPLIFIED. The session that was stored on this record has expired (the phone sat
+       queued long enough to log out, say). One phone, one employee — so the fix is simply "the
+       same person logs back in," and the moment they do, opts.currentToken IS their fresh token.
+       No relay to someone else is possible or needed any more; if nobody is signed in yet, keep
+       waiting. */
     if(SESSION_GONE.test(em)){
-      if(!relayFor && opts.currentToken && opts.currentEmpId && String(opts.currentEmpId) !== String(rec.ownerEmpId||'')){
-        rec.ownerToken = '';                       /* their token is dead — stop trying it */
-        rec.relayable = true;
-        delete rec.hold; delete rec.holdTs; delete rec.cool;
-        return idbPut(rec);                        /* next step() picks it up and relays it */
-      }
-      if(!relayFor && opts.currentToken && String(opts.currentEmpId||'') === String(rec.ownerEmpId||'')){
-        rec.ownerToken = opts.currentToken;        /* same person, fresh login — adopt the new token */
+      if(opts.currentToken){
+        rec.ownerToken = opts.currentToken;
         delete rec.hold; delete rec.holdTs; delete rec.cool;
         return idbPut(rec);
       }
-      return markKeep(rec, 'needs owner login', {needsOwnerLogin:1, ownerToken:''});
+      return markKeep(rec, 'needs login', {});
     }
     /* Anything else is treated as temporary. There is no attempt cap that deletes a punch any
        more: an unsendable punch becomes visible (see the dead list) rather than disappearing. */
@@ -507,6 +502,8 @@ var Q = {
      Two things fix it. The stager no longer depends on api.js at all (it reads localStorage and
      config.js directly, which exist in every build). And this repairs the records ALREADY stranded
      on phones, so nobody has to clear their app data to recover a day's attendance. */
+  /* v345 — SIMPLIFIED. One phone, one employee, so there is only ever one possible owner for a
+     record on this device — fill in whatever is missing rather than checking a match first. */
   repair: function(token, empId, apiUrl){
     return idbAll().then(function(list){
       var jobs = [];
@@ -514,13 +511,7 @@ var Q = {
         var changed = false;
         if(!r.apiUrl && apiUrl){ r.apiUrl = apiUrl; changed = true; }
         if(!r.ownerEmpId && empId){ r.ownerEmpId = empId; changed = true; }
-        /* Only ever adopt the signed-in token for a punch that has no owner, or whose owner IS the
-           person signed in now. Someone else's punch keeps waiting for them — that rule is the
-           whole point of stamping the owner in the first place and is not relaxed here. */
-        if(!r.ownerToken && token && (!r.ownerEmpId || !empId || String(r.ownerEmpId) === String(empId))){
-          r.ownerToken = token; changed = true;
-        }
-        if(r.needsOwnerLogin && r.ownerToken){ delete r.needsOwnerLogin; changed = true; }
+        if(!r.ownerToken && token){ r.ownerToken = token; changed = true; }
         if(changed){ delete r.cool; delete r.hold; delete r.holdTs; jobs.push(idbPut(r)); }
       });
       return Promise.all(jobs);
