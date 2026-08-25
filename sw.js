@@ -4,7 +4,14 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v346';  /* v346: Patient CRM — a patient is no longer just their mobile number. Bulk import now dedupes on NAME + number, so a family sharing one mobile imports as separate people instead of collapsing to the first row. Membership cards now create leads: a card issued at a branch is assigned to whoever issued it (My leads), a card the member issued themselves from a QR standee lands unassigned in Cold leads, both tagged 'New lead'; pcBackfillLeadsReport()/pcBackfillLeadsApply() file every card already issued. Adds a Lost lead outcome that removes somebody from every calling list and refuses every WhatsApp send to their number (card sends and bulk alike), and makes the next call date mandatory on the call form. Backend: Code_PatientCRM.gs, 06_Cards.gs, 07_WhatsApp.gs, 13_OpsSamples.gs. */  /* v345: fixes the attendance "punch flips back" bug — a punch confirmed by a background
+var CACHE_VERSION = 'nakoda-mis-v348';  /* v348: SELFIES ACTUALLY SAVE. Since v335 the photo was sent as a second, separate
+   request after the punch — so the punch could be recorded while the photo quietly failed on its own, leaving the approver
+   looking at "No selfie" with nothing to act on. The photo now rides inside the punch itself: one request, one row, written
+   complete, or nothing written and the punch stays queued for retry. The speed reason for splitting it no longer applies,
+   because the screen already finishes in 1.2s on its own (FAST_MS) without waiting for the server. A missing selfie also now
+   shows red on the Approve screen rather than a soft grey word. No backend change. Carries v345, below, which was built but
+   never uploaded to GitHub. */
+/* v345: fixes the attendance "punch flips back" bug — a punch confirmed by a background
    queue flush now writes into the screen's own record the instant it's confirmed, before it disappears from the visible queue,
    closing the gap where a just-confirmed Check-out briefly reappeared as Check-in / Not checked in yet (attendance.js —
    applyPunchToRecs). Adds a plain "You're offline — punch saved, will send by itself" banner when the device has no

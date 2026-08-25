@@ -243,8 +243,22 @@
         '<div style="font-size:14px;margin-top:1px;overflow-wrap:anywhere">'+valueHtml+'</div></div>';
     }
     function shot(url,label,empty){
-      if(!url) return '<div style="flex:1;min-width:0"><div style="font-size:11px;color:#888;margin-bottom:4px">'+label+'</div>'+
-        '<div style="height:130px;background:#f6f7f9;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11.5px;color:#b6b9be">'+empty+'</div></div>';
+      /* v348: a missing selfie is no longer a soft grey word. A selfie is required of everyone on
+         every punch, so its absence is something the approver has to SEE and act on, not something
+         the eye slides past. Grey said "nothing here"; red says "this punch is incomplete". The out
+         photo before someone has checked out is the one genuinely blank case — that stays grey. */
+      if(!url){
+        var _pend = /not yet/i.test(String(empty||''));
+        return '<div style="flex:1;min-width:0"><div style="font-size:11px;color:#888;margin-bottom:4px">'+label+'</div>'+
+          (_pend
+            ? '<div style="height:130px;background:#f6f7f9;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11.5px;color:#b6b9be">'+empty+'</div>'
+            : '<div style="height:130px;background:#fdf2f2;border:1px dashed #e0a1a1;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;text-align:center;padding:6px">'+
+                '<div style="font-size:19px;line-height:1">📷</div>'+
+                '<div style="font-size:12px;color:#a3271f;font-weight:700">'+empty+'</div>'+
+                '<div style="font-size:10px;color:#c07a72;line-height:1.35">Selfie is required.<br>Ask them to open Attendance<br>and tap &ldquo;add photo&rdquo;.</div>'+
+              '</div>')+
+          '</div>';
+      }
       /* onerror keeps a failed image from showing browser chrome/alt text — it becomes a neutral tile
          with a link, so the approver can still open the original in Drive. */
       /* 130px tall — at the old 78px a face was not identifiable on a phone, which defeats the point

@@ -1045,8 +1045,33 @@
        server down) the photo travels inside it exactly as before, because at that point nobody is
        waiting on a screen and one request is simpler than two.
        ============================================================================================ */
+    /* ============================================================================================
+       v348 — THE PHOTO TRAVELS WITH THE PUNCH AGAIN, AND IT COSTS NOTHING.
+
+       WHAT v335 DID AND WHY. It split the photo out of the punch: the punch went as a few hundred
+       bytes, and the photo followed a moment later as a separate attachSelfie job. The reason was
+       real — the Drive upload was the first thing apiCheckIn did, so somebody stood at the door
+       watching a four-to-eight second spinner for a file that has no bearing on whether they
+       arrived.
+
+       WHY IT IS NOT WORTH IT. Splitting the photo out gave the selfie a SECOND leg that can fail on
+       its own, silently, after the punch has already been recorded — and when it does, the row is
+       written with a blank selfie and the approver sees "No selfie" with nothing to act on. That is
+       exactly what the Approve screen was showing.
+
+       AND THE SPEED ARGUMENT NO LONGER HOLDS, because v335 ALSO added the FAST_MS paint further
+       down this function: after 1.2 seconds the screen finishes and shows the punch as made,
+       whatever the server is still doing. Nobody waits for the reply any more. So the photo can
+       ride along inside the punch — one request, one row, written complete — and the person still
+       gets their screen back in about a second.
+
+       ONE REQUEST, ONE OUTCOME. Either the punch is recorded with its selfie, or it is not
+       recorded and it stays in the queue to be retried. There is no longer a state where the
+       attendance exists but the photo quietly does not. The server needs no change for this: the
+       inline path is the one apiCheckIn has always had.
+       ============================================================================================ */
     var _photo = selfie || '';
-    var c=ATT.coords||{}, payload={punchId:_pid, selfie:'', selfiePending:(_photo?1:0), lat:c.lat, lng:c.lng, noGeo:!!ATT.noGeo, wfh:!!ATT.wfh, altShift:!!ATT.altShift, remark:(kind==='out'?(ATT.outRemark||''):''), tapDate:_tapDate, tapTime:_tapTime};
+    var c=ATT.coords||{}, payload={punchId:_pid, selfie:_photo, selfiePending:0, lat:c.lat, lng:c.lng, noGeo:!!ATT.noGeo, wfh:!!ATT.wfh, altShift:!!ATT.altShift, remark:(kind==='out'?(ATT.outRemark||''):''), tapDate:_tapDate, tapTime:_tapTime};
     function tdy(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
     /* v283 — WHY THE BUTTON TOOK SO LONG TO CHANGE.
        The punch itself finishes, and then this used to wait for a FULL myAttendance round trip before
@@ -1060,8 +1085,13 @@
     function applyLocalPunch(r){ applyPunchToRecs(kind, r); }   // v345: shared with pqSync's onEvent — see the note above applyPunchToRecs
     /* The punch is recorded and we now know WHICH ROW it went into. Hand the photo to the queue,
        addressed to that row. From here it is the queue's problem and nobody is waiting on it. */
+    /* v348: the photo now goes inside the punch, so this normally has nothing to do. It stays as a
+       fallback for the one case that can still happen: an OLDER deployment that answers with
+       selfiePending set, meaning it recorded the punch but is expecting the photo separately.
+       Without this, a phone on the new build talking to an old server would lose the photo. */
     function queuePhoto(r){
       if(!_photo) return;
+      if(!(r && r.selfiePending)) { _photo=''; return; }   /* the punch already carried it */
       var attId = (r && r.attId) || '';
       /* No attId means we cannot say which row the photo belongs to — an old server, or a replay
          of an answer from before this build. Drop it; the "⚠ selfie didn't save — tap to add it"
