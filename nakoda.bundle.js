@@ -611,6 +611,10 @@
     pcImport:function(d){ return call('pcImport',{token:getToken(),data:d||{}},120000); },
     pcDash:function(branch,ym){ return call('pcDash',{token:getToken(),branch:branch||'',ym:ym||''}); },
     pcHours:function(branch,date){ return call('pcHours',{token:getToken(),branch:branch||'',date:date||''}); },
+    /* v349 — how many calls each future day already holds, for the busy-day warning on the
+       next-call-date box. A pure read, so it never queues; if it fails the box simply shows no
+       warning rather than blocking anybody from saving a call. */
+    pcDayLoad:function(branch,mineOnly){ return call('pcDayLoad',{token:getToken(),branch:branch||'',mineOnly:!!mineOnly}); },
     /* v314 — the five-stage pipeline */
     saveOrder:function(d){ return call('saveOrder',{token:getToken(),data:d}); },
     completeVisit:function(id,d){ return call('completeVisit',{token:getToken(),sampleId:id,data:d||{}}); },
@@ -1553,7 +1557,13 @@ function initInstall(){
    someone their app is stale, which matters a lot here: staff who assumed the mismatch banner was just
    always-on noise had no reliable signal to go tap "Check update" after a real deploy. Bump this to
    match sw.js's CACHE_VERSION on every deploy that changes sw.js — the two must always agree. */
-var APP_BUILD='v348';   /* v348: the selfie now travels INSIDE the punch instead of following it as a separate job, so a
+var APP_BUILD='v349';   /* v349: Patient CRM round 3. Pending card now decides who holds a membership card by looking their
+   MOBILE NUMBER up in the card sheet instead of trusting a column on the patient row, so counter-issued cards and a relative's
+   card on the same family number finally count. The next-call-date field became a box you type the GAP into — 3m, 2w, 7,
+   25/11 — with the real date spelled out beside it and a warning when that day is already overloaded; no date picker opens
+   unless you ask for one. And from a call, "Book a home visit" now opens the same booking popup the dashboard opens, with the
+   patient filled in, instead of the log-a-collected-sample form that demanded tests and a prescription nobody has yet. */
+/* v348:   /* v348: the selfie now travels INSIDE the punch instead of following it as a separate job, so a
    punch is either recorded complete (time + location + photo) or not recorded at all. There is no longer a state where the
    attendance row exists and the photo quietly does not — which is why the Approve screen was showing "No selfie". A missing
    selfie now also shows red on the Approve screen instead of grey, because it is required of everyone. Carries v345, which
@@ -13252,7 +13262,20 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
       if(h) h.innerHTML='<div class="ops-slot-msg err">Could not reach the server. Booking needs a connection.</div>'; });
   }
 
-  window.openBookCollection=function(after){
+  /* v349: `prefill` added so the Patient CRM can open THIS popup — the same one the dashboard
+     opens — instead of the "log a sample already collected" form, which demands tests, an amount
+     and a prescription that do not exist while somebody is still on the phone. Called with no
+     prefill (every existing caller) nothing below behaves differently. See handOffSample in
+     patients.js.
+
+       prefill.name / .mobile / .address / .branchId   fill the form in
+       prefill.lock             name and mobile become read-only — the person on the call must not
+                                be typed over by a slip of the hand
+       prefill.amountOptional   the amount may be left blank; the phlebotomist fills it in at the
+                                door, where the prescription actually is
+       prefill.fromLabel        shown in the title, so it is obvious where the booking came from */
+  window.openBookCollection=function(after, prefill){
+    prefill = prefill || null;
     if(!window.opsCanOrder()){ toast('Your role cannot book a collection.',true); return; }
     if(typeof navigator!=='undefined' && navigator.onLine===false){
       toast('Booking needs a connection — his diary cannot be read offline.',true); return;
@@ -13276,15 +13299,41 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
         /* v318a: Tests and Age removed at your instruction. Tests are decided at the door with the
            prescription in hand; age was being left blank anyway. Both columns still exist and are
            still written by the walk-in form, so nothing on the board or in the sheet moved. */
-        '<div class="field"><label>Amount (&#8377;) *</label><input id="odAmt" class="in" type="number" inputmode="numeric" placeholder="850"></div>'+
+        '<div class="field"><label>Amount (&#8377;) '+((prefill&&prefill.amountOptional)?'<span class="muted">the phlebotomist can fill this in</span>':'*')+'</label>'+
+          '<input id="odAmt" class="in" type="number" inputmode="numeric" placeholder="850"></div>'+
         '<div class="field"><label>Sex <span class="muted">optional</span></label><select id="odSex" class="in"><option value="">&mdash;</option><option>Female</option><option>Male</option><option>Other</option></select></div>'+
         '<div class="field full"><label>Remark <span class="muted">optional</span></label><input id="odNote" class="in" placeholder="Call before arriving"></div>'+
       '</div><div id="odMsg"></div>';
 
-    openModal('Sample collection — book a visit', body,
+    openModal('Sample collection — book a visit'+((prefill&&prefill.fromLabel)?(' · '+String(prefill.fromLabel)):''), body,
       '<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="bkSave">Book collection</button>');
 
     wirePatientSearch();
+
+    /* v349 — apply the Patient CRM pre-fill. Deliberately after wirePatientSearch, so the locked
+       fields are not left with a live type-ahead dropdown attached to a name nobody may change. */
+    if(prefill){
+      (function(){
+        function set(id, v, lock){
+          var e=$id(id); if(!e || v==null || v==='') return;
+          e.value=v;
+          if(lock && prefill.lock){
+            e.setAttribute('readonly','readonly');
+            e.style.background='#f6f7f9'; e.style.color='#5a5a5a';
+            e.onfocus=null; e.oninput=null;      /* kill the patient search on a field that is fixed */
+          }
+        }
+        set('odName', prefill.name,    true);
+        set('odMob',  prefill.mobile,  true);
+        set('odAddr', prefill.address, false);   /* editable — somebody still has to find the house */
+        var br=$id('bkBranch');
+        if(br && prefill.branchId){
+          for(var i=0;i<br.options.length;i++){
+            if(String(br.options[i].value)===String(prefill.branchId)){ br.selectedIndex=i; break; }
+          }
+        }
+      })();
+    }
 
     function loadPeople(){
       var sel=$id('bkWho'); if(!sel) return;
@@ -13329,12 +13378,17 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
       if(!name) return bad('Enter the patient name.');
       if(mob.length!==10) return bad('Enter a 10-digit mobile number.');
       if(!addr) return bad('Enter the address — somebody has to find this patient.');
-      if(amt===''||isNaN(Number(amt))) return bad('Enter the amount.');
+      /* v349: from the Patient CRM the amount may be blank — the price follows the prescription and
+         the prescription is at the door. A typed amount is still validated. Dashboard bookings,
+         which have no prefill, keep demanding it exactly as before. */
+      var amtOpt = !!(prefill && prefill.amountOptional);
+      if(amt===''){ if(!amtOpt) return bad('Enter the amount.'); }
+      else if(isNaN(Number(amt))) return bad('Enter the amount as a number.');
       var sl=null; for(var i=0;i<_bk.slots.length;i++){ if(_bk.slots[i].min===_bk.pick){ sl=_bk.slots[i]; break; } }
       if(!sl) return bad('Pick a time on his diary.');
       btn.disabled=true; $id('odMsg').innerHTML='';
       API.saveOrder({ clientId:cid(), branchId:($id('bkBranch')||{}).value||'', patientName:name, mobile:mob,
-        tests:'', amount:Number(amt), appointmentAt:sl.at, appointmentDate:_bk.date, address:addr,
+        tests:'', amount:(amt===''?0:Number(amt)), appointmentAt:sl.at, appointmentDate:_bk.date, address:addr,
         assignedToEmpId:_bk.empId, sex:($id('odSex').value||''),
         remarks:($id('odNote').value||'').trim()
       }).then(function(r){
@@ -14072,6 +14126,15 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     return '<span style="font-size:10.5px;color:#9aa0a6">due '+esc(niceDate(p.nextCallAt))+'</span>';
   }
   function cardChip(p){
+    /* v349: the server now settles the card question by looking the patient's MOBILE NUMBER up in
+       the card sheet, not by trusting a column on the patient row — so a card issued at the counter
+       or carried by a relative on the same family number counts. cardVia says which it was, and the
+       chip says so out loud: telling a caller "this is his wife's card" is the difference between a
+       useful call and an embarrassing one. */
+    if(p.cardStatus==='issued' && p.cardVia==='family')
+      return '<span style="background:#E6F0E5;color:#2F6B33;border-radius:11px;font-size:9.5px;padding:2px 8px;font-weight:700" '+
+             'title="'+esc(p.cardHolderName||'')+' holds this card on the same mobile number">◆ FAMILY CARD'+
+             (p.cardNumber?(' · '+esc(p.cardNumber)):'')+'</span>';
     if(p.cardStatus==='issued')
       return '<span style="background:#F7EFD8;color:#8C6B1F;border-radius:11px;font-size:9.5px;padding:2px 8px;font-weight:700">◆ CARD'+(p.cardNumber?(' · '+esc(p.cardNumber)):'')+'</span>';
     if(p.cardStatus==='pending')
@@ -14121,6 +14184,259 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     t.setDate(Math.min(d,last));
     return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0');
   }
+
+  /* ============================================================================================
+     v349 — TYPE THE GAP. SETTING A CALL-BACK DATE WITHOUT OPENING A CALENDAR.
+
+     WHAT WAS SLOW, AND IT WAS NOT THE CALENDAR BEING MISSING. The field was a bare
+     <input type="date">. Clicking it opens a date picker, and to reach "three months from now"
+     somebody navigates to the right month, finds the day, clicks it. Every single call. And the
+     year is exactly where a follow-up quietly gets booked into the wrong one.
+
+     Nobody on a call thinks in dates anyway. They think "call her in three months". So this asks
+     that question instead: a small box you type the GAP into. Two keystrokes — 3m — and the real
+     date appears underneath in words, spelled out, with the weekday. Wrong years become obvious
+     instead of invisible, because you are reading "Wed, 25 November 2026" rather than 25-11-2026.
+
+     It fills itself in from the tag when the popup opens, so the ordinary call needs no typing
+     at all.
+
+     THE INPUT ITSELF DOES NOT MOVE. The original <input type="date"> is still here with the same
+     id — just hidden behind "pick exact date" for the patient who says "the 14th, I'm travelling
+     till then". Everything that reads val('pc_next') or writes $id('pc_next').value keeps working
+     untouched; it only has to call dpSync afterwards to repaint.
+     ============================================================================================ */
+  var DP_CAP  = 40;    /* calls per day past which a day is "full" — matches PC_SPREAD_PER_DAY_ on the server */
+  var DP_WARM = 24;    /* ...and past which it is "getting full" */
+  var DP_LOAD = null;  /* { 'yyyy-mm-dd': count } once fetched; shared by every box this session */
+
+  function dpAdd(from, n, unit){
+    var base = from ? new Date(from+'T00:00:00') : new Date();
+    if(isNaN(base)) base = new Date();
+    n = parseInt(n,10) || 0;
+    if(unit === 'd'){ base.setDate(base.getDate()+n); }
+    else if(unit === 'w'){ base.setDate(base.getDate()+n*7); }
+    else {
+      /* month arithmetic the way a person means it: the 31st plus one month is the 28th of
+         February, not the 3rd of March. Years are just twelve months. */
+      if(unit === 'y') n = n*12;
+      var d = base.getDate();
+      var t = new Date(base.getFullYear(), base.getMonth()+n, 1);
+      var last = new Date(t.getFullYear(), t.getMonth()+1, 0).getDate();
+      t.setDate(Math.min(d,last));
+      base = t;
+    }
+    return base.getFullYear()+'-'+String(base.getMonth()+1).padStart(2,'0')+'-'+String(base.getDate()).padStart(2,'0');
+  }
+  function dpNextDay(d){ var x=new Date(d+'T00:00:00'); x.setDate(x.getDate()+1);
+    return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0'); }
+  function dpIsSunday(d){ var x=new Date(d+'T00:00:00'); return !isNaN(x) && x.getDay()===0; }
+  function dpNice(d){
+    var x=new Date(d+'T00:00:00'); if(isNaN(x)) return '';
+    var D=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
+        M=['January','February','March','April','May','June','July','August','September','October','November','December'];
+    return D[x.getDay()]+', '+x.getDate()+' '+M[x.getMonth()]+' '+x.getFullYear();
+  }
+  function dpShort(d){
+    var x=new Date(d+'T00:00:00'); if(isNaN(x)) return '';
+    var M=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var s=x.getDate()+' '+M[x.getMonth()];
+    if(x.getFullYear()!==new Date().getFullYear()) s+=' '+String(x.getFullYear()).slice(2);
+    return s;
+  }
+
+  /* ------------------------------------------------------------------ what the box understands
+     Returns { date:'yyyy-mm-dd', said:'3 months' } or null. Deliberately forgiving — "3 m",
+     "3months", "3M" and "3" all mean something sensible, because a caller is typing this with a
+     patient on the line and should never be corrected by a form. */
+  function dpParse(txt){
+    var s = String(txt||'').trim().toLowerCase().replace(/\s+/g,'');
+    if(!s) return null;
+    var today = todayStr();
+
+    if(s==='today')                     return { date: today, said:'today' };
+    if(s==='tom'||s==='tmr'||s==='tomorrow') return { date: dpAdd(today,1,'d'), said:'tomorrow' };
+
+    /* a bare number is days — "7" is the commonest thing anyone types */
+    var m = s.match(/^(\d{1,4})$/);
+    if(m) return { date: dpAdd(today, m[1], 'd'), said: m[1]+' day'+(m[1]==='1'?'':'s') };
+
+    /* number + unit: 7d  2w  3m  1y  (the unit may be spelled out) */
+    m = s.match(/^(\d{1,4})(d|w|m|y|day|days|week|weeks|month|months|year|years)$/);
+    if(m){
+      var u = m[2].charAt(0), n = m[1];
+      var word = {d:'day', w:'week', m:'month', y:'year'}[u];
+      return { date: dpAdd(today, n, u), said: n+' '+word+(n==='1'?'':'s') };
+    }
+
+    /* an actual day: 25/11 or 25-11 — the next time that date comes round.
+       25/11/26 and 25/11/2026 are taken literally. */
+    m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})(?:[\/\-.](\d{2,4}))?$/);
+    if(m){
+      var dd=parseInt(m[1],10), mm=parseInt(m[2],10), yy=m[3]?parseInt(m[3],10):null;
+      if(dd>=1 && dd<=31 && mm>=1 && mm<=12){
+        if(yy!==null){ if(yy<100) yy += 2000; }
+        else {
+          yy = new Date().getFullYear();
+          var tryIt = yy+'-'+String(mm).padStart(2,'0')+'-'+String(dd).padStart(2,'0');
+          if(tryIt <= today) yy++;                    /* already gone this year -> next year */
+        }
+        var out = yy+'-'+String(mm).padStart(2,'0')+'-'+String(dd).padStart(2,'0');
+        var chk = new Date(out+'T00:00:00');
+        if(isNaN(chk) || chk.getDate()!==dd) return null;   /* 31 Feb and friends */
+        return { date: out, said:'that date' };
+      }
+    }
+    return null;
+  }
+
+  /* The first working day after `d` that is not already full for this caller. */
+  function dpLighter(d){
+    var n=d, guard=0;
+    while(guard++ < 400){
+      n = dpNextDay(n);
+      if(dpIsSunday(n)) continue;
+      if(((DP_LOAD||{})[n]||0) < DP_WARM) return n;
+    }
+    return '';
+  }
+  /* What someone would have typed to land on this date — so the box shows "3m" and not a date. */
+  function dpGuess(v){
+    if(!v) return '';
+    var today=todayStr();
+    /* Ordered by how a person would SAY it, not by size — 2w beats 14d, 1m beats 30d — so the box
+       shows the phrase somebody would have typed rather than an arithmetically equal one. */
+    var units=[['d',1],['d',2],['d',3],['d',4],['d',5],['d',6],['w',1],['d',10],['w',2],['d',15],
+               ['w',3],['m',1],['d',45],['m',2],['m',3],['m',4],['m',5],['m',6],['m',9],['y',1],['y',2]];
+    for(var i=0;i<units.length;i++){
+      if(dpAdd(today, units[i][1], units[i][0])===v) return String(units[i][1])+units[i][0];
+    }
+    var x=new Date(v+'T00:00:00');
+    if(isNaN(x)) return '';
+    return x.getDate()+'/'+(x.getMonth()+1);
+  }
+  /* 3031 is a number you have to count the digits of. 3,031 is one you read. */
+  function dpThou(n){ return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+
+  /* The markup. `id` is the id the ORIGINAL date input had, so nothing that reads it moves. */
+  function datePad(id, value, tag){
+    var v = d10(value)||'';
+    return '<div class="dp" id="'+id+'_pad" data-tag="'+esc(tag||'')+'">'+
+      '<div style="display:flex;gap:8px;align-items:stretch">'+
+        '<input id="'+id+'_txt" class="dp-txt" autocomplete="off" spellcheck="false" placeholder="3m" '+
+          'value="'+esc(dpGuess(v))+'" '+
+          'style="flex:none;width:104px;text-align:center;font-size:17px;font-weight:800;'+
+          'border:1.5px solid #0A2E20;border-radius:9px;padding:9px 6px;background:#fff">'+
+        '<div id="'+id+'_res" style="flex:1;min-width:0;background:#EAF6EE;border:1px solid #c9e3cf;border-radius:9px;'+
+          'padding:7px 11px;display:flex;align-items:center;justify-content:space-between;gap:9px">'+
+          '<div style="min-width:0">'+
+            '<div id="'+id+'_big" style="font-size:14.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>'+
+            '<div id="'+id+'_why" style="font-size:11px;color:#4E7A57;font-weight:700;margin-top:1px"></div>'+
+          '</div>'+
+          '<span class="dp-exact" style="flex:none;cursor:pointer;color:#686868;text-decoration:underline;font-size:11px;white-space:nowrap">exact date</span>'+
+        '</div>'+
+      '</div>'+
+      '<div id="'+id+'_help" style="margin-top:6px;font-size:10.5px;color:#9aa0a6;line-height:1.6">'+
+        'Type a gap: <b>7</b> = 7 days &middot; <b>2w</b> = 2 weeks &middot; <b>3m</b> = 3 months &middot; '+
+        '<b>1y</b> = 1 year &middot; <b>25/11</b> = that day &middot; <b>tom</b> = tomorrow'+
+      '</div>'+
+      '<input id="'+id+'" type="date" value="'+esc(v)+'" style="display:none;margin-top:8px;width:100%">'+
+      '<div id="'+id+'_busy" style="margin-top:8px"></div>'+
+    '</div>';
+  }
+
+  /* Repaint from whatever the hidden input currently holds. Safe to call at any time, and safe to
+     call for an id that has no pad. */
+  function dpSync(id, keepTyping){
+    var pad=$id(id+'_pad'), inp=$id(id); if(!pad||!inp) return;
+    var v=d10(inp.value)||'';
+    var txt=$id(id+'_txt');
+    if(txt && !keepTyping) txt.value = dpGuess(v);
+
+    var big=$id(id+'_big'), why=$id(id+'_why'), res=$id(id+'_res');
+    var tag=pad.getAttribute('data-tag')||'';
+    var parsed = txt ? dpParse(txt.value) : null;
+
+    if(big) big.textContent = v ? dpNice(v) : 'No date set';
+    if(why){
+      if(!v) why.textContent = 'A next call date is required.';
+      else if(parsed && parsed.date===v) why.textContent = '↻ '+parsed.said+
+              (nextFromTag(tag,todayStr())===v ? (' — the default for '+tag) : '');
+      else why.textContent = '↻ chosen date';
+    }
+    if(res){
+      var bad=!v;
+      res.style.background  = bad ? '#fdf2f2' : '#EAF6EE';
+      res.style.borderColor = bad ? '#e0a1a1' : '#c9e3cf';
+      if(why) why.style.color = bad ? '#a3271f' : '#4E7A57';
+    }
+    if(txt){
+      var unread = !!(txt.value && !parsed);
+      txt.style.borderColor = unread ? '#DA1017' : '#0A2E20';
+      if(unread && why){ why.textContent = 'Not understood — try 7, 2w, 3m, 1y or 25/11'; why.style.color='#a3271f'; }
+    }
+
+    /* how loaded is that day already */
+    var busy=$id(id+'_busy'); if(!busy) return;
+    if(!v || !DP_LOAD){ busy.innerHTML=''; return; }
+    var n=DP_LOAD[v]||0;
+    if(n < DP_WARM){ busy.innerHTML=''; return; }
+    var lighter=dpLighter(v);
+    busy.innerHTML=
+      '<div style="background:#FDF6E7;border:1px solid #f0d9a8;border-radius:9px;padding:8px 10px;font-size:11.5px;color:#8A5A0B;line-height:1.45">'+
+        '⚠ <b>'+esc(dpShort(v))+' already has '+dpThou(n)+' call'+(n===1?'':'s')+' booked.</b>'+
+        (n>=DP_CAP?' That is more than one person can make in a day — they will roll over as overdue.':'')+
+      '</div>'+
+      (lighter
+        ? '<div class="dp-move" data-d="'+lighter+'" style="cursor:pointer;margin-top:6px;border:1px solid #1a7f37;color:#1a7f37;'+
+          'background:#F5FBF6;border-radius:8px;padding:7px 10px;font-size:11.5px;font-weight:800;text-align:center">'+
+          '→ Use '+esc(dpShort(lighter))+' instead · '+dpThou(DP_LOAD[lighter]||0)+' call'+((DP_LOAD[lighter]||0)===1?'':'s')+'</div>'
+        : '');
+    var mv=busy.querySelector('.dp-move');
+    if(mv) mv.onclick=function(){
+      inp.value=mv.getAttribute('data-d'); dpSync(id);
+      if(typeof window.__dpAfter==='function') window.__dpAfter(id);
+    };
+  }
+
+  /* Wire one box. `after` runs whenever the date changes, so the screen around it can repaint. */
+  function wireDatePad(id, after){
+    var pad=$id(id+'_pad'), inp=$id(id); if(!pad||!inp) return;
+    window.__dpAfter=after||null;
+    function changed(keepTyping){ dpSync(id, keepTyping); if(after) after(id); }
+
+    var txt=$id(id+'_txt');
+    if(txt){
+      txt.oninput=function(){
+        var r=dpParse(txt.value);
+        /* an unreadable half-typed entry must not wipe a good date — only a parse sets it */
+        if(r) inp.value=r.date;
+        else if(!txt.value) inp.value='';
+        changed(true);
+      };
+      /* Enter is how a fast typist finishes a field; make it settle rather than submit. */
+      txt.onkeydown=function(e){ if(e && e.key==='Enter'){ e.preventDefault(); txt.blur(); } };
+      txt.onblur=function(){ dpSync(id); };
+    }
+    var ex=pad.querySelector('.dp-exact');
+    if(ex) ex.onclick=function(){
+      inp.style.display='block';
+      try{ inp.focus(); if(inp.showPicker) inp.showPicker(); }catch(e){}
+    };
+    inp.onchange=function(){ changed(false); };
+
+    dpSync(id);
+    /* Fetch the day loads once, then repaint. Deliberately fire-and-forget: if it fails or the
+       device is offline the box works exactly as before, just without the busy warning. */
+    if(DP_LOAD===null && typeof API!=='undefined' && typeof API.pcDayLoad==='function'){
+      DP_LOAD={};
+      API.pcDayLoad(PC.branch||'', !META.canViewAll).then(function(r){
+        if(r&&r.ok&&r.days){ DP_LOAD=r.days; dpSync(id); }
+      }, function(){});
+    }
+  }
+
+
 
   /* ============================================================ SCREEN 1 — the four lists */
   function renderPatientCRM(){
@@ -14282,7 +14598,9 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
             return '<div class="pf-tag" data-t="'+esc(t)+'" style="cursor:pointer;padding:5px 12px;border-radius:16px;font-size:12px;border:1px solid '+(on?m.pill:'#ecedf0')+';background:'+(on?m.pill:'#fff')+';color:'+(on?'#fff':'#666')+';font-weight:'+(on?'600':'400')+'">'+esc(t)+'</div>';
           }).join('')+
         '</div><div id="pf_auto" class="msg ok" style="margin-top:8px;font-size:12px"></div></div>'+
-        '<div class="field full"><label>Next call date</label><input id="pf_next" type="date" value="'+esc(d10(p.nextCallAt))+'"></div>'+
+        /* v349: the bare date input became the typing box — see datePad above. The original
+           <input id="pf_next"> still lives inside it, so saveThen's val('pf_next') is untouched. */
+        '<div class="field full"><label>Next call date</label>'+datePad('pf_next', p.nextCallAt, curTag)+'</div>'+
         (isNew?'<div class="field full"><label>First note</label><textarea id="pf_note" rows="2" placeholder="Thyroid profile done 12 Aug. Call back after Diwali."></textarea></div>':'')+
         '<div class="field full"><label>Membership card</label><div id="pf_cardwrap"></div></div>'+
         /* full width: a name like JITENDRAKUMAR K MEHTA (Director) does not fit in half a row */
@@ -14291,6 +14609,8 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
 
       openModal(isNew?'Add patient':'Edit patient', body,
         '<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="pf_save">'+(isNew?'Save patient':'Save changes')+'</button>');
+
+      wireDatePad('pf_next');   /* v349 */
 
       var chosen=curTag;
 
@@ -14351,6 +14671,10 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
         box.innerHTML='↻ Next call date will be set to <b>'+esc(niceDate(n))+'</b> — '+months+' months, the default for '+esc(chosen)+'.';
         var nx=$id('pf_next');
         if(nx && (isNew || !nx.value)) nx.value=n;
+        /* v349: the tag drives what the box calls "the default", and the box has to repaint when
+           the tag changes underneath it. */
+        var pd=$id('pf_next_pad'); if(pd) pd.setAttribute('data-tag', chosen);
+        dpSync('pf_next');
       }
       document.querySelectorAll('#pf_tags .pf-tag').forEach(function(el){
         el.onclick=function(){
@@ -14627,8 +14951,11 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
         '</div></div>'+
       '<div class="grid2">'+
         '<div class="field"><label>Talk time</label><input id="pc_secs" placeholder="4m 10s"></div>'+
-        '<div class="field"><label>Next call date</label><input id="pc_next" type="date" value="'+esc(nextFromTag(p.tag, todayStr()))+'"></div>'+
       '</div>'+
+      /* v349: full width and on its own row — the typing box carries a spelled-out date and a
+         busy-day warning beside it, which do not fit in half a row on a phone. */
+      '<div class="field full" style="margin-top:9px"><label>Next call date</label>'+
+        datePad('pc_next', nextFromTag(p.tag, todayStr()), p.tag)+'</div>'+
       '<div class="msg ok" id="pc_auto" style="font-size:12px"></div>'+
       '<div class="field full" style="margin-top:11px"><label>Notes</label><textarea id="pc_note" rows="2" placeholder="Booked full body check-up for 2 Sept."></textarea></div>'+
       '<div class="field full"><label>Did the call produce anything?</label>'+
@@ -14636,7 +14963,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
           (r.canCollect
             ? '<div id="pc_samp" style="cursor:pointer;border:1px solid #ecedf0;border-radius:10px;padding:11px 12px;background:#fff;display:flex;gap:9px;align-items:center">'+
               '<span style="width:28px;height:28px;border-radius:8px;flex:none;display:flex;align-items:center;justify-content:center;font-size:14px;background:#FAEEDA">\u{1F9EA}</span>'+
-              '<span><b style="display:block;font-size:12.5px">Book sample collection</b><small style="color:#686868;font-size:10.5px">Opens Collect sample</small></span></div>'
+              '<span><b style="display:block;font-size:12.5px">Book a home visit</b><small style="color:#686868;font-size:10.5px">Opens the phlebotomist&rsquo;s diary</small></span></div>'
             : '')+
           (noCard
             ? '<div id="pc_card" style="cursor:pointer;border:1px solid #DFC98D;border-radius:10px;padding:11px 12px;background:#FFFDF7;display:flex;gap:9px;align-items:center">'+
@@ -14651,6 +14978,8 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
 
     openModal('Call · '+esc(p.name), body,
       '<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="pc_save">Save &amp; next patient</button>');
+
+    wireDatePad('pc_next');   /* v349 */
 
     var linked={ sampleId:'', cardNumber:'', cardStatus:'' };
 
@@ -14681,6 +15010,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
         var nx=$id('pc_next');
         if(chosen!=='answered') nx.value=d10(p.nextCallAt)||'';
         else nx.value=nextFromTag(p.tag, todayStr());
+        dpSync('pc_next');   /* v349: the outcome moved the date — the box has to say so */
         paintAuto();
       };
     });
@@ -14706,6 +15036,14 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     };
 
     $id('pc_save').onclick=function(){
+      /* v349: the server has refused a call without a next date since v346, but a caller with a
+         patient still on the line should be told here, in the box, not after a round trip. */
+      if(chosen!=='lost' && !val('pc_next')){
+        toast('Set the next call date first — type 3m, 2w or 7 in the box.',true);
+        dpSync('pc_next');
+        var t=$id('pc_next_txt'); if(t) try{ t.focus(); }catch(e){}
+        return;
+      }
       var btn=$id('pc_save'); btn.disabled=true; btn.innerHTML='<span class="loader"></span>';
       API.pcLogCall({
         callId:callId, patientId:p.patientId, outcome:chosen,
@@ -14741,21 +15079,50 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
   /* ============================================================ SCREEN 5 — the two hand-offs */
 
   /* Opens the EXISTING Collect-sample modal from ops.js, pre-filled and locked on identity. */
+  /* ============================================================================================
+     v349 — FROM A CALL YOU BOOK A VISIT. YOU DO NOT LOG A SAMPLE.
+
+     WHAT WAS WRONG. This opened openCollectSample — the "blood is already drawn, record it" form.
+     It demands tests, an amount, a prescription and a photo BEFORE it will save, because that is
+     what recording a completed collection needs. On a phone call none of those exist: nobody has
+     been to the patient's house yet. So the caller was being asked to invent four things, while
+     the popup the dashboard opens for the same job — pick a phlebotomist, pick a day and a time —
+     was sitting right there unused.
+
+     WHAT IT DOES NOW. It opens openBookCollection, byte for byte the popup the dashboard's own
+     "Sample collection" button opens, with the patient's name, mobile, address and branch already
+     filled in. Name and mobile are locked so the person on the call cannot be typed over. The
+     booked visit links back to this call exactly as the old one did — apiSaveOrder returns the same
+     sampleId, so pcLinkSample never knew the difference.
+
+     AMOUNT. The booking form makes it compulsory, which is right on the dashboard and wrong on a
+     call — the price follows the prescription, and the prescription is at the door. From the CRM it
+     may be left blank and the phlebotomist fills it in when he gets there. Dashboard bookings are
+     untouched. See amountOptional in ops.js.
+     ============================================================================================ */
   function handOffSample(p, callId, after){
-    if(typeof window.openCollectSample !== 'function'){
-      toast('The Sample Collection module is not loaded.',true); return;
+    var book = window.openBookCollection;
+    if(typeof book !== 'function'){
+      /* An older bundle without the booking popup — fall back to the collect form rather than
+         leaving the caller with a dead button. */
+      if(typeof window.openCollectSample === 'function') book = null;
+      else { toast('The Sample Collection module is not loaded.',true); return; }
     }
-    window.openCollectSample(function(saved){
+    var prefill = {
+      name:p.name, mobile:digits(p.number), address:p.address||'',
+      branchId:p.branchId||'', lock:true, amountOptional:true,
+      fromLabel:'FROM CRM · '+String(p.name||'').toUpperCase()
+    };
+    function linkIt(saved){
       var sid=(saved&&(saved.sampleId||saved.id))||'';
       if(!sid){ if(after) after(null); return; }
       API.pcLinkSample(p.patientId, sid, callId||'').then(function(r){
-        if(r&&r.ok){ toast('Sample linked to '+p.name); if(after) after(r); }
-        else { toast((r&&r.error)||'Sample saved, but could not link it to the patient',true); if(after) after(null); }
+        if(r&&r.ok){ toast('Visit booked for '+p.name); if(after) after(r); }
+        else { toast((r&&r.error)||'Visit booked, but could not link it to the patient',true); if(after) after(null); }
       });
-    }, {
-      name:p.name, mobile:digits(p.number), address:p.address||'',
-      branchId:p.branchId||'', lock:true, fromLabel:'FROM CRM · '+String(p.name||'').toUpperCase()
-    });
+    }
+    if(book) book(linkIt, prefill);
+    else window.openCollectSample(linkIt, prefill);
   }
 
   /* Opens the EXISTING Issue-card modal from membership.js, pre-filled. */

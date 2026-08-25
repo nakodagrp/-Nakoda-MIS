@@ -4,7 +4,18 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v348';  /* v348: SELFIES ACTUALLY SAVE. Since v335 the photo was sent as a second, separate
+var CACHE_VERSION = 'nakoda-mis-v349';  /* v349: PATIENT CRM ROUND 3 — three things. (1) PENDING CARD IS NO LONGER A LIE.
+   It decided who holds a membership card from one column on the patient row, and that column is only written when a card is
+   issued through the CRM — so counter-issued cards, imported cards and a relative's card on the same family mobile number all
+   read as NO CARD forever. It now looks the patient's number up in Membership_Cards and counts any LIVE card (active, not
+   expired); a family card says so on the chip. (2) THE NEXT-CALL-DATE FIELD NO LONGER OPENS A DATE PICKER. Type the gap
+   instead — 3m, 2w, 7, 1y, 25/11, tom — and the real date appears beside it spelled out with its weekday, so a wrong year is
+   visible instead of invisible. It fills itself from the tag, so the ordinary call needs no typing. If that day is already
+   overloaded it says so and offers the next lighter one. "pick exact date" still opens the calendar. (3) FROM A CALL YOU NOW
+   BOOK A VISIT. "Book a home visit" opens the dashboard's own booking popup — phlebotomist, diary, day, time — with name,
+   mobile, address and branch pre-filled and the identity locked, instead of the log-a-collected-sample form that demanded
+   tests, an amount and a prescription that do not exist while the patient is still on the phone. From the CRM the amount may
+   be left for the phlebotomist to fill in at the door. Backend: Code_PatientCRM.gs and the new 24_CrmTools.gs. */  /* v348: SELFIES ACTUALLY SAVE. Since v335 the photo was sent as a second, separate
    request after the punch — so the punch could be recorded while the photo quietly failed on its own, leaving the approver
    looking at "No selfie" with nothing to act on. The photo now rides inside the punch itself: one request, one row, written
    complete, or nothing written and the punch stays queued for retry. The speed reason for splitting it no longer applies,
