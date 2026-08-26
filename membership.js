@@ -504,7 +504,10 @@
   }
 
   /* ── issue modal ──────────────────────────────────────────────────────── */
-  function openIssueCardModal(){
+  /* pc1 — TWO ARGUMENTS ADDED. The Patient CRM opens this modal with the patient already filled
+     in, and wants the created card number back so it can stamp it onto the patient. Called with
+     no arguments (the Membership Cards page itself) both are undefined and nothing changes. */
+  function openIssueCardModal(prefill, afterIssue){
     var branches=(S.meta&&S.meta.branches)||[];
     var brOpts=branches.map(function(b){ return '<option value="'+esc(b.BranchID)+'"'+(b.BranchID===(S.user&&S.user.Branch)?' selected':'')+'>'+esc(b.BranchName)+'</option>'; }).join('');
     var typeOpts=TYPES.map(function(t){ return '<option value="'+esc(t.typeId)+'">'+esc(t.name)+'</option>'; }).join('');
@@ -517,7 +520,27 @@
       '<div class="field full"><label>Referred by (optional)</label><input id="ic_refer"></div>'+
       '<div class="field full"><label>Preview</label><div id="ic_preview"></div></div>'+
     '</div>';
-    openModal('Issue Membership Card', body, '<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="ic_save">Create card</button>');
+    openModal('Issue Membership Card'+((prefill&&prefill.fromLabel)?(' \u00b7 '+String(prefill.fromLabel)):''), body, '<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="ic_save">Create card</button>');
+
+    /* pc1 — apply the Patient CRM pre-fill */
+    if(prefill){
+      (function(){
+        function set(id,v,lock){
+          var e=document.getElementById(id); if(!e||v==null||v==='') return;
+          e.value=v;
+          if(lock&&prefill.lock){ e.setAttribute('readonly','readonly'); e.style.background='#f6f7f9'; e.style.color='#5a5a5a'; }
+        }
+        set('ic_name',   prefill.holderName,  true);
+        set('ic_mobile', prefill.mobile,      true);
+        set('ic_refer',  prefill.referByName, false);
+        var br=document.getElementById('ic_branch');
+        if(br && prefill.branchId){
+          for(var i=0;i<br.options.length;i++){
+            if(String(br.options[i].value)===String(prefill.branchId)){ br.selectedIndex=i; break; }
+          }
+        }
+      })();
+    }
     var pv=document.getElementById('ic_preview'), cv=newCardCanvas(); pv.appendChild(cv);
     var amtTouched=false;
     function redraw(){
@@ -546,9 +569,15 @@
            never repaints the table on screen. So the card was created correctly and was simply absent
            from the list until the page was reopened. The `r` second argument still saves the extra
            round trip for the detail panel, which was the part actually worth saving. */
+        /* pc1: when the Patient CRM opened this, hand the card number back to it instead of
+           navigating into the Cards page — the caller is mid-call and must stay where they are. */
+        /* v354: used to stop here with just a toast — the CRM caller never got the chance to send
+           the card. Now it opens the same send screen the Cards page uses (image, Share via
+           System, Send via Official API) right after linking it to the patient. */
+        if(r.ok && typeof afterIssue==='function'){ closeModal(); toast('Card issued: '+r.card.cardNumber); afterIssue(r.card); openCardDetail(r.card.cardNumber, r); return; }
         if(r.ok){ closeModal(); toast('Card issued: '+r.card.cardNumber); openCardDetail(r.card.cardNumber, r); renderMembershipCards(); return; }
         if(String(r.error).indexOf('DUPLICATE')===0){
-          if(confirm(r.error.replace('DUPLICATE: ','')+'\n\nReplace the old card and issue this new one?')){ data.replaceExisting=true; return API.issueCard(data).then(function(r2){ if(r2.ok){ closeModal(); toast('Card issued: '+r2.card.cardNumber); openCardDetail(r2.card.cardNumber, r2); renderMembershipCards(); } else toast(r2.error,true); }); }
+          if(confirm(r.error.replace('DUPLICATE: ','')+'\n\nReplace the old card and issue this new one?')){ data.replaceExisting=true; return API.issueCard(data).then(function(r2){ if(r2.ok){ closeModal(); toast('Card issued: '+r2.card.cardNumber); if(typeof afterIssue==='function'){ afterIssue(r2.card); openCardDetail(r2.card.cardNumber, r2); } else { openCardDetail(r2.card.cardNumber, r2); renderMembershipCards(); } } else toast(r2.error,true); }); }
         } else { toast(r.error,true); }
         btn.disabled=false; btn.textContent='Create card';
       }).catch(function(){ toast('Issuing a card needs an internet connection.',true); btn.disabled=false; btn.textContent='Create card'; });
