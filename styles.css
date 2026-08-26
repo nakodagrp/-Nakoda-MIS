@@ -787,6 +787,13 @@ html,body{overflow-x:hidden}
   .modal{max-width:100%;border-radius:16px 16px 0 0}
   .modal-body{max-height:74vh}
   .toolbar{padding:12px} .toolbar .search{min-width:0;width:100%}
+  /* v358: a footer with 3-4 buttons (e.g. the "book a visit" popup's Message patient /
+     Message phlebotomist / Cancel / Book collection row) used to overflow the modal on a
+     phone-width screen — justify-content:flex-end pushed the first button off-screen to
+     the left instead of wrapping it onto a new line. Wrapping + letting each button share
+     the row width keeps every button fully visible and tappable. */
+  .modal-foot{flex-wrap:wrap;justify-content:stretch}
+  .modal-foot .btn{flex:1 1 calc(50% - 5px)}
 }
 /* data tables -> stacked cards on phones */
 @media(max-width:620px){
