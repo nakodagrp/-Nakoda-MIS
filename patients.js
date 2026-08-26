@@ -18,7 +18,7 @@
 
   /* ---------------- module state ---------------- */
   var PC = {
-    tab:'followups', branch:'', q:'', tag:'', page:0,
+    tab:'cold', branch:'', q:'', tag:'', page:0,
     rows:[], counts:{cold:0,mine:0,followups:0,card:0}, kpi:{}, total:0, pageSize:200, today:''
   };
   var META = null;            /* tags, people, branches, permissions — fetched once */
@@ -31,7 +31,9 @@
     'Old data': { bg:'#EFF1F3', fg:'#5C646E', pill:'#686868' }
   };
   var OUTLABEL = { answered:'Answered', no_answer:'No answer', busy:'Busy', wrong_number:'Wrong number' };
-  var TABS = [['cold','Cold leads'],['mine','My leads'],['followups','Follow-ups'],['card','Pending card']];
+  /* v355: Follow-ups dropped — it only ever counted next-call dates, and calling was removed from
+     the CRM entirely (see paintList, openPatient and renderPatientBar below). */
+  var TABS = [['cold','Cold leads'],['mine','My leads'],['card','Pending card']];
 
   /* ---------------- small helpers ---------------- */
   function $id(i){ return document.getElementById(i); }
@@ -516,9 +518,14 @@
             (p.assignedToName?(' · '+esc(p.assignedToName)):'')+
           '</div>'+
         '</div>'+
-        '<div style="display:flex;gap:6px;flex:none;flex-wrap:wrap;justify-content:flex-end" data-stop="1">'+
-          (noCard?'<button class="btn sm" data-card="'+esc(p.patientId)+'" style="background:#fff;color:#8C6B1F;border:1px solid #DFC98D">◆ Issue card</button>':'')+
-          (p.number?'<button class="btn sm" data-call="'+esc(p.patientId)+'" style="background:#1a7f37">☎ Call</button>':'')+
+        /* v355: Call replaced with Book sample / Edit / Notes — same three actions the Patient
+           file popup already offered, now one tap away instead of two. Icon-only so four actions
+           still fit on one line on a phone. */
+        '<div style="display:flex;gap:5px;flex:none" data-stop="1">'+
+          (noCard?'<button class="btn sm" data-card="'+esc(p.patientId)+'" title="Issue card" style="width:34px;padding:0;background:#fff;color:#8C6B1F;border:1px solid #DFC98D">◆</button>':'')+
+          '<button class="btn sm" data-samp="'+esc(p.patientId)+'" title="Book sample" style="width:34px;padding:0;background:#fff;color:#0E6F5C;border:1px solid #B7E6DA">\u{1F9EA}</button>'+
+          '<button class="btn sm ghost" data-edit="'+esc(p.patientId)+'" title="Edit" style="width:34px;padding:0">✎</button>'+
+          '<button class="btn sm ghost" data-notes="'+esc(p.patientId)+'" title="Notes" style="width:34px;padding:0">\u{1F4DD}</button>'+
         '</div>'+
       '</div>';
     }).join('');
@@ -529,11 +536,24 @@
         openPatient(el.getAttribute('data-id'));
       };
     });
-    box.querySelectorAll('[data-call]').forEach(function(b){
-      b.onclick=function(ev){ ev.stopPropagation(); openPatientCall(b.getAttribute('data-call')); };
-    });
     box.querySelectorAll('[data-card]').forEach(function(b){
       b.onclick=function(ev){ ev.stopPropagation(); handOffCard(b.getAttribute('data-card'), null); };
+    });
+    box.querySelectorAll('[data-samp]').forEach(function(b){
+      b.onclick=function(ev){ ev.stopPropagation();
+        var id=b.getAttribute('data-samp'), p=null;
+        for(var i=0;i<PC.rows.length;i++){ if(PC.rows[i].patientId===id){ p=PC.rows[i]; break; } }
+        if(p) handOffSample(p, null, function(){ load(); });
+      };
+    });
+    box.querySelectorAll('[data-edit]').forEach(function(b){
+      b.onclick=function(ev){ ev.stopPropagation();
+        var id=b.getAttribute('data-edit');
+        API.pcGet(id).then(function(r){ if(r&&r.ok) openPatientForm(r.patient); else toast((r&&r.error)||'Could not open this patient',true); });
+      };
+    });
+    box.querySelectorAll('[data-notes]').forEach(function(b){
+      b.onclick=function(ev){ ev.stopPropagation(); openPatient(b.getAttribute('data-notes')); };
     });
 
     /* Real pages, not an infinite “show more” — load() replaces the list rather than appending,
@@ -848,7 +868,6 @@
       : (p.nextCallAt ? '<div class="msg ok" style="margin-top:12px">Next call '+esc(niceDate(p.nextCallAt))+'</div>' : '');
 
     var actions='<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:12px">'+
-      (p.number?'<button class="btn" id="pd_call" style="background:#1a7f37">☎ Call &amp; log</button>':'')+
       (noCard?'<button class="btn ghost" id="pd_card" style="color:#8C6B1F;border-color:#DFC98D">◆ Issue card</button>':'')+
       (r.canCollect?'<button class="btn ghost" id="pd_samp">\u{1F9EA} Book sample</button>':'')+
       '<button class="btn ghost" id="pd_edit">✎ Edit</button>'+
@@ -881,7 +900,6 @@
     function reopen(){ load(); openPatient(p.patientId, after); }
 
     var b;
-    if((b=$id('pd_call'))) b.onclick=function(){ closeModal(); openPatientCall(p.patientId); };
     if((b=$id('pd_card'))) b.onclick=function(){ handOffCard(p.patientId, null, reopen); };
     if((b=$id('pd_samp'))) b.onclick=function(){ handOffSample(p, null, reopen); };
     if((b=$id('pd_edit'))) b.onclick=function(){ closeModal(); openPatientForm(p); };
@@ -1401,66 +1419,20 @@
       box.style.cssText='margin-bottom:14px';
       host.parentNode.insertBefore(box, host);
     }
+    /* v355: the quick-dial lookup and "Call list" shortcut both existed only to jump into calling,
+       which is gone from the CRM now — Issue card and Add patient are what's left worth a shortcut. */
     box.innerHTML='<div class="card" style="padding:13px 14px">'+
       '<div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap">'+
-        '<div style="display:flex;gap:7px;align-items:center;flex:1;min-width:210px">'+
-          '<span style="font-size:19px">☎</span>'+
-          '<input id="pcQuickNum" inputmode="numeric" maxlength="10" placeholder="Type a mobile number to call…" '+
-            'style="flex:1;min-width:130px;border:1px solid #ecedf0;border-radius:20px;padding:9px 14px;font-size:13.5px">'+
-          '<button class="btn sm" id="pcQuickGo" style="background:#1a7f37">Go</button>'+
-        '</div>'+
-        '<button class="btn sm ghost" id="pcBarList">☎ Call list <b id="pcBarDue" style="margin-left:4px">…</b></button>'+
         '<button class="btn sm ghost" id="pcBarCard" style="color:#8C6B1F;border-color:#DFC98D">◆ Issue card</button>'+
         '<button class="btn sm ghost" id="pcBarAdd">+ Add patient</button>'+
       '</div>'+
-      '<div id="pcQuickMsg" style="font-size:12px;color:#9aa0a6;margin-top:7px"></div>'+
     '</div>';
 
-    document.getElementById('pcBarList').onclick=function(){ PC.tab='followups'; PC.page=0; if(window.go) go('patients'); };
     document.getElementById('pcBarAdd').onclick=function(){ ensureMeta().then(function(){ openPatientForm(null); }); };
     document.getElementById('pcBarCard').onclick=function(){
       if(typeof window.openIssueCardModal!=='function'){ toast('Membership Cards is not loaded.',true); return; }
       window.openIssueCardModal();     /* no pre-fill — the ordinary card screen */
     };
-
-    var inp=document.getElementById('pcQuickNum'), msg=document.getElementById('pcQuickMsg');
-    function goNumber(){
-      var n=mobile(inp.value);
-      if(n.length!==10){ msg.innerHTML='<span style="color:#C0392B">Enter all 10 digits.</span>'; return; }
-      msg.textContent='Looking up '+n+'…';
-      API.pcLookup(n).then(function(r){
-        if(r&&r.ok&&r.patient){
-          msg.textContent='';
-          inp.value='';
-          openPatientCall(r.patient.patientId);
-          return;
-        }
-        /* not on the list yet — but we may still know them from cards or past samples */
-        var known=(r&&r.ok&&r.found);
-        msg.innerHTML='Not on the calling list yet'+
-          (known?(' — but '+esc(r.name||'this number')+' is in your records ('+(r.visits||0)+' visits'+
-                  (r.activeCard?', has a card':'')+').'):'.')+
-          ' <a href="#" id="pcQuickAdd" style="font-weight:600">Add them</a>';
-        var a=document.getElementById('pcQuickAdd');
-        if(a) a.onclick=function(ev){ ev.preventDefault(); ensureMeta().then(function(){
-          openPatientForm(null);
-          setTimeout(function(){ var f=document.getElementById('pf_num'); if(f){ f.value=n; f.dispatchEvent(new Event('input')); } },120);
-        }); };
-      });
-    }
-    document.getElementById('pcQuickGo').onclick=goNumber;
-    inp.addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); goNumber(); } });
-
-    /* how many are due — the number that decides whether anyone opens the page */
-    API.pcList('followups','', '', '', 0).then(function(r){
-      var b=document.getElementById('pcBarDue'); if(!b) return;
-      if(r&&(r.ok||r.offline)){
-        var k=r.kpi||{}, n=(k.dueToday||0)+(k.overdue||0);
-        b.textContent=n;
-        b.style.color = k.overdue ? '#C0392B' : '#1a7f37';
-        if(k.overdue) b.title=k.overdue+' overdue';
-      } else b.textContent='0';
-    }).catch(function(){ var b=document.getElementById('pcBarDue'); if(b) b.textContent='0'; });
   }
 
   /* ---------------- exports ---------------- */
