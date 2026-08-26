@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Feedback Ratings</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#eef0f3;
+    --surface:#ffffff;
+    --surface-2:#f7f8fa;
+    --border:#e1e5ea;
+    --text:#1b2129;
+    --text-soft:#67707c;
+    --text-faint:#98a1ac;
+    --green:#1a7f37;
+    --green-bg:#eaf6ee;
+    --amber:#7a5b00;
+    --amber-bg:#fdf3df;
+    --purple:#8e44ad;
+    --purple-bg:#f4ebf8;
+    --gold:#b8860b;
+    --red:#c0392b;
+    --red-bg:#fbeceb;
+    --shadow: 0 1px 2px rgba(20,24,30,0.04), 0 8px 24px -12px rgba(20,24,30,0.12);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#14171c;
+      --surface:#1c2027;
+      --surface-2:#20242c;
+      --border:#2c313a;
+      --text:#eceef1;
+      --text-soft:#a2aab5;
+      --text-faint:#6b7280;
+      --green:#4bbf6f;
+      --green-bg:#173626;
+      --amber:#e0b74a;
+      --amber-bg:#3a2f10;
+      --purple:#c98ee6;
+      --purple-bg:#33203d;
+      --gold:#e0b74a;
+      --red:#f0776a;
+      --red-bg:#3a1c19;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#14171c;
+    --surface:#1c2027;
+    --surface-2:#20242c;
+    --border:#2c313a;
+    --text:#eceef1;
+    --text-soft:#a2aab5;
+    --text-faint:#6b7280;
+    --green:#4bbf6f;
+    --green-bg:#173626;
+    --amber:#e0b74a;
+    --amber-bg:#3a2f10;
+    --purple:#c98ee6;
+    --purple-bg:#33203d;
+    --gold:#e0b74a;
+    --red:#f0776a;
+    --red-bg:#3a1c19;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:"IBM Plex Sans", system-ui, sans-serif;
+    padding:40px 20px 64px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:28px;
+  }
+  .mono{font-family:"IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums;}
+
+  .intro{
+    max-width:640px;
+    text-align:center;
+  }
+  .intro .eyebrow{
+    font-size:11.5px;
+    font-weight:600;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:var(--purple);
+    margin:0 0 10px;
+  }
+  .intro h1{
+    font-size:26px;
+    font-weight:700;
+    margin:0 0 10px;
+    text-wrap:balance;
+    letter-spacing:-0.01em;
+  }
+  .intro p{
+    font-size:14.5px;
+    line-height:1.6;
+    color:var(--text-soft);
+    margin:0;
+  }
+
+  .stage{
+    display:flex;
+    gap:28px;
+    flex-wrap:wrap;
+    justify-content:center;
+    align-items:flex-start;
+    max-width:1040px;
+    width:100%;
+  }
+
+  /* ---- phone frame ---- */
+  .frame{
+    width:340px;
+    background:var(--surface);
+    border-radius:28px;
+    border:1px solid var(--border);
+    box-shadow:var(--shadow);
+    overflow:hidden;
+    flex-shrink:0;
+  }
+  .frame-head{
+    padding:16px 18px 12px;
+    border-bottom:1px solid var(--border);
+    background:var(--surface);
+  }
+  .frame-head .title{
+    font-size:16px;
+    font-weight:700;
+    margin:0 0 2px;
+  }
+  .frame-head .sub{
+    font-size:12px;
+    color:var(--text-faint);
+    margin:0;
+  }
+  .search{
+    margin:12px 18px 4px;
+    padding:8px 12px;
+    background:var(--surface-2);
+    border:1px solid var(--border);
+    border-radius:9px;
+    font-size:12.5px;
+    color:var(--text-faint);
+  }
+  .chips{
+    display:flex;
+    gap:6px;
+    padding:10px 18px 4px;
+    overflow-x:auto;
+  }
+  .chip{
+    font-size:11px;
+    font-weight:600;
+    padding:5px 10px;
+    border-radius:100px;
+    background:var(--surface-2);
+    border:1px solid var(--border);
+    color:var(--text-soft);
+    white-space:nowrap;
+  }
+  .chip.active{
+    background:var(--text);
+    color:var(--surface);
+    border-color:var(--text);
+  }
+
+  .list{
+    display:flex;
+    flex-direction:column;
+    padding:8px 0 14px;
+  }
+  .row{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:10px;
+    padding:12px 18px;
+    border-bottom:1px solid var(--border);
+    position:relative;
+  }
+  .row:last-child{border-bottom:none;}
+  .row.highlight{background:var(--purple-bg);}
+  .row-main{min-width:0;}
+  .row-name{
+    font-size:14px;
+    font-weight:600;
+    display:flex;
+    align-items:center;
+    gap:6px;
+    flex-wrap:wrap;
+  }
+  .row-meta{
+    font-size:11.5px;
+    color:var(--text-faint);
+    margin-top:3px;
+  }
+  .row-side{
+    display:flex;
+    flex-direction:column;
+    align-items:flex-end;
+    gap:6px;
+    flex-shrink:0;
+  }
+  .status-pill{
+    font-size:10px;
+    font-weight:700;
+    letter-spacing:0.02em;
+    padding:3px 8px;
+    border-radius:100px;
+    background:var(--green-bg);
+    color:var(--green);
+    white-space:nowrap;
+  }
+
+  .fb-badge{
+    font-size:11px;
+    font-weight:600;
+    letter-spacing:0.02em;
+    color:var(--gold);
+  }
+  .fb-badge.low{color:var(--red);}
+  .fb-cta{
+    font-size:10.5px;
+    font-weight:600;
+    color:var(--purple);
+    white-space:nowrap;
+  }
+
+  .new-tag{
+    position:absolute;
+    top:-9px;
+    right:14px;
+    background:var(--purple);
+    color:#fff;
+    font-size:9px;
+    font-weight:700;
+    letter-spacing:0.05em;
+    text-transform:uppercase;
+    padding:3px 7px;
+    border-radius:5px;
+    box-shadow:0 3px 8px -2px rgba(142,68,173,0.5);
+  }
+
+  /* ---- detail card ---- */
+  .detail{
+    width:320px;
+    background:var(--surface);
+    border-radius:20px;
+    border:1px solid var(--border);
+    box-shadow:var(--shadow);
+    overflow:hidden;
+    flex-shrink:0;
+  }
+  .detail-head{
+    padding:16px 18px;
+    border-bottom:1px solid var(--border);
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    gap:10px;
+  }
+  .detail-head h3{
+    font-size:15px;
+    margin:0 0 3px;
+    font-weight:700;
+  }
+  .detail-head .mono{
+    font-size:11px;
+    color:var(--text-faint);
+  }
+  .detail-fields{
+    display:flex;
+    flex-direction:column;
+  }
+  .dfield{
+    display:flex;
+    justify-content:space-between;
+    gap:14px;
+    padding:10px 18px;
+    border-bottom:1px solid var(--border);
+    font-size:12.5px;
+  }
+  .dfield .k{color:var(--text-faint); flex-shrink:0;}
+  .dfield .v{text-align:right; font-weight:500;}
+  .dfield.feature{
+    background:var(--purple-bg);
+    position:relative;
+  }
+  .dfield.feature .v{color:var(--purple); font-weight:700;}
+  .dfield .v.stars{color:var(--gold); font-weight:700;}
+
+  .detail-actions{
+    padding:14px 18px 18px;
+  }
+  .btn-fb{
+    width:100%;
+    padding:10px 12px;
+    border-radius:10px;
+    border:1px dashed var(--purple);
+    background:var(--purple-bg);
+    color:var(--purple);
+    font-size:12.5px;
+    font-weight:600;
+    text-align:center;
+  }
+  .caption{
+    text-align:center;
+    font-size:11.5px;
+    color:var(--text-faint);
+    margin-top:10px;
+    max-width:320px;
+  }
+
+  .col{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+  }
+
+  .legend{
+    max-width:640px;
+    width:100%;
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:18px 22px;
+    box-shadow:var(--shadow);
+  }
+  .legend h4{
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+    color:var(--text-faint);
+    margin:0 0 12px;
+    font-weight:600;
+  }
+  .legend-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+    gap:12px;
+  }
+  .legend-item{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    font-size:12.5px;
+  }
+  .legend-glyph{
+    font-size:14px;
+    font-weight:700;
+    width:24px;
+    text-align:center;
+    flex-shrink:0;
+  }
+  .legend-item .desc{color:var(--text-soft);}
+  .legend-item .desc b{color:var(--text); font-weight:600;}
+</style>
+</head>
+<body>
+
+  <div class="intro">
+    <p class="eyebrow">Ops · Samples — built &amp; live in this bundle</p>
+    <h1>Feedback ratings, right on the sample list</h1>
+    <p>After a report is sent, a "Send feedback request" action fires a WhatsApp message with rating buttons. Whatever the patient taps is written back automatically and shown as a badge next to their name — no separate report screen to check.</p>
+  </div>
+
+  <div class="stage">
+
+    <div class="col">
+      <div class="frame">
+        <div class="frame-head">
+          <p class="title">Ops · Samples</p>
+          <p class="sub">Navsari Branch · Today</p>
+        </div>
+        <div class="search">Search patient, mobile, sample ID…</div>
+        <div class="chips">
+          <span class="chip active">All</span>
+          <span class="chip">Pending</span>
+          <span class="chip">Sent</span>
+          <span class="chip">Feedback</span>
+        </div>
+        <div class="list">
+
+          <div class="row">
+            <div class="row-main">
+              <div class="row-name">Karan Mahadik</div>
+              <div class="row-meta mono">#OPS-1042 · 98252 4●●●●</div>
+            </div>
+            <div class="row-side">
+              <span class="status-pill">SENT</span>
+              <span class="fb-cta">📩 Send feedback request</span>
+            </div>
+          </div>
+
+          <div class="row highlight">
+            <span class="new-tag">New</span>
+            <div class="row-main">
+              <div class="row-name">Pandey Ji <span class="fb-badge">★★★★★</span></div>
+              <div class="row-meta mono">#OPS-1038 · 90999 1●●●●</div>
+            </div>
+            <div class="row-side">
+              <span class="status-pill">SENT</span>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="row-main">
+              <div class="row-name">Sunita Rathod <span class="fb-badge">★★★</span></div>
+              <div class="row-meta mono">#OPS-1031 · 88664 2●●●●</div>
+            </div>
+            <div class="row-side">
+              <span class="status-pill">SENT</span>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="row-main">
+              <div class="row-name">Devang Patel <span class="fb-badge low">★</span></div>
+              <div class="row-meta mono">#OPS-1027 · 97231 6●●●●</div>
+            </div>
+            <div class="row-side">
+              <span class="status-pill">SENT</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+      <p class="caption">Sample list — a star badge appears next to the name the moment a reply lands. No badge yet? The "Send feedback request" action is still waiting.</p>
+    </div>
+
+    <div class="col">
+      <div class="detail">
+        <div class="detail-head">
+          <div>
+            <h3>Pandey Ji</h3>
+            <div class="mono">#OPS-1038</div>
+          </div>
+          <span class="status-pill">SENT</span>
+        </div>
+        <div class="detail-fields">
+          <div class="dfield"><span class="k">Mobile</span><span class="v mono">90999 15522</span></div>
+          <div class="dfield"><span class="k">Tests</span><span class="v">CBC, Lipid Profile</span></div>
+          <div class="dfield"><span class="k">Sent at</span><span class="v mono">25 Aug, 6:12 PM</span></div>
+          <div class="dfield feature">
+            <span class="k">Feedback</span>
+            <span class="v stars">5 ★ Excellent · 25 Aug, 6:40 PM</span>
+          </div>
+        </div>
+      </div>
+      <p class="caption">Sample detail — the reply is stored with a timestamp, next to the rest of the record.</p>
+    </div>
+
+  </div>
+
+  <div class="legend">
+    <h4>How a tap becomes a badge</h4>
+    <div class="legend-grid">
+      <div class="legend-item"><span class="legend-glyph" style="color:var(--gold)">★★★★★</span><span class="desc">Patient taps <b>Excellent</b> → scored 5</span></div>
+      <div class="legend-item"><span class="legend-glyph" style="color:var(--gold)">★★★</span><span class="desc">Patient taps <b>Okay</b> → scored 3</span></div>
+      <div class="legend-item"><span class="legend-glyph" style="color:var(--red)">★</span><span class="desc">Patient taps <b>Needs improvement</b> → scored 1</span></div>
+      <div class="legend-item"><span class="legend-glyph" style="color:var(--purple)">Aa</span><span class="desc">Button words are <b>yours to edit</b> in WA Templates</span></div>
+    </div>
+  </div>
+
+</body>
+</html>

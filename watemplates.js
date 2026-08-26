@@ -5,11 +5,17 @@
   var TPLS=[], TPLMAP={};
 
   var HEADER_TYPES=[['none','No header'],['text','Text header'],['image','Image header'],['document','Document (PDF) header'],['video','Video header']];
-  var PURPOSES=[['general','General / promotional'],['membership_card','Membership card (used by Cards ▸ Send via Official API)']];
+  var PURPOSES=[['general','General / promotional'],['membership_card','Membership card (used by Cards ▸ Send via Official API)'],
+    ['sample_collection_patient','Sample collection · message to patient (booking popup)'],
+    ['sample_collection_phlebotomist','Sample collection · message to phlebotomist (booking popup)'],
+    ['sample_collection_feedback','Sample collection · feedback request (with rating buttons)']];
 
   function headerLabel(h){ var m={none:'None',text:'Text',image:'🖼 Image',document:'📄 Document',video:'🎬 Video'}; return m[h]||h||'—'; }
   function purposeBadge(p,cardTypeId){
     if(p==='membership_card') return '<span class="badge" style="background:#185fa522;color:#185fa5">Membership card'+(cardTypeId?(' · '+esc(cardTypeId)):' · all types')+'</span>';
+    if(p==='sample_collection_patient') return '<span class="badge" style="background:#1a7f3722;color:#1a7f37">Message · patient</span>';
+    if(p==='sample_collection_phlebotomist') return '<span class="badge" style="background:#7a5b0022;color:#7a5b00">Message · phlebotomist</span>';
+    if(p==='sample_collection_feedback') return '<span class="badge" style="background:#8e44ad22;color:#8e44ad">Feedback · rating</span>';
     return '<span style="color:#888">General</span>';
   }
   function statusBadgeT(s){ var on=s!=='inactive'; return '<span class="badge" style="background:'+(on?'#1a7f37':'#9aa0a6')+'22;color:'+(on?'#1a7f37':'#9aa0a6')+'">'+(on?'active':'inactive')+'</span>'; }
@@ -62,6 +68,11 @@
     var htOpts=HEADER_TYPES.map(function(h){ return '<option value="'+h[0]+'"'+(h[0]===String(t.headerType)?' selected':'')+'>'+h[1]+'</option>'; }).join('');
     var puOpts=PURPOSES.map(function(p){ return '<option value="'+p[0]+'"'+(p[0]===String(t.purpose)?' selected':'')+'>'+p[1]+'</option>'; }).join('');
     var ctOpts='<option value="">All card types (generic)</option>'+cardTypes.map(function(ct){ return '<option value="'+esc(ct.typeId)+'"'+(String(ct.typeId)===String(t.cardTypeId||'')?' selected':'')+'>'+esc(ct.name)+' ('+esc(ct.typeId)+')</option>'; }).join('');
+    /* v353 — feedback-with-rating templates carry their 3 Quick Reply button labels here, so the
+       webhook that records a patient's tap can match it back to a score without a code change every
+       time someone reworks the wording. Order matters: label 1 = best, label 3 = worst. */
+    var btnLabelsArr=String(t.btnLabels||'Excellent|Okay|Needs improvement').split('|');
+    var showBtnLabels = String(t.purpose)==='sample_collection_feedback';
     var body='<div class="grid2">'+
       '<div class="field"><label>Template name * (exactly as in Meta)</label><input id="wt_name" value="'+esc(t.name||'')+'" placeholder="membership_card" style="text-transform:lowercase"></div>'+
       '<div class="field"><label>Language code</label><input id="wt_lang" value="'+esc(t.language||'en')+'" placeholder="en"></div>'+
@@ -71,6 +82,15 @@
       '<div class="field"><label>Card type (Membership card only)</label><select id="wt_cardtype">'+ctOpts+'</select></div>'+
       '<div class="field full" style="margin-top:-6px"><div style="font-size:11px;color:#999">For "Membership card": pick a card type to use this template only for that type (e.g. one per type with its own benefits in the body). "All card types" is the fallback when a type has no template of its own.</div></div>'+
       '<div class="field full"><label>Variable hints (one per line, e.g. "1 = customer name") — for your team\'s reference</label><textarea id="wt_hints" rows="4">'+esc(t.paramHints||'')+'</textarea></div>'+
+      '<div class="field full" id="wt_btnwrap" style="display:'+(showBtnLabels?'block':'none')+';background:#8e44ad11;border:1px solid #8e44ad33;border-radius:8px;padding:10px 12px">'+
+        '<label style="margin-bottom:6px;display:block">Rating button labels — must match the Quick Reply buttons exactly as approved in whatsbizapi.com</label>'+
+        '<div class="grid2" style="gap:8px">'+
+          '<div class="field"><label style="font-size:11px;color:#999">Best (5★)</label><input id="wt_btn1" value="'+esc(btnLabelsArr[0]||'')+'"></div>'+
+          '<div class="field"><label style="font-size:11px;color:#999">Middle (3★)</label><input id="wt_btn2" value="'+esc(btnLabelsArr[1]||'')+'"></div>'+
+          '<div class="field"><label style="font-size:11px;color:#999">Worst (1★)</label><input id="wt_btn3" value="'+esc(btnLabelsArr[2]||'')+'"></div>'+
+        '</div>'+
+        '<div style="font-size:11px;color:#999;margin-top:6px">When a patient taps a button, the MIS matches the reply text to one of these three to record a rating on their sample. If the wording doesn\'t match exactly, the tap is logged but not scored.</div>'+
+      '</div>'+
       '<div class="field full"><label>Notes (what is this template for?)</label><textarea id="wt_notes" rows="2">'+esc(t.notes||'')+'</textarea></div>'+
       '<div class="field full"><label>Status</label><select id="wt_status"><option value="active"'+(t.status!=='inactive'?' selected':'')+'>active</option><option value="inactive"'+(t.status==='inactive'?' selected':'')+'>inactive</option></select></div>'+
     '</div>';
@@ -78,11 +98,16 @@
       '<button class="btn ghost" onclick="closeModal()">Cancel</button>'+
       (tplId?'<button class="btn ghost" id="wt_del" style="color:#C0392B">Delete</button>':'')+
       '<button class="btn" id="wt_save">'+(tplId?'Save':'Create')+'</button>');
+    document.getElementById('wt_purpose').onchange=function(){
+      var wrap=document.getElementById('wt_btnwrap');
+      if(wrap) wrap.style.display=(this.value==='sample_collection_feedback')?'block':'none';
+    };
     document.getElementById('wt_save').onclick=function(){
       var data={ tplId:tplId||'', name:val('wt_name').toLowerCase().trim(), language:val('wt_lang'),
         headerType:document.getElementById('wt_header').value, paramCount:val('wt_params'),
         purpose:document.getElementById('wt_purpose').value, cardTypeId:document.getElementById('wt_cardtype').value,
         paramHints:document.getElementById('wt_hints').value,
+        btnLabels:[val('wt_btn1'),val('wt_btn2'),val('wt_btn3')].map(function(s){return (s||'').trim();}).join('|'),
         notes:document.getElementById('wt_notes').value, status:document.getElementById('wt_status').value };
       if(!data.name){ toast('Template name is required.',true); return; }
       if(!/^[a-z0-9_]+$/.test(data.name)){ toast('Name: lowercase letters, numbers and _ only (must match Meta exactly).',true); return; }
