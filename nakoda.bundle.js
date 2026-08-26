@@ -14233,9 +14233,12 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     var n=parseInt(t,10);
     return isNaN(n) ? 0 : n;   /* bare number = seconds */
   }
+  /* v360: chips got a small colour dot + pill radius (100px) instead of a flat rounded box —
+     purely cosmetic, same background/text colours as before, just easier to scan at a glance. */
   function tagChip(tag){
     var m=TAGMETA[tag]||TAGMETA['Old data'];
-    return '<span style="background:'+m.bg+';color:'+m.fg+';border-radius:11px;font-size:9.5px;padding:2px 8px;font-weight:700;letter-spacing:.03em;white-space:nowrap">'+esc(String(tag||'').toUpperCase())+'</span>';
+    return '<span style="display:inline-flex;align-items:center;gap:4px;background:'+m.bg+';color:'+m.fg+';border-radius:100px;font-size:9px;padding:2.5px 8px 2.5px 7px;font-weight:700;letter-spacing:.03em;white-space:nowrap">'+
+      '<span style="width:5px;height:5px;border-radius:50%;background:'+m.pill+';flex:none"></span>'+esc(String(tag||'').toUpperCase())+'</span>';
   }
   function dueChip(p){
     if(!p.nextCallAt) return '';
@@ -14252,14 +14255,18 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
        chip says so out loud: telling a caller "this is his wife's card" is the difference between a
        useful call and an embarrassing one. */
     if(p.cardStatus==='issued' && p.cardVia==='family')
-      return '<span style="background:#E6F0E5;color:#2F6B33;border-radius:11px;font-size:9.5px;padding:2px 8px;font-weight:700" '+
-             'title="'+esc(p.cardHolderName||'')+' holds this card on the same mobile number">◆ FAMILY CARD'+
+      return '<span style="display:inline-flex;align-items:center;gap:4px;background:#E6F0E5;color:#2F6B33;border-radius:100px;font-size:9px;padding:2.5px 8px 2.5px 7px;font-weight:700" '+
+             'title="'+esc(p.cardHolderName||'')+' holds this card on the same mobile number">'+
+             '<span style="width:5px;height:5px;border-radius:50%;background:#2F6B33;flex:none"></span>FAMILY CARD'+
              (p.cardNumber?(' · '+esc(p.cardNumber)):'')+'</span>';
     if(p.cardStatus==='issued')
-      return '<span style="background:#F7EFD8;color:#8C6B1F;border-radius:11px;font-size:9.5px;padding:2px 8px;font-weight:700">◆ CARD'+(p.cardNumber?(' · '+esc(p.cardNumber)):'')+'</span>';
+      return '<span style="display:inline-flex;align-items:center;gap:4px;background:#F7EFD8;color:#8C6B1F;border-radius:100px;font-size:9px;padding:2.5px 8px 2.5px 7px;font-weight:700">'+
+             '<span style="width:5px;height:5px;border-radius:50%;background:#8C6B1F;flex:none"></span>CARD'+(p.cardNumber?(' · '+esc(p.cardNumber)):'')+'</span>';
     if(p.cardStatus==='pending')
-      return '<span style="background:#FAEEDA;color:#854F0B;border-radius:11px;font-size:9.5px;padding:2px 8px;font-weight:700">CARD PENDING</span>';
-    return '<span style="background:#EFF1F3;color:#5C646E;border-radius:11px;font-size:9.5px;padding:2px 8px;font-weight:700">NO CARD</span>';
+      return '<span style="display:inline-flex;align-items:center;gap:4px;background:#FAEEDA;color:#854F0B;border-radius:100px;font-size:9px;padding:2.5px 8px 2.5px 7px;font-weight:700">'+
+             '<span style="width:5px;height:5px;border-radius:50%;background:#854F0B;flex:none"></span>CARD PENDING</span>';
+    return '<span style="display:inline-flex;align-items:center;gap:4px;background:#EFF1F3;color:#5C646E;border-radius:100px;font-size:9px;padding:2.5px 8px 2.5px 7px;font-weight:700">'+
+           '<span style="width:5px;height:5px;border-radius:50%;background:#5C646E;flex:none"></span>NO CARD</span>';
   }
   function loader(txt){ return '<div class="center-load"><span class="loader dark"></span> '+esc(txt||'Loading…')+'</div>'; }
 
@@ -14648,29 +14655,34 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     }
     box.innerHTML=PC.rows.map(function(p){
       var c=hue(p.name), noCard=(p.cardStatus!=='issued');
-      /* v357: plain white for every row now — the cream/gold tint used to be the only signal that
-         a lead had no card, but the "NO CARD" pill on the row already says the same thing, so the
-         tint was dropped in favor of a flat white background across the board. */
-      return '<div class="tcard" data-id="'+esc(p.patientId)+'" style="align-items:center">'+
-        '<div style="width:34px;height:34px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;background:'+c[0]+';color:'+c[1]+'">'+esc(initials(p.name))+'</div>'+
+      /* v360: "more attractive" pass — a thin colored stripe on the row's left edge shows card
+         status at a glance (gold=no card, teal=has card); the avatar gets a subtle ring so it
+         doesn't blend into the white row; card status moved up next to the name as a chip instead
+         of sitting in the contact line; a phone glyph leads the contact line. All still just this
+         one row's own inline styles — .tcard/.tbody/.ttitle/.tmeta stay untouched for tasks.js/app.js. */
+      return '<div class="tcard" data-id="'+esc(p.patientId)+'" style="align-items:center;border-left:4px solid '+(noCard?'#c9962c':'#0e6f5c')+'">'+
+        '<div style="width:40px;height:40px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;background:'+c[0]+';color:'+c[1]+';box-shadow:0 0 0 3px #fff,0 0 0 4px #ecedf0">'+esc(initials(p.name))+'</div>'+
         '<div class="tbody">'+
-          '<div class="ttitle" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><b style="color:#000;font-weight:700">'+esc(p.name)+'</b> '+tagChip(p.tag)+' '+dueChip(p)+'</div>'+
-          '<div class="tmeta" style="margin-top:3px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">'+
-            (p.number?esc(p.number):'<i style="color:#c0392b">no number</i>')+
-            (p.address?(' · '+esc(p.address)):'')+' '+cardChip(p)+
-            (p.assignedToName?(' · '+esc(p.assignedToName)):'')+
+          '<div class="ttitle" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><b style="color:#000;font-weight:700">'+esc(p.name)+'</b> '+tagChip(p.tag)+' '+cardChip(p)+' '+dueChip(p)+'</div>'+
+          '<div class="tmeta" style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:11px">'+
+            '\u{1F4DE} '+(p.number?esc(p.number):'<i style="color:#c0392b">no number</i>')+
+            (p.address?(' · '+esc(p.address)):'')+
+            (p.assignedToName?(' · <span style="color:#9aa0a6">'+esc(p.assignedToName)+'</span>'):'')+
           '</div>'+
         '</div>'+
         /* v355: Call replaced with Book sample / Edit / Notes — same three actions the Patient
            file popup already offered, now one tap away instead of two. Icon-only so four actions
            still fit on one line on a phone.
            v357: each icon gets its own colored square (gold/teal/blue/purple) instead of a flat
-           white outline, so the row is scannable by color instead of by reading the tiny glyph. */
-        '<div style="display:flex;gap:5px;flex:none" data-stop="1">'+
-          (noCard?'<button class="btn sm" data-card="'+esc(p.patientId)+'" title="Issue card" style="width:34px;height:34px;padding:0;border:0;border-radius:10px;background:linear-gradient(160deg,#e8c568,#c9962c);color:#4a3200;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">◆</button>':'')+
-          '<button class="btn sm" data-samp="'+esc(p.patientId)+'" title="Book sample" style="width:34px;height:34px;padding:0;border:0;border-radius:10px;background:linear-gradient(160deg,#3fcfae,#0e6f5c);color:#fff;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">\u{1F9EA}</button>'+
-          '<button class="btn sm" data-edit="'+esc(p.patientId)+'" title="Edit" style="width:34px;height:34px;padding:0;border:0;border-radius:10px;background:linear-gradient(160deg,#6d93ef,#3a5a9b);color:#fff;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">✎</button>'+
-          '<button class="btn sm" data-notes="'+esc(p.patientId)+'" title="Notes" style="width:34px;height:34px;padding:0;border:0;border-radius:10px;background:linear-gradient(160deg,#c98ee6,#8e44ad);color:#fff;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">\u{1F4DD}</button>'+
+           white outline, so the row is scannable by color instead of by reading the tiny glyph.
+           v360: added justify-content:center — the buttons only had align-items:center (from the
+           shared .btn class), which centers vertically but left the glyph hugging the left edge
+           of the box instead of sitting dead-centre; also bumped 34px→36px and the radius slightly. */
+        '<div style="display:flex;gap:6px;flex:none" data-stop="1">'+
+          (noCard?'<button class="btn sm" data-card="'+esc(p.patientId)+'" title="Issue card" style="width:36px;height:36px;padding:0;border:0;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#e8c568,#c9962c);color:#4a3200;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">◆</button>':'')+
+          '<button class="btn sm" data-samp="'+esc(p.patientId)+'" title="Book sample" style="width:36px;height:36px;padding:0;border:0;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#3fcfae,#0e6f5c);color:#fff;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">\u{1F9EA}</button>'+
+          '<button class="btn sm" data-edit="'+esc(p.patientId)+'" title="Edit" style="width:36px;height:36px;padding:0;border:0;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#6d93ef,#3a5a9b);color:#fff;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">✎</button>'+
+          '<button class="btn sm" data-notes="'+esc(p.patientId)+'" title="Notes" style="width:36px;height:36px;padding:0;border:0;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#c98ee6,#8e44ad);color:#fff;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">\u{1F4DD}</button>'+
         '</div>'+
       '</div>';
     }).join('');
