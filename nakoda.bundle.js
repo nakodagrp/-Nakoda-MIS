@@ -14171,9 +14171,9 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     'Old data': { bg:'#EFF1F3', fg:'#5C646E', pill:'#686868' }
   };
   var OUTLABEL = { answered:'Answered', no_answer:'No answer', busy:'Busy', wrong_number:'Wrong number' };
-  /* v355: Follow-ups dropped — it only ever counted next-call dates, and calling was removed from
-     the CRM entirely (see paintList, openPatient and renderPatientBar below). */
-  var TABS = [['cold','Cold leads'],['mine','My leads'],['card','Pending card']];
+  /* v358: Follow-ups tab restored on request — the calling workflow itself stays removed
+     (no Call button, no Talk-time popup), this just brings the count/tab back for visibility. */
+  var TABS = [['cold','Cold leads'],['mine','My leads'],['followups','Follow-ups'],['card','Pending card']];
 
   /* ---------------- small helpers ---------------- */
   function $id(i){ return document.getElementById(i); }
