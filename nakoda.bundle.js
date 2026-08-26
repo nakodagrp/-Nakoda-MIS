@@ -14648,10 +14648,13 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     }
     box.innerHTML=PC.rows.map(function(p){
       var c=hue(p.name), noCard=(p.cardStatus!=='issued');
-      return '<div class="tcard" data-id="'+esc(p.patientId)+'" style="align-items:center'+(noCard?';border-color:#DFC98D;background:#FFFDF7':'')+'">'+
+      /* v357: plain white for every row now — the cream/gold tint used to be the only signal that
+         a lead had no card, but the "NO CARD" pill on the row already says the same thing, so the
+         tint was dropped in favor of a flat white background across the board. */
+      return '<div class="tcard" data-id="'+esc(p.patientId)+'" style="align-items:center">'+
         '<div style="width:34px;height:34px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;background:'+c[0]+';color:'+c[1]+'">'+esc(initials(p.name))+'</div>'+
         '<div class="tbody">'+
-          '<div class="ttitle" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">'+esc(p.name)+' '+tagChip(p.tag)+' '+dueChip(p)+'</div>'+
+          '<div class="ttitle" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><b style="color:#000;font-weight:700">'+esc(p.name)+'</b> '+tagChip(p.tag)+' '+dueChip(p)+'</div>'+
           '<div class="tmeta" style="margin-top:3px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">'+
             (p.number?esc(p.number):'<i style="color:#c0392b">no number</i>')+
             (p.address?(' · '+esc(p.address)):'')+' '+cardChip(p)+
@@ -14660,12 +14663,14 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
         '</div>'+
         /* v355: Call replaced with Book sample / Edit / Notes — same three actions the Patient
            file popup already offered, now one tap away instead of two. Icon-only so four actions
-           still fit on one line on a phone. */
+           still fit on one line on a phone.
+           v357: each icon gets its own colored square (gold/teal/blue/purple) instead of a flat
+           white outline, so the row is scannable by color instead of by reading the tiny glyph. */
         '<div style="display:flex;gap:5px;flex:none" data-stop="1">'+
-          (noCard?'<button class="btn sm" data-card="'+esc(p.patientId)+'" title="Issue card" style="width:34px;padding:0;background:#fff;color:#8C6B1F;border:1px solid #DFC98D">◆</button>':'')+
-          '<button class="btn sm" data-samp="'+esc(p.patientId)+'" title="Book sample" style="width:34px;padding:0;background:#fff;color:#0E6F5C;border:1px solid #B7E6DA">\u{1F9EA}</button>'+
-          '<button class="btn sm ghost" data-edit="'+esc(p.patientId)+'" title="Edit" style="width:34px;padding:0">✎</button>'+
-          '<button class="btn sm ghost" data-notes="'+esc(p.patientId)+'" title="Notes" style="width:34px;padding:0">\u{1F4DD}</button>'+
+          (noCard?'<button class="btn sm" data-card="'+esc(p.patientId)+'" title="Issue card" style="width:34px;height:34px;padding:0;border:0;border-radius:10px;background:linear-gradient(160deg,#e8c568,#c9962c);color:#4a3200;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">◆</button>':'')+
+          '<button class="btn sm" data-samp="'+esc(p.patientId)+'" title="Book sample" style="width:34px;height:34px;padding:0;border:0;border-radius:10px;background:linear-gradient(160deg,#3fcfae,#0e6f5c);color:#fff;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">\u{1F9EA}</button>'+
+          '<button class="btn sm" data-edit="'+esc(p.patientId)+'" title="Edit" style="width:34px;height:34px;padding:0;border:0;border-radius:10px;background:linear-gradient(160deg,#6d93ef,#3a5a9b);color:#fff;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">✎</button>'+
+          '<button class="btn sm" data-notes="'+esc(p.patientId)+'" title="Notes" style="width:34px;height:34px;padding:0;border:0;border-radius:10px;background:linear-gradient(160deg,#c98ee6,#8e44ad);color:#fff;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">\u{1F4DD}</button>'+
         '</div>'+
       '</div>';
     }).join('');
