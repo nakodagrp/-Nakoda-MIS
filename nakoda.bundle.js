@@ -227,6 +227,17 @@
     if(queueable) return NET(action,payload,timeoutMs).catch(function(){ return enqueue(action,payload); });
     return NET(action,payload,timeoutMs);            /* self-queued (method handles) or online-only */
   }
+  /* v351 -- SAME FIX AS login (see the v295 note above): a single 30s shot at an online-only action
+     fails outright the moment Apps Script is busy (>30 concurrent executions -- happens any time
+     several staff tap something at once, not just "morning rush"). "Message patient" / "Message
+     phlebotomist" are online-only (NOQUEUE -- nothing useful to replay offline), so they got no retry
+     at all and any transient busy-server moment showed the user "signal is aborted without reason"
+     even though the WhatsApp send itself is fine. Retry once with a fresh 25s window before giving up. */
+  function callRetryOnce_(action,payload,timeoutMs){
+    return call(action,payload,timeoutMs).catch(function(e){
+      return call(action,payload,timeoutMs).catch(function(e2){ throw e2; });
+    });
+  }
 
   /* ---------- status broadcasting ---------- */
   function emit(){
@@ -631,8 +642,8 @@
        remark, sampleId(optional) — whatever the popup currently holds. The server resolves the
        template, the phlebotomist's phone, and the branch's WhatsApp key; nothing sensitive is
        decided on the client. */
-    opsMessagePatient:function(d){ return call('opsMessagePatient',{token:getToken(),data:d||{}}, 30000); },
-    opsMessagePhlebotomist:function(d){ return call('opsMessagePhlebotomist',{token:getToken(),data:d||{}}, 30000); },
+    opsMessagePatient:function(d){ return callRetryOnce_('opsMessagePatient',{token:getToken(),data:d||{}}, 25000); },
+    opsMessagePhlebotomist:function(d){ return callRetryOnce_('opsMessagePhlebotomist',{token:getToken(),data:d||{}}, 25000); },
     /* v317 — one call answers the whole picker: the week strip and every box for the chosen day.
        Two calls would be tidier and twice as slow, and this runs while a patient waits on the phone. */
     opsSlots:function(empId,date,month){ return call('opsSlots',{token:getToken(),empId:empId||'',date:date||'',month:month||''}); },
