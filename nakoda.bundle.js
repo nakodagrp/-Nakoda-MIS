@@ -82,7 +82,7 @@
     /* v350 — "Message patient" / "Message phlebotomist" on the booking popup. Both send a live
        WhatsApp template through whatsbizapi.com; see the NOQUEUE note just below for why they
        must never sit in the offline outbox. */
-    opsMessagePatient:1,opsMessagePhlebotomist:1};
+    opsMessagePatient:1,opsMessagePhlebotomist:1,opsMessageFeedback:1};
   /* Writes that already do their own optimistic queueing inside the method (don't double-queue here). */
   var SELF_QUEUE={createEmployee:1,updateEmployee:1,setStatus:1,issueCard:1,renewCard:1,cancelCard:1,markCardSent:1,markCardActivated:1,
     createTask:1,updateTask:1,setTaskStatus:1,deleteTask:1,createCalEntry:1,updateCalEntry:1,attachSelfie:1};
@@ -100,7 +100,7 @@
      The way back to offline booking is a failed-items tray the desk can see and retry, not a change
      here. Until that exists, this is the honest setting. */
   var NOQUEUE={pcImport:1,login:1,validate:1,logout:1,changePassword:1,resetPassword:1,checkIn:1,checkOut:1,runPayroll:1,approvePayroll:1,confirmAbsent:1,uploadFile:1,importOldCards:1,submitQuiz:1,waTest:1,waSendCard:1,waCardMedia:1,waBulkSend:1,saveWaTemplate:1,waTestTemplate:1,saveOrder:1,saveLabVisit:1,
-    opsMessagePatient:1,opsMessagePhlebotomist:1};   /* v319: a chair is exclusive too. v350: a WhatsApp send has nothing useful to replay offline. */
+    opsMessagePatient:1,opsMessagePhlebotomist:1,opsMessageFeedback:1};   /* v319: a chair is exclusive too. v350/v353: a WhatsApp send has nothing useful to replay offline. */
   /* ---------------- ATTACHMENTS ----------------------------------------------------
      A phone photo of a report is 4-8 MB. Sent as base64 it grows by a third, so ~10 MB was
      going up a branch connection against a hard 60-second abort — the request was killed
@@ -644,6 +644,7 @@
        decided on the client. */
     opsMessagePatient:function(d){ return callRetryOnce_('opsMessagePatient',{token:getToken(),data:d||{}}, 25000); },
     opsMessagePhlebotomist:function(d){ return callRetryOnce_('opsMessagePhlebotomist',{token:getToken(),data:d||{}}, 25000); },
+    opsMessageFeedback:function(sampleId){ return callRetryOnce_('opsMessageFeedback',{token:getToken(),sampleId:sampleId}, 25000); },
     /* v317 — one call answers the whole picker: the week strip and every box for the chosen day.
        Two calls would be tidier and twice as slow, and this runs while a patient waits on the phone. */
     opsSlots:function(empId,date,month){ return call('opsSlots',{token:getToken(),empId:empId||'',date:date||'',month:month||''}); },
@@ -2925,13 +2926,15 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
   var HEADER_TYPES=[['none','No header'],['text','Text header'],['image','Image header'],['document','Document (PDF) header'],['video','Video header']];
   var PURPOSES=[['general','General / promotional'],['membership_card','Membership card (used by Cards ▸ Send via Official API)'],
     ['sample_collection_patient','Sample collection · message to patient (booking popup)'],
-    ['sample_collection_phlebotomist','Sample collection · message to phlebotomist (booking popup)']];
+    ['sample_collection_phlebotomist','Sample collection · message to phlebotomist (booking popup)'],
+    ['sample_collection_feedback','Sample collection · feedback request (with rating buttons)']];
 
   function headerLabel(h){ var m={none:'None',text:'Text',image:'🖼 Image',document:'📄 Document',video:'🎬 Video'}; return m[h]||h||'—'; }
   function purposeBadge(p,cardTypeId){
     if(p==='membership_card') return '<span class="badge" style="background:#185fa522;color:#185fa5">Membership card'+(cardTypeId?(' · '+esc(cardTypeId)):' · all types')+'</span>';
     if(p==='sample_collection_patient') return '<span class="badge" style="background:#1a7f3722;color:#1a7f37">Message · patient</span>';
     if(p==='sample_collection_phlebotomist') return '<span class="badge" style="background:#7a5b0022;color:#7a5b00">Message · phlebotomist</span>';
+    if(p==='sample_collection_feedback') return '<span class="badge" style="background:#8e44ad22;color:#8e44ad">Feedback · rating</span>';
     return '<span style="color:#888">General</span>';
   }
   function statusBadgeT(s){ var on=s!=='inactive'; return '<span class="badge" style="background:'+(on?'#1a7f37':'#9aa0a6')+'22;color:'+(on?'#1a7f37':'#9aa0a6')+'">'+(on?'active':'inactive')+'</span>'; }
@@ -2984,6 +2987,11 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     var htOpts=HEADER_TYPES.map(function(h){ return '<option value="'+h[0]+'"'+(h[0]===String(t.headerType)?' selected':'')+'>'+h[1]+'</option>'; }).join('');
     var puOpts=PURPOSES.map(function(p){ return '<option value="'+p[0]+'"'+(p[0]===String(t.purpose)?' selected':'')+'>'+p[1]+'</option>'; }).join('');
     var ctOpts='<option value="">All card types (generic)</option>'+cardTypes.map(function(ct){ return '<option value="'+esc(ct.typeId)+'"'+(String(ct.typeId)===String(t.cardTypeId||'')?' selected':'')+'>'+esc(ct.name)+' ('+esc(ct.typeId)+')</option>'; }).join('');
+    /* v353 — feedback-with-rating templates carry their 3 Quick Reply button labels here, so the
+       webhook that records a patient's tap can match it back to a score without a code change every
+       time someone reworks the wording. Order matters: label 1 = best, label 3 = worst. */
+    var btnLabelsArr=String(t.btnLabels||'Excellent|Okay|Needs improvement').split('|');
+    var showBtnLabels = String(t.purpose)==='sample_collection_feedback';
     var body='<div class="grid2">'+
       '<div class="field"><label>Template name * (exactly as in Meta)</label><input id="wt_name" value="'+esc(t.name||'')+'" placeholder="membership_card" style="text-transform:lowercase"></div>'+
       '<div class="field"><label>Language code</label><input id="wt_lang" value="'+esc(t.language||'en')+'" placeholder="en"></div>'+
@@ -2993,6 +3001,15 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
       '<div class="field"><label>Card type (Membership card only)</label><select id="wt_cardtype">'+ctOpts+'</select></div>'+
       '<div class="field full" style="margin-top:-6px"><div style="font-size:11px;color:#999">For "Membership card": pick a card type to use this template only for that type (e.g. one per type with its own benefits in the body). "All card types" is the fallback when a type has no template of its own.</div></div>'+
       '<div class="field full"><label>Variable hints (one per line, e.g. "1 = customer name") — for your team\'s reference</label><textarea id="wt_hints" rows="4">'+esc(t.paramHints||'')+'</textarea></div>'+
+      '<div class="field full" id="wt_btnwrap" style="display:'+(showBtnLabels?'block':'none')+';background:#8e44ad11;border:1px solid #8e44ad33;border-radius:8px;padding:10px 12px">'+
+        '<label style="margin-bottom:6px;display:block">Rating button labels — must match the Quick Reply buttons exactly as approved in whatsbizapi.com</label>'+
+        '<div class="grid2" style="gap:8px">'+
+          '<div class="field"><label style="font-size:11px;color:#999">Best (5★)</label><input id="wt_btn1" value="'+esc(btnLabelsArr[0]||'')+'"></div>'+
+          '<div class="field"><label style="font-size:11px;color:#999">Middle (3★)</label><input id="wt_btn2" value="'+esc(btnLabelsArr[1]||'')+'"></div>'+
+          '<div class="field"><label style="font-size:11px;color:#999">Worst (1★)</label><input id="wt_btn3" value="'+esc(btnLabelsArr[2]||'')+'"></div>'+
+        '</div>'+
+        '<div style="font-size:11px;color:#999;margin-top:6px">When a patient taps a button, the MIS matches the reply text to one of these three to record a rating on their sample. If the wording doesn\'t match exactly, the tap is logged but not scored.</div>'+
+      '</div>'+
       '<div class="field full"><label>Notes (what is this template for?)</label><textarea id="wt_notes" rows="2">'+esc(t.notes||'')+'</textarea></div>'+
       '<div class="field full"><label>Status</label><select id="wt_status"><option value="active"'+(t.status!=='inactive'?' selected':'')+'>active</option><option value="inactive"'+(t.status==='inactive'?' selected':'')+'>inactive</option></select></div>'+
     '</div>';
@@ -3000,11 +3017,16 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
       '<button class="btn ghost" onclick="closeModal()">Cancel</button>'+
       (tplId?'<button class="btn ghost" id="wt_del" style="color:#C0392B">Delete</button>':'')+
       '<button class="btn" id="wt_save">'+(tplId?'Save':'Create')+'</button>');
+    document.getElementById('wt_purpose').onchange=function(){
+      var wrap=document.getElementById('wt_btnwrap');
+      if(wrap) wrap.style.display=(this.value==='sample_collection_feedback')?'block':'none';
+    };
     document.getElementById('wt_save').onclick=function(){
       var data={ tplId:tplId||'', name:val('wt_name').toLowerCase().trim(), language:val('wt_lang'),
         headerType:document.getElementById('wt_header').value, paramCount:val('wt_params'),
         purpose:document.getElementById('wt_purpose').value, cardTypeId:document.getElementById('wt_cardtype').value,
         paramHints:document.getElementById('wt_hints').value,
+        btnLabels:[val('wt_btn1'),val('wt_btn2'),val('wt_btn3')].map(function(s){return (s||'').trim();}).join('|'),
         notes:document.getElementById('wt_notes').value, status:document.getElementById('wt_status').value };
       if(!data.name){ toast('Template name is required.',true); return; }
       if(!/^[a-z0-9_]+$/.test(data.name)){ toast('Name: lowercase letters, numbers and _ only (must match Meta exactly).',true); return; }
@@ -3637,10 +3659,13 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
            round trip for the detail panel, which was the part actually worth saving. */
         /* pc1: when the Patient CRM opened this, hand the card number back to it instead of
            navigating into the Cards page — the caller is mid-call and must stay where they are. */
-        if(r.ok && typeof afterIssue==='function'){ closeModal(); toast('Card issued: '+r.card.cardNumber); afterIssue(r.card); return; }
+        /* v354: used to stop here with just a toast — the CRM caller never got the chance to send
+           the card. Now it opens the same send screen the Cards page uses (image, Share via
+           System, Send via Official API) right after linking it to the patient. */
+        if(r.ok && typeof afterIssue==='function'){ closeModal(); toast('Card issued: '+r.card.cardNumber); afterIssue(r.card); openCardDetail(r.card.cardNumber, r); return; }
         if(r.ok){ closeModal(); toast('Card issued: '+r.card.cardNumber); openCardDetail(r.card.cardNumber, r); renderMembershipCards(); return; }
         if(String(r.error).indexOf('DUPLICATE')===0){
-          if(confirm(r.error.replace('DUPLICATE: ','')+'\n\nReplace the old card and issue this new one?')){ data.replaceExisting=true; return API.issueCard(data).then(function(r2){ if(r2.ok){ closeModal(); toast('Card issued: '+r2.card.cardNumber); if(typeof afterIssue==='function'){ afterIssue(r2.card); } else { openCardDetail(r2.card.cardNumber, r2); renderMembershipCards(); } } else toast(r2.error,true); }); }
+          if(confirm(r.error.replace('DUPLICATE: ','')+'\n\nReplace the old card and issue this new one?')){ data.replaceExisting=true; return API.issueCard(data).then(function(r2){ if(r2.ok){ closeModal(); toast('Card issued: '+r2.card.cardNumber); if(typeof afterIssue==='function'){ afterIssue(r2.card); openCardDetail(r2.card.cardNumber, r2); } else { openCardDetail(r2.card.cardNumber, r2); renderMembershipCards(); } } else toast(r2.error,true); }); }
         } else { toast(r.error,true); }
         btn.disabled=false; btn.textContent='Create card';
       }).catch(function(){ toast('Issuing a card needs an internet connection.',true); btn.disabled=false; btn.textContent='Create card'; });
@@ -12418,6 +12443,12 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
                    outsource:['&#128300;','Outsourced'] };
   var TYPE_LABEL={ walkin:'Walk-in', homevisit:'Home visit', labvisit:'Counter appointment',
                    outsource:'Outsource' };
+  function fbBadge(fr){
+    if(!fr) return '';
+    var m=String(fr).match(/^(\d)\s*\u2605/);
+    var glyph = m ? '\u2605'.repeat(Math.max(1,Math.min(5,Number(m[1])))) : '\ud83d\udcac';
+    return ' <span class="ops-fb-badge'+(m && Number(m[1])<=2?' low':'')+'" title="Feedback: '+esc(fr)+'">'+glyph+'</span>';
+  }
   function rowHtml(s){
     var on=(s.sampleId===OPS.sel);
     /* v322: an outsource carries no amount — printing "₹0" on every one of them reads as a billing
@@ -12434,7 +12465,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     var kb=KIND_BADGE[String(s.type||'walkin')];
     var badge=kb?('<i class="ti-home" title="'+esc(kb[1])+'">'+kb[0]+'</i> '):'';
     return '<div class="'+cls+'" data-sid="'+esc(s.sampleId)+'">'+
-      '<div class="ops-row-n">'+badge+esc(s.patientName)+'</div>'+
+      '<div class="ops-row-n">'+badge+esc(s.patientName)+fbBadge(s.feedbackRating)+'</div>'+
       '<div class="ops-row-s'+(s.status==='sent'?' done':(s.pendingHours>=24?' late':''))+'">'+sub+'</div></div>';
   }
   function detailHtml(s){
@@ -12483,6 +12514,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
        v322: and on that row it has already been printed at the top, so it is not printed twice. */
     if(s.labRemark && !isOut) rows.push(['Lab remark', esc(s.labRemark)]);
     if(s.remarks) rows.push(['Remarks', esc(s.remarks)]);
+    if(s.feedbackRating) rows.push(['Feedback', esc(s.feedbackRating)+(s.feedbackAt?(' \u00b7 '+esc(s.feedbackAt)):'')]);
     /* Whatever the record needs next — the same popup the owner gets from their task list, so a
        manager can push a stuck record along without hunting for whose queue it is in. */
     /* v320: collected goes straight to Send report. The two legacy statuses map there too, so an old
@@ -12491,8 +12523,9 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
               result:['opsSend','Send report'],verified:['opsSend','Send report'],
               outsourced:['opsSend','Send report']};   /* v321 */
     var n=NEXT[s.status];
+    var fbBtn=(s.status==='sent'&&!s.feedbackRating)?' <button class="btn ghost" id="opsSendFb">\ud83d\udce9 Send feedback request</button>':'';
     var act=(s.status==='sent')
-      ? '<button class="btn ghost" disabled>Report sent</button>'
+      ? '<button class="btn ghost" disabled>Report sent</button>'+fbBtn
       : (n?('<button class="btn" id="'+n[0]+'">'+n[1]+'</button>'):'');
     return '<div class="ops-dh"><b>'+esc(s.patientName)+'</b> <span class="ops-sid">'+esc(s.sampleId)+'</span></div>'+
       '<div class="ops-dm">'+esc(meta||'—')+'</div>'+stage+
@@ -12523,6 +12556,16 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     function go(id,fn){ var b=$id(id); if(b) b.onclick=function(){ var s=selected(); if(s) fn(s.sampleId,function(){ load(true); }); }; }
     go('opsSend',   function(id,cb){ window.openSendReport(id,'',cb); });
     go('opsGoVisit',  window.openHomeVisit);
+    var fb=$id('opsSendFb');
+    if(fb) fb.onclick=function(){
+      var s=selected(); if(!s) return;
+      var orig=fb.innerHTML; fb.disabled=true; fb.innerHTML='<span class="loader"></span>';
+      API.opsMessageFeedback(s.sampleId).then(function(r){
+        fb.disabled=false; fb.innerHTML=orig;
+        if(r&&r.ok) toast('Feedback request sent \u2014 check WhatsApp.');
+        else toast((r&&r.error)||'Could not send.',true);
+      }, function(e){ fb.disabled=false; fb.innerHTML=orig; toast((e&&e.message)||'Could not reach the server.',true); });
+    };
   }
   function paint(){
     var host=$id('opsBody'); if(!host) return;
@@ -14115,7 +14158,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
 
   /* ---------------- module state ---------------- */
   var PC = {
-    tab:'followups', branch:'', q:'', tag:'', page:0,
+    tab:'cold', branch:'', q:'', tag:'', page:0,
     rows:[], counts:{cold:0,mine:0,followups:0,card:0}, kpi:{}, total:0, pageSize:200, today:''
   };
   var META = null;            /* tags, people, branches, permissions — fetched once */
@@ -14128,7 +14171,9 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     'Old data': { bg:'#EFF1F3', fg:'#5C646E', pill:'#686868' }
   };
   var OUTLABEL = { answered:'Answered', no_answer:'No answer', busy:'Busy', wrong_number:'Wrong number' };
-  var TABS = [['cold','Cold leads'],['mine','My leads'],['followups','Follow-ups'],['card','Pending card']];
+  /* v355: Follow-ups dropped — it only ever counted next-call dates, and calling was removed from
+     the CRM entirely (see paintList, openPatient and renderPatientBar below). */
+  var TABS = [['cold','Cold leads'],['mine','My leads'],['card','Pending card']];
 
   /* ---------------- small helpers ---------------- */
   function $id(i){ return document.getElementById(i); }
@@ -14613,9 +14658,14 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
             (p.assignedToName?(' · '+esc(p.assignedToName)):'')+
           '</div>'+
         '</div>'+
-        '<div style="display:flex;gap:6px;flex:none;flex-wrap:wrap;justify-content:flex-end" data-stop="1">'+
-          (noCard?'<button class="btn sm" data-card="'+esc(p.patientId)+'" style="background:#fff;color:#8C6B1F;border:1px solid #DFC98D">◆ Issue card</button>':'')+
-          (p.number?'<button class="btn sm" data-call="'+esc(p.patientId)+'" style="background:#1a7f37">☎ Call</button>':'')+
+        /* v355: Call replaced with Book sample / Edit / Notes — same three actions the Patient
+           file popup already offered, now one tap away instead of two. Icon-only so four actions
+           still fit on one line on a phone. */
+        '<div style="display:flex;gap:5px;flex:none" data-stop="1">'+
+          (noCard?'<button class="btn sm" data-card="'+esc(p.patientId)+'" title="Issue card" style="width:34px;padding:0;background:#fff;color:#8C6B1F;border:1px solid #DFC98D">◆</button>':'')+
+          '<button class="btn sm" data-samp="'+esc(p.patientId)+'" title="Book sample" style="width:34px;padding:0;background:#fff;color:#0E6F5C;border:1px solid #B7E6DA">\u{1F9EA}</button>'+
+          '<button class="btn sm ghost" data-edit="'+esc(p.patientId)+'" title="Edit" style="width:34px;padding:0">✎</button>'+
+          '<button class="btn sm ghost" data-notes="'+esc(p.patientId)+'" title="Notes" style="width:34px;padding:0">\u{1F4DD}</button>'+
         '</div>'+
       '</div>';
     }).join('');
@@ -14626,11 +14676,24 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
         openPatient(el.getAttribute('data-id'));
       };
     });
-    box.querySelectorAll('[data-call]').forEach(function(b){
-      b.onclick=function(ev){ ev.stopPropagation(); openPatientCall(b.getAttribute('data-call')); };
-    });
     box.querySelectorAll('[data-card]').forEach(function(b){
       b.onclick=function(ev){ ev.stopPropagation(); handOffCard(b.getAttribute('data-card'), null); };
+    });
+    box.querySelectorAll('[data-samp]').forEach(function(b){
+      b.onclick=function(ev){ ev.stopPropagation();
+        var id=b.getAttribute('data-samp'), p=null;
+        for(var i=0;i<PC.rows.length;i++){ if(PC.rows[i].patientId===id){ p=PC.rows[i]; break; } }
+        if(p) handOffSample(p, null, function(){ load(); });
+      };
+    });
+    box.querySelectorAll('[data-edit]').forEach(function(b){
+      b.onclick=function(ev){ ev.stopPropagation();
+        var id=b.getAttribute('data-edit');
+        API.pcGet(id).then(function(r){ if(r&&r.ok) openPatientForm(r.patient); else toast((r&&r.error)||'Could not open this patient',true); });
+      };
+    });
+    box.querySelectorAll('[data-notes]').forEach(function(b){
+      b.onclick=function(ev){ ev.stopPropagation(); openPatient(b.getAttribute('data-notes')); };
     });
 
     /* Real pages, not an infinite “show more” — load() replaces the list rather than appending,
@@ -14945,7 +15008,6 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
       : (p.nextCallAt ? '<div class="msg ok" style="margin-top:12px">Next call '+esc(niceDate(p.nextCallAt))+'</div>' : '');
 
     var actions='<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:12px">'+
-      (p.number?'<button class="btn" id="pd_call" style="background:#1a7f37">☎ Call &amp; log</button>':'')+
       (noCard?'<button class="btn ghost" id="pd_card" style="color:#8C6B1F;border-color:#DFC98D">◆ Issue card</button>':'')+
       (r.canCollect?'<button class="btn ghost" id="pd_samp">\u{1F9EA} Book sample</button>':'')+
       '<button class="btn ghost" id="pd_edit">✎ Edit</button>'+
@@ -14978,7 +15040,6 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     function reopen(){ load(); openPatient(p.patientId, after); }
 
     var b;
-    if((b=$id('pd_call'))) b.onclick=function(){ closeModal(); openPatientCall(p.patientId); };
     if((b=$id('pd_card'))) b.onclick=function(){ handOffCard(p.patientId, null, reopen); };
     if((b=$id('pd_samp'))) b.onclick=function(){ handOffSample(p, null, reopen); };
     if((b=$id('pd_edit'))) b.onclick=function(){ closeModal(); openPatientForm(p); };
@@ -15024,9 +15085,6 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
             return '<div class="pc-oc" data-o="'+k+'" style="cursor:pointer;border:1px solid '+(on?'#1a7f37':'#ecedf0')+';background:'+(on?'#EAF6EE':'#fff')+';color:'+(on?'#3B6D11':'#5a5a5a')+';font-weight:'+(on?'700':'400')+';border-radius:9px;padding:8px 4px;text-align:center;font-size:11px">'+esc(OUTLABEL[k])+'</div>';
           }).join('')+
         '</div></div>'+
-      '<div class="grid2">'+
-        '<div class="field"><label>Talk time</label><input id="pc_secs" placeholder="4m 10s"></div>'+
-      '</div>'+
       /* v349: full width and on its own row — the typing box carries a spelled-out date and a
          busy-day warning beside it, which do not fit in half a row on a phone. */
       '<div class="field full" style="margin-top:9px"><label>Next call date</label>'+
@@ -15122,7 +15180,6 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
       var btn=$id('pc_save'); btn.disabled=true; btn.innerHTML='<span class="loader"></span>';
       API.pcLogCall({
         callId:callId, patientId:p.patientId, outcome:chosen,
-        seconds:secFromText(val('pc_secs')),
         nextCallAt:val('pc_next')||'',
         note:(($id('pc_note')||{}).value||'').trim(),
         sampleId:linked.sampleId, cardNumber:linked.cardNumber,
@@ -15502,66 +15559,20 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
       box.style.cssText='margin-bottom:14px';
       host.parentNode.insertBefore(box, host);
     }
+    /* v355: the quick-dial lookup and "Call list" shortcut both existed only to jump into calling,
+       which is gone from the CRM now — Issue card and Add patient are what's left worth a shortcut. */
     box.innerHTML='<div class="card" style="padding:13px 14px">'+
       '<div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap">'+
-        '<div style="display:flex;gap:7px;align-items:center;flex:1;min-width:210px">'+
-          '<span style="font-size:19px">☎</span>'+
-          '<input id="pcQuickNum" inputmode="numeric" maxlength="10" placeholder="Type a mobile number to call…" '+
-            'style="flex:1;min-width:130px;border:1px solid #ecedf0;border-radius:20px;padding:9px 14px;font-size:13.5px">'+
-          '<button class="btn sm" id="pcQuickGo" style="background:#1a7f37">Go</button>'+
-        '</div>'+
-        '<button class="btn sm ghost" id="pcBarList">☎ Call list <b id="pcBarDue" style="margin-left:4px">…</b></button>'+
         '<button class="btn sm ghost" id="pcBarCard" style="color:#8C6B1F;border-color:#DFC98D">◆ Issue card</button>'+
         '<button class="btn sm ghost" id="pcBarAdd">+ Add patient</button>'+
       '</div>'+
-      '<div id="pcQuickMsg" style="font-size:12px;color:#9aa0a6;margin-top:7px"></div>'+
     '</div>';
 
-    document.getElementById('pcBarList').onclick=function(){ PC.tab='followups'; PC.page=0; if(window.go) go('patients'); };
     document.getElementById('pcBarAdd').onclick=function(){ ensureMeta().then(function(){ openPatientForm(null); }); };
     document.getElementById('pcBarCard').onclick=function(){
       if(typeof window.openIssueCardModal!=='function'){ toast('Membership Cards is not loaded.',true); return; }
       window.openIssueCardModal();     /* no pre-fill — the ordinary card screen */
     };
-
-    var inp=document.getElementById('pcQuickNum'), msg=document.getElementById('pcQuickMsg');
-    function goNumber(){
-      var n=mobile(inp.value);
-      if(n.length!==10){ msg.innerHTML='<span style="color:#C0392B">Enter all 10 digits.</span>'; return; }
-      msg.textContent='Looking up '+n+'…';
-      API.pcLookup(n).then(function(r){
-        if(r&&r.ok&&r.patient){
-          msg.textContent='';
-          inp.value='';
-          openPatientCall(r.patient.patientId);
-          return;
-        }
-        /* not on the list yet — but we may still know them from cards or past samples */
-        var known=(r&&r.ok&&r.found);
-        msg.innerHTML='Not on the calling list yet'+
-          (known?(' — but '+esc(r.name||'this number')+' is in your records ('+(r.visits||0)+' visits'+
-                  (r.activeCard?', has a card':'')+').'):'.')+
-          ' <a href="#" id="pcQuickAdd" style="font-weight:600">Add them</a>';
-        var a=document.getElementById('pcQuickAdd');
-        if(a) a.onclick=function(ev){ ev.preventDefault(); ensureMeta().then(function(){
-          openPatientForm(null);
-          setTimeout(function(){ var f=document.getElementById('pf_num'); if(f){ f.value=n; f.dispatchEvent(new Event('input')); } },120);
-        }); };
-      });
-    }
-    document.getElementById('pcQuickGo').onclick=goNumber;
-    inp.addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); goNumber(); } });
-
-    /* how many are due — the number that decides whether anyone opens the page */
-    API.pcList('followups','', '', '', 0).then(function(r){
-      var b=document.getElementById('pcBarDue'); if(!b) return;
-      if(r&&(r.ok||r.offline)){
-        var k=r.kpi||{}, n=(k.dueToday||0)+(k.overdue||0);
-        b.textContent=n;
-        b.style.color = k.overdue ? '#C0392B' : '#1a7f37';
-        if(k.overdue) b.title=k.overdue+' overdue';
-      } else b.textContent='0';
-    }).catch(function(){ var b=document.getElementById('pcBarDue'); if(b) b.textContent='0'; });
   }
 
   /* ---------------- exports ---------------- */
