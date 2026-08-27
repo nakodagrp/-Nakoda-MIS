@@ -14168,7 +14168,11 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     'New':      { bg:'#E6F1FB', fg:'#0C447C', pill:'#185FA5' },
     'Chronic':  { bg:'#FCEBEB', fg:'#A32D2D', pill:'#A32D2D' },
     'Healthy':  { bg:'#EAF3DE', fg:'#3B6D11', pill:'#1a7f37' },
-    'Old data': { bg:'#EFF1F3', fg:'#5C646E', pill:'#686868' }
+    'Old data': { bg:'#EFF1F3', fg:'#5C646E', pill:'#686868' },
+    /* v365 — not a pickable Tag chip (deliberately left out of pcMeta's tags list, so it never
+       shows up in the Add/Edit popup or the bulk-upload "tag all as" dropdown); it only ever gets
+       set by the row's own "mark lost" icon. Still needs a color here so tagChip() can render it. */
+    'Lost lead':{ bg:'#F5E6E6', fg:'#6b2737', pill:'#6b2737' }
   };
   var OUTLABEL = { answered:'Answered', no_answer:'No answer', busy:'Busy', wrong_number:'Wrong number' };
   /* v358: Follow-ups tab restored on request — the calling workflow itself stays removed
@@ -14654,13 +14658,15 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
       $id('pcMore').innerHTML=''; return;
     }
     box.innerHTML=PC.rows.map(function(p){
-      var c=hue(p.name), noCard=(p.cardStatus!=='issued');
+      var c=hue(p.name), noCard=(p.cardStatus!=='issued'), isLost=(p.tag==='Lost lead');
       /* v360: "more attractive" pass — a thin colored stripe on the row's left edge shows card
          status at a glance (gold=no card, teal=has card); the avatar gets a subtle ring so it
          doesn't blend into the white row; card status moved up next to the name as a chip instead
          of sitting in the contact line; a phone glyph leads the contact line. All still just this
-         one row's own inline styles — .tcard/.tbody/.ttitle/.tmeta stay untouched for tasks.js/app.js. */
-      return '<div class="tcard" data-id="'+esc(p.patientId)+'" style="align-items:center;border-left:4px solid '+(noCard?'#c9962c':'#0e6f5c')+'">'+
+         one row's own inline styles — .tcard/.tbody/.ttitle/.tmeta stay untouched for tasks.js/app.js.
+         v365: a lost lead overrides the stripe with maroon and dims the whole row — the fastest way
+         to tell, scrolling fast, which rows are dead. */
+      return '<div class="tcard" data-id="'+esc(p.patientId)+'" style="align-items:center;border-left:4px solid '+(isLost?'#6b2737':(noCard?'#c9962c':'#0e6f5c'))+(isLost?';opacity:.72':'')+'">'+
         '<div style="width:40px;height:40px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;background:'+c[0]+';color:'+c[1]+';box-shadow:0 0 0 3px #fff,0 0 0 4px #ecedf0">'+esc(initials(p.name))+'</div>'+
         '<div class="tbody">'+
           '<div class="ttitle" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><b style="color:#000;font-weight:700">'+esc(p.name)+'</b> '+tagChip(p.tag)+' '+cardChip(p)+' '+dueChip(p)+'</div>'+
@@ -14677,12 +14683,26 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
            white outline, so the row is scannable by color instead of by reading the tiny glyph.
            v360: added justify-content:center — the buttons only had align-items:center (from the
            shared .btn class), which centers vertically but left the glyph hugging the left edge
-           of the box instead of sitting dead-centre; also bumped 34px→36px and the radius slightly. */
+           of the box instead of sitting dead-centre; also bumped 34px→36px and the radius slightly.
+           v365: two fixes together.
+           (1) these icons never gave any visible response to a hover or a tap — the .pcActBtn class
+           below (see styles.css) adds a hover glow and a press state (darken + shrink-in-place +
+           ring) so a tap visibly registers instead of feeling dead. A plain mousedown listener,
+           wired below, stops the button stealing keyboard focus on tap, which is what was making
+           the page hop up a few pixels on touch — focusing a button near the edge of a scrolling
+           list makes the browser scroll it into view.
+           (2) a 5th icon marks/unmarks a lead as lost, right on the row — no popup. Marking it sets
+           the tag to "Lost lead" (own maroon color, excluded from the Tag picker on purpose — see
+           TAGMETA above) and clears any scheduled next-call date, same as any other tag change;
+           unmarking puts it back in "Old data" so it re-enters the ordinary cold-leads pool. */
         '<div style="display:flex;gap:6px;flex:none" data-stop="1">'+
-          (noCard?'<button class="btn sm" data-card="'+esc(p.patientId)+'" title="Issue card" style="width:36px;height:36px;padding:0;border:0;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#e8c568,#c9962c);color:#4a3200;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">◆</button>':'')+
-          '<button class="btn sm" data-samp="'+esc(p.patientId)+'" title="Book sample" style="width:36px;height:36px;padding:0;border:0;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#3fcfae,#0e6f5c);color:#fff;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">\u{1F9EA}</button>'+
-          '<button class="btn sm" data-edit="'+esc(p.patientId)+'" title="Edit" style="width:36px;height:36px;padding:0;border:0;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#6d93ef,#3a5a9b);color:#fff;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">✎</button>'+
-          '<button class="btn sm" data-notes="'+esc(p.patientId)+'" title="Notes" style="width:36px;height:36px;padding:0;border:0;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#c98ee6,#8e44ad);color:#fff;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">\u{1F4DD}</button>'+
+          (noCard?'<button class="btn sm pcActBtn" data-card="'+esc(p.patientId)+'" title="Issue card" style="width:36px;height:36px;padding:0;border:0;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#e8c568,#c9962c);color:#4a3200;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">◆</button>':'')+
+          '<button class="btn sm pcActBtn" data-samp="'+esc(p.patientId)+'" title="Book sample" style="width:36px;height:36px;padding:0;border:0;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#3fcfae,#0e6f5c);color:#fff;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">\u{1F9EA}</button>'+
+          '<button class="btn sm pcActBtn" data-edit="'+esc(p.patientId)+'" title="Edit" style="width:36px;height:36px;padding:0;border:0;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#6d93ef,#3a5a9b);color:#fff;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">✎</button>'+
+          '<button class="btn sm pcActBtn" data-notes="'+esc(p.patientId)+'" title="Notes" style="width:36px;height:36px;padding:0;border:0;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#c98ee6,#8e44ad);color:#fff;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">\u{1F4DD}</button>'+
+          (isLost
+            ? '<button class="btn sm pcActBtn" data-lost="'+esc(p.patientId)+'" title="Reopen this lead" style="width:36px;height:36px;padding:0;border:0;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#8fd0b8,#2f8f6f);color:#fff;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">\u{21BB}</button>'
+            : '<button class="btn sm pcActBtn" data-lost="'+esc(p.patientId)+'" title="Mark as lost lead" style="width:36px;height:36px;padding:0;border:0;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#9a9a9a,#5a5a5a);color:#fff;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">\u{1F6AB}</button>')+
         '</div>'+
       '</div>';
     }).join('');
@@ -14711,6 +14731,30 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     });
     box.querySelectorAll('[data-notes]').forEach(function(b){
       b.onclick=function(ev){ ev.stopPropagation(); openPatient(b.getAttribute('data-notes')); };
+    });
+    /* v365 — mark/unmark lost, straight from the row, no popup. cur.tag on the client is only
+       updated after the server confirms (same as every other action here) so a slow connection
+       never shows a lead as lost when it was not actually saved. */
+    box.querySelectorAll('[data-lost]').forEach(function(b){
+      b.onclick=function(ev){ ev.stopPropagation();
+        var id=b.getAttribute('data-lost'), p=null;
+        for(var i=0;i<PC.rows.length;i++){ if(PC.rows[i].patientId===id){ p=PC.rows[i]; break; } }
+        if(!p) return;
+        var newTag=(p.tag==='Lost lead')?'Old data':'Lost lead';
+        b.disabled=true;
+        API.pcSave({patientId:id, name:p.name, tag:newTag}).then(function(r){
+          b.disabled=false;
+          if(r&&r.ok){ p.tag=newTag; load(); }
+          else toast((r&&r.error)||'Could not update this lead.',true);
+        }, function(){ b.disabled=false; toast('Could not reach the server.',true); });
+      };
+    });
+    /* v365 — stop these icons stealing keyboard focus on a tap. A button focused near the edge
+       of a scrolling list makes the browser scroll it into view, which read as the row "jumping
+       up" the moment it was touched. preventDefault on mousedown blocks the focus without
+       blocking the click that follows it. */
+    box.querySelectorAll('.pcActBtn').forEach(function(b){
+      b.addEventListener('mousedown', function(e){ e.preventDefault(); });
     });
 
     /* Real pages, not an infinite “show more” — load() replaces the list rather than appending,
@@ -14741,7 +14785,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
       var curTag=p.tag||'New';
 
       var body='<div class="grid2">'+
-        '<div class="field full"><label>Name *</label><input id="pf_name" value="'+esc(p.name||'')+'" placeholder="Kiritbhai Desai"></div>'+
+        '<div class="field full"><label>Name *</label><div class="ops-pt-wrap"><input id="pf_name" autocomplete="off" value="'+esc(p.name||'')+'" placeholder="Kiritbhai Desai"><div class="ops-pt-drop" id="pf_ptN"></div></div></div>'+
         '<div class="field"><label>Mobile number '+(isNew?'*':'')+'</label><input id="pf_num" inputmode="numeric" maxlength="10" value="'+esc(p.number||'')+'" placeholder="9879533021"></div>'+
         (META.canViewAll
           ? '<div class="field"><label>Branch</label><select id="pf_branch">'+branchOptions(p.branchId||PC.branch||META.myBranch,'')+'</select></div>'
@@ -14914,6 +14958,47 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
         numEl.addEventListener('blur',runLookup);
         if(mobile(numEl.value).length===10) runLookup();
       }
+
+      /* ---- v364: type a name -> offer a match already on file, autofill number/address ----
+         Two people can share a name (this file already has two separate "Ajay Kumar Jain" rows),
+         so this shows a small picklist instead of guessing — same UX as the sample-collection
+         popup's patient search (ops.js wirePatientSearch), just backed by the CRM's own list
+         search (pcList) since this form works off the Patients sheet, not Ops_Samples. Only fills
+         a field that is still empty, same rule the mobile lookup above already follows. */
+      (function(){
+        var nameEl=$id('pf_name'), drop=$id('pf_ptN');
+        if(!nameEl || !drop) return;
+        var timer=null, pfNameList=[];
+        nameEl.addEventListener('input', function(){
+          var q=(nameEl.value||'').trim();
+          if(timer) clearTimeout(timer);
+          if(q.length<2){ drop.innerHTML=''; drop.style.display='none'; return; }
+          timer=setTimeout(function(){
+            API.pcList('all','',q,'',0).then(function(r){
+              pfNameList=((r&&r.ok&&r.patients)||[])
+                .filter(function(x){ return String(x.patientId)!==String(p.patientId||''); })
+                .slice(0,8);
+              if(!pfNameList.length){ drop.innerHTML=''; drop.style.display='none'; return; }
+              drop.innerHTML=pfNameList.map(function(x,i){
+                return '<div class="ops-pt-it" data-i="'+i+'"><b>'+esc(x.name)+'</b>'+
+                  '<span>'+esc(x.number||'—')+(x.address?(' · '+esc(x.address)):'')+'</span></div>';
+              }).join('');
+              drop.style.display='block';
+            }, function(){ drop.style.display='none'; });
+          }, 300);
+        });
+        drop.addEventListener('mousedown', function(e){
+          var it=e.target.closest && e.target.closest('.ops-pt-it'); if(!it) return;
+          e.preventDefault();
+          var x=pfNameList[Number(it.getAttribute('data-i'))]; if(!x) return;
+          nameEl.value=x.name||nameEl.value;
+          var numEl2=$id('pf_num'), addrEl2=$id('pf_addr');
+          if(numEl2 && !numEl2.value && x.number){ numEl2.value=x.number; runLookup(); }
+          if(addrEl2 && !addrEl2.value && x.address) addrEl2.value=x.address;
+          drop.style.display='none';
+        });
+        nameEl.addEventListener('blur', function(){ setTimeout(function(){ drop.style.display='none'; }, 150); });
+      })();
 
       /* ---- issue a card straight from this form ----
          A card needs a saved patient to attach to, so this saves first and then opens the card
