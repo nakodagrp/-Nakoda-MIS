@@ -3247,7 +3247,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     opts = opts || {};
     var W = CIMG.W, PAD = CIMG.PAD;
     var CARDW = W - PAD*2, CARDH = Math.round(CARDW * 638 / 1012);
-    var theme = resolveTheme(type), foil = theme.foil;
+    var theme = resolveTheme(type), foil = theme.foil, isLight = !!theme.light;   /* v367 */
     var typeName = String((type && type.name) || 'Membership').toUpperCase();
     var bens = (opts.benefits && opts.benefits.length) ? opts.benefits : cardBenefitLines(type, []);
     var textMaxW = CARDW - CIMG.PX*2 - CIMG.TICK;
@@ -3272,12 +3272,17 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     cv.width = W; cv.height = H;
     var ctx = cv.getContext('2d');
 
-    /* ── background ───────────────────────────────────────────────────────── */
+    /* ── background ─────────────────────────────────────────────────────────
+       v367: this used to be dark green (Hunter Green) for every card type, so a light theme like
+       Champagne Gold got wrapped in a colour its own front never uses — the front looked gold, the
+       picture around it looked green. Now it follows the resolved theme's own light/dark flag, the
+       same one drawCard() already uses for the card front. */
     var bg = ctx.createLinearGradient(0, 0, W*0.35, H);
-    bg.addColorStop(0, '#0A2419'); bg.addColorStop(0.45, '#061912'); bg.addColorStop(1, '#02100B');
+    if(isLight){ bg.addColorStop(0, '#FAF6EA'); bg.addColorStop(0.45, '#F3ECD6'); bg.addColorStop(1, '#EADFC0'); }
+    else       { bg.addColorStop(0, '#0A2419'); bg.addColorStop(0.45, '#061912'); bg.addColorStop(1, '#02100B'); }
     ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
     ctx.save();
-    ctx.strokeStyle = 'rgba(236,200,87,0.16)'; ctx.lineWidth = 2;
+    ctx.strokeStyle = isLight ? 'rgba(120,90,20,0.20)' : 'rgba(236,200,87,0.16)'; ctx.lineWidth = 2;
     roundRect(ctx, 7, 7, W-14, H-14, 30); ctx.stroke();
     ctx.restore();
 
@@ -3291,15 +3296,18 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     ctx.save(); roundRect(ctx, PAD, PAD, CARDW, CARDH, 26); ctx.clip();
     ctx.drawImage(off, PAD, PAD, CARDW, CARDH); ctx.restore();
     ctx.save(); roundRect(ctx, PAD, PAD, CARDW, CARDH, 26);
-    ctx.strokeStyle = 'rgba(236,200,87,0.30)'; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
+    ctx.strokeStyle = isLight ? 'rgba(120,90,20,0.30)' : 'rgba(236,200,87,0.30)'; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
 
-    /* ── benefits panel ───────────────────────────────────────────────────── */
+    /* ── benefits panel ─────────────────────────────────────────────────────
+       v367: same fix as the outer background above — follows the theme's light/dark flag instead
+       of always being dark green. */
     var py = PAD + CARDH + CIMG.GAP;
     var pg = ctx.createLinearGradient(PAD, py, PAD + CARDW, py + panelH);
-    pg.addColorStop(0, '#0C3325'); pg.addColorStop(0.55, '#08241B'); pg.addColorStop(1, '#051A13');
+    if(isLight){ pg.addColorStop(0, '#FFFCF2'); pg.addColorStop(0.55, '#FBF2D8'); pg.addColorStop(1, '#F3E6BE'); }
+    else       { pg.addColorStop(0, '#0C3325'); pg.addColorStop(0.55, '#08241B'); pg.addColorStop(1, '#051A13'); }
     ctx.save();
     ctx.fillStyle = pg; roundRect(ctx, PAD, py, CARDW, panelH, 26); ctx.fill();
-    ctx.strokeStyle = 'rgba(236,200,87,0.26)'; ctx.lineWidth = 2;
+    ctx.strokeStyle = isLight ? 'rgba(120,90,20,0.35)' : 'rgba(236,200,87,0.26)'; ctx.lineWidth = 2;
     roundRect(ctx, PAD, py, CARDW, panelH, 26); ctx.stroke();
     ctx.restore();
 
@@ -3317,7 +3325,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
 
     /* sub-title */
     ctx.font = 'italic 400 ' + CIMG.SUB + 'px Georgia, "Times New Roman", serif';
-    ctx.fillStyle = 'rgba(236,200,87,0.62)'; ctx.textAlign = 'center';
+    ctx.fillStyle = isLight ? 'rgba(120,80,10,0.65)' : 'rgba(236,200,87,0.62)'; ctx.textAlign = 'center';
     ctx.fillText(String(opts.labelText || 'Nakoda Diagnostics & Research Center'), cx, y);
     y += CIMG.SUB + 24;
 
@@ -3338,13 +3346,13 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
       ctx.restore();
 
       ctx.font = '400 ' + CIMG.BEN + 'px -apple-system,"Segoe UI",Roboto,Arial,sans-serif';
-      ctx.fillStyle = '#EDE6D2';
+      ctx.fillStyle = isLight ? '#3D2400' : '#EDE6D2';
       for(var l=0;l<lines.length;l++) ctx.fillText(lines[l], tx + CIMG.TICK, ty + 2 + l*CIMG.LINE);
 
       y += rowH;
       if(i < rows.length - 1){
         ctx.save();
-        ctx.strokeStyle = 'rgba(236,200,87,0.15)'; ctx.lineWidth = 1;
+        ctx.strokeStyle = isLight ? 'rgba(120,90,20,0.18)' : 'rgba(236,200,87,0.15)'; ctx.lineWidth = 1;
         if(ctx.setLineDash) ctx.setLineDash([5, 6]);
         ctx.beginPath(); ctx.moveTo(PAD + CIMG.PX, y + 0.5); ctx.lineTo(PAD + CARDW - CIMG.PX, y + 0.5); ctx.stroke();
         ctx.restore();
@@ -3354,33 +3362,35 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     /* ── footer: card number left, lab number right ───────────────────────── */
     y += 18;
     ctx.save();
-    ctx.strokeStyle = 'rgba(236,200,87,0.20)'; ctx.lineWidth = 1;
+    ctx.strokeStyle = isLight ? 'rgba(120,90,20,0.22)' : 'rgba(236,200,87,0.20)'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(PAD + CIMG.PX, y + 0.5); ctx.lineTo(PAD + CARDW - CIMG.PX, y + 0.5); ctx.stroke();
     ctx.restore();
     y += 20;
 
     var lab = String(opts.labPhone || '').replace(/\D/g, '');
+    var footLabel = isLight ? 'rgba(90,65,10,0.65)' : 'rgba(220,210,170,0.60)';   /* v367 */
+    var footValue = isLight ? '#3D2400' : '#EDE6D2';                             /* v367 */
     ctx.textBaseline = 'top';
     ctx.font = '400 ' + CIMG.FOOT + 'px -apple-system,"Segoe UI",Roboto,Arial,sans-serif';
-    ctx.fillStyle = 'rgba(220,210,170,0.60)'; ctx.textAlign = 'left';
+    ctx.fillStyle = footLabel; ctx.textAlign = 'left';
     var lbl = 'Card no. ';
     ctx.fillText(lbl, PAD + CIMG.PX, y);
     var lblW = ctx.measureText(lbl).width;
     ctx.font = '700 ' + CIMG.FOOT + 'px -apple-system,"Segoe UI",Roboto,Arial,sans-serif';
-    ctx.fillStyle = '#EDE6D2';
+    ctx.fillStyle = footValue;
     ctx.fillText(String(card.cardNumber || ''), PAD + CIMG.PX + lblW, y);
     if(lab){
       ctx.textAlign = 'right';
       ctx.font = '400 ' + CIMG.FOOT + 'px -apple-system,"Segoe UI",Roboto,Arial,sans-serif';
-      ctx.fillStyle = 'rgba(220,210,170,0.60)';
+      ctx.fillStyle = footLabel;
       var rt = 'Nakoda Lab ';
       var rw = ctx.measureText(rt).width;
       ctx.font = '700 ' + CIMG.FOOT + 'px -apple-system,"Segoe UI",Roboto,Arial,sans-serif';
-      ctx.fillStyle = '#EDE6D2';
+      ctx.fillStyle = footValue;
       ctx.fillText(lab, PAD + CARDW - CIMG.PX, y);
       var numW = ctx.measureText(lab).width;
       ctx.font = '400 ' + CIMG.FOOT + 'px -apple-system,"Segoe UI",Roboto,Arial,sans-serif';
-      ctx.fillStyle = 'rgba(220,210,170,0.60)';
+      ctx.fillStyle = footLabel;
       ctx.textAlign = 'left';
       ctx.fillText(rt, PAD + CARDW - CIMG.PX - numW - rw, y);
     }
