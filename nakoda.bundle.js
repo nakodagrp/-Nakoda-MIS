@@ -45,47 +45,15 @@
   /* ---------- token ---------- */
   function getToken(){ try{ return localStorage.getItem('nk_tok')||''; }catch(e){ return ''; } }
   function setToken(t){ try{ t?localStorage.setItem('nk_tok',t):localStorage.removeItem('nk_tok'); }catch(e){} }
-  /* pc1 — CRM runs its own Apps Script project with its own copy of Employees/Sessions, so a
-     token from the main login is meaningless there. A second, silent login (loginToCrm_, below)
-     gets a token good on the CRM backend and keeps it here, separately. */
-  function getCrmToken(){ try{ return localStorage.getItem('nk_tok_crm')||''; }catch(e){ return ''; } }
-  function setCrmToken(t){ try{ t?localStorage.setItem('nk_tok_crm',t):localStorage.removeItem('nk_tok_crm'); }catch(e){} }
 
   /* ---------- network ---------- */
-  /* pc1 — Patient CRM. ONLY these exact action names live on the separate CRM backend/sheet.
-     IMPORTANT: this must be an exact list, not "starts with pc" — apiPcFollowups (the
-     Follow-ups screen under Tasks) also happens to start with "pc" but is served by the MAIN
-     system's Tasks module and reads the main sheet directly. Routing it to CRM by mistake
-     would break the Follow-ups screen. */
-  var CRM_ACTIONS_={pcMeta:1,pcList:1,pcGet:1,pcLookup:1,pcSave:1,pcLogCall:1,pcAddNote:1,
-    pcLinkSample:1,pcLinkCard:1,pcImport:1,pcDash:1,pcHours:1,pcDayLoad:1};
-  function apiUrl(action){
-    var cfg=window.NAKODA_CONFIG||{};
-    if(action && CRM_ACTIONS_[action] && cfg.CRM_API_URL) return cfg.CRM_API_URL;
-    return cfg.API_URL||'';
-  }
+  function apiUrl(){ return (window.NAKODA_CONFIG&&window.NAKODA_CONFIG.API_URL)||''; }
   function configured(){ var u=apiUrl(); return u && u.indexOf('PASTE_YOUR')<0; }
-  /* pc1 — fire-and-forget login to the CRM backend, right after the main login succeeds, using
-     the same LoginID/password the user just typed (CRM has its own copy of Employees, so this
-     is a genuine independent login, not a token hand-off). Deliberately never throws or blocks:
-     if CRM is briefly unreachable, the main app must keep working exactly as before — the CRM
-     screens simply show "Session expired" until the next successful login retries this. */
-  function loginToCrm_(loginId,password){
-    try{
-      var cfg=window.NAKODA_CONFIG||{};
-      if(!cfg.CRM_API_URL) return;
-      fetch(cfg.CRM_API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
-        body:JSON.stringify({action:'login',loginId:loginId,password:password}),redirect:'follow'})
-        .then(function(r){ return r.json(); })
-        .then(function(r){ if(r&&r.ok&&r.token) setCrmToken(r.token); })
-        .catch(function(){});
-    }catch(e){}
-  }
   function NET(action, payload, timeoutMs){
     var body=JSON.stringify(Object.assign({action:action}, payload||{}));
     var ctrl=(typeof AbortController!=='undefined')?new AbortController():null;
     var to=ctrl?setTimeout(function(){ try{ctrl.abort();}catch(e){} }, timeoutMs||60000):null;   // never hang forever
-    return fetch(apiUrl(action),{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body,redirect:'follow',signal:ctrl?ctrl.signal:undefined})
+    return fetch(apiUrl(),{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body,redirect:'follow',signal:ctrl?ctrl.signal:undefined})
       .then(function(r){ return r.json(); })
       .then(function(j){ if(to) clearTimeout(to); return j; }, function(e){ if(to) clearTimeout(to); throw e; });
   }
@@ -338,7 +306,6 @@
            cached reads before anything of theirs can be painted under the new login. */
         if(r.ok){
           setToken(r.token);
-          loginToCrm_(loginId,password);   // pc1 — silent second login for CRM screens, see above
           return adoptUser(r.me||r.user).then(function(){
             if(r.perms){ kvSet('meta',{roles:r.roles||[],branches:r.branches||[]}); kvSet('me',r.me||r.user); kvSet('perms',r.perms); }
             /* v333: a punch may have been waiting on this very phone for its owner to sign in
@@ -372,19 +339,12 @@
        This is belt and braces: if the phone is offline at logout (the usual case, since that is
        why the punch is queued at all), punchq.js's relay path still lands it correctly later. */
     logout:function(){
-      var t=getToken(), me=curUid(), tCrm=getCrmToken();
+      var t=getToken(), me=curUid();
       try{
         if(navigator.serviceWorker && navigator.serviceWorker.controller)
           navigator.serviceWorker.controller.postMessage({type:'FLUSH_PUNCHES', token:t, empId:me, apiUrl:apiUrl()});
       }catch(e){}
-      setToken(''); setCrmToken('');
-      if(tCrm){
-        try{
-          var cfg=window.NAKODA_CONFIG||{};
-          if(cfg.CRM_API_URL) fetch(cfg.CRM_API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
-            body:JSON.stringify({action:'logout',token:tCrm}),redirect:'follow'}).catch(function(){});
-        }catch(e){}
-      }
+      setToken('');
       return call('logout',{token:t}).catch(function(){return {ok:true};});
     },
     changePassword:function(oldPw,newPw){
@@ -652,25 +612,25 @@
     /* ---------- pc1 · PATIENT CRM ----------
        Replaces the Sales CRM. Reads are cache-first like every other read in this file, so the
        calling list opens instantly and still works with no signal. */
-    pcMeta:function(){ return call('pcMeta',{token:getCrmToken()}); },
+    pcMeta:function(){ return call('pcMeta',{token:getToken()}); },
     pcList:function(tab,branch,q,tag,page){
-      return call('pcList',{token:getCrmToken(),tab:tab||'followups',branch:branch||'',q:q||'',tag:tag||'',page:page||0}); },
-    pcGet:function(id){ return call('pcGet',{token:getCrmToken(),patientId:id}); },
+      return call('pcList',{token:getToken(),tab:tab||'followups',branch:branch||'',q:q||'',tag:tag||'',page:page||0}); },
+    pcGet:function(id){ return call('pcGet',{token:getToken(),patientId:id}); },
     /* Type a number, see everything the business already knows about it — the patient row,
        their membership cards, and every sample they have ever given. */
-    pcLookup:function(n){ return call('pcLookup',{token:getCrmToken(),number:n||''}); },
-    pcSave:function(d){ return call('pcSave',{token:getCrmToken(),data:d||{}}); },
-    pcLogCall:function(d){ return call('pcLogCall',{token:getCrmToken(),data:d||{}}); },
-    pcAddNote:function(id,msg){ return call('pcAddNote',{token:getCrmToken(),patientId:id,message:msg||''}); },
-    pcLinkSample:function(pid,sid,cid){ return call('pcLinkSample',{token:getCrmToken(),patientId:pid,sampleId:sid,callId:cid||''}); },
-    pcLinkCard:function(pid,cn,cid){ return call('pcLinkCard',{token:getCrmToken(),patientId:pid,cardNumber:cn,callId:cid||''}); },
-    pcImport:function(d){ return call('pcImport',{token:getCrmToken(),data:d||{}},120000); },
-    pcDash:function(branch,ym){ return call('pcDash',{token:getCrmToken(),branch:branch||'',ym:ym||''}); },
-    pcHours:function(branch,date){ return call('pcHours',{token:getCrmToken(),branch:branch||'',date:date||''}); },
+    pcLookup:function(n){ return call('pcLookup',{token:getToken(),number:n||''}); },
+    pcSave:function(d){ return call('pcSave',{token:getToken(),data:d||{}}); },
+    pcLogCall:function(d){ return call('pcLogCall',{token:getToken(),data:d||{}}); },
+    pcAddNote:function(id,msg){ return call('pcAddNote',{token:getToken(),patientId:id,message:msg||''}); },
+    pcLinkSample:function(pid,sid,cid){ return call('pcLinkSample',{token:getToken(),patientId:pid,sampleId:sid,callId:cid||''}); },
+    pcLinkCard:function(pid,cn,cid){ return call('pcLinkCard',{token:getToken(),patientId:pid,cardNumber:cn,callId:cid||''}); },
+    pcImport:function(d){ return call('pcImport',{token:getToken(),data:d||{}},120000); },
+    pcDash:function(branch,ym){ return call('pcDash',{token:getToken(),branch:branch||'',ym:ym||''}); },
+    pcHours:function(branch,date){ return call('pcHours',{token:getToken(),branch:branch||'',date:date||''}); },
     /* v349 — how many calls each future day already holds, for the busy-day warning on the
        next-call-date box. A pure read, so it never queues; if it fails the box simply shows no
        warning rather than blocking anybody from saving a call. */
-    pcDayLoad:function(branch,mineOnly){ return call('pcDayLoad',{token:getCrmToken(),branch:branch||'',mineOnly:!!mineOnly}); },
+    pcDayLoad:function(branch,mineOnly){ return call('pcDayLoad',{token:getToken(),branch:branch||'',mineOnly:!!mineOnly}); },
     /* v314 — the five-stage pipeline */
     saveOrder:function(d){ return call('saveOrder',{token:getToken(),data:d}); },
     completeVisit:function(id,d){ return call('completeVisit',{token:getToken(),sampleId:id,data:d||{}}); },
@@ -881,7 +841,7 @@
   function syncOutbox(){
     if(_syncing || !navigator.onLine || !configured()) return Promise.resolve();
     _syncing=true; emit();
-    var token=getToken(), tokenCrm=getCrmToken();
+    var token=getToken();
     return obAll().then(function(items){
       items.sort(function(a,b){return a.id-b.id;});
       function next(i){
@@ -889,7 +849,7 @@
         var it=items[i], payload;
         if(it.payload){ payload=Object.assign({}, it.payload); }
         else { payload={}; if(it.action==='createEmployee') payload.data=it.data; if(it.action==='updateEmployee'){ payload.empId=it.empId; payload.data=it.data; } if(it.action==='setStatus'){ payload.empId=it.empId; payload.status=it.status; } }
-        payload.token = CRM_ACTIONS_[it.action] ? tokenCrm : token;
+        payload.token=token;
         return NET(it.action,payload).then(function(r){
           // attachSelfie: a logical failure (e.g. Drive briefly rejecting the upload) should keep
           // retrying instead of vanishing — bump an attempt counter and leave it queued until it
