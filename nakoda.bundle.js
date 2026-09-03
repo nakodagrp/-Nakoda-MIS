@@ -5098,7 +5098,8 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
             :'a leave request is still waiting for your decision ('+i.title+'). Please approve or reject it.')
           :i.kind==='tr'?('your training “'+String(i.title||'').replace(/^Training overdue — /,'')+'” is overdue. Please finish the video and quiz.')
           :i.state==='late'?('you punched in late today ('+String(i.title||'').replace(/^Punched in late - /,'')+'). Please be on time.')
-          :i.kind==='upc'?('your shift starts soon — please punch in on time.')
+          :i.kind==='upc'?('reminder — '+i.title+'.')
+          :i.state==='missing_out'?('your shift has ended — please punch out.')
           :'please punch in your attendance — it is past your shift start.'));
         var chip=i.kind==='task'?'<span class="tm-chip task">TASK</span>'
                 :i.kind==='sch'?'<span class="tm-chip sch">SCHEDULE</span>'
