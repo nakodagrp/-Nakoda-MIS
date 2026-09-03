@@ -4,7 +4,7 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v373';  /* v349: PATIENT CRM ROUND 3 — three things. (1) PENDING CARD IS NO LONGER A LIE.
+var CACHE_VERSION = 'nakoda-mis-v374';  /* v349: PATIENT CRM ROUND 3 — three things. (1) PENDING CARD IS NO LONGER A LIE.
    It decided who holds a membership card from one column on the patient row, and that column is only written when a card is
    issued through the CRM — so counter-issued cards, imported cards and a relative's card on the same family mobile number all
    read as NO CARD forever. It now looks the patient's number up in Membership_Cards and counts any LIVE card (active, not
