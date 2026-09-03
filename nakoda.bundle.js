@@ -5760,11 +5760,24 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
   function pqStage(rec){
     if(!PQ) return Promise.resolve();
     ATT.q.waiting = (ATT.q.waiting||[]).concat([rec]);   // paint from it immediately
+    /* v346: best-effort, fire-and-forget heads-up so the ADMIN side can tell "saved on this phone,
+       still syncing" apart from a genuine no-show -- never awaited, never allowed to affect the punch
+       itself. Uses sendBeacon so it survives the tab closing right after this call, same as the punch
+       queue itself is built to. See punchQueuedKey_ in Code.gs. */
+    if(rec && rec.kind && !PQ.isPhoto(rec)){ try{ pqPing(); }catch(ePing){} }
     return PQ.put(rec).then(function(){
       /* Register the OS-level wake-up as soon as there is something to send. If the app is
          killed one second later, this is the only thing that will still get the punch out. */
       return PQ.registerSync();
     }).catch(function(){});
+  }
+  function pqPing(){
+    try{
+      var url=myApiUrl(), tok=myToken(); if(!url||!tok) return;
+      var body=JSON.stringify({action:'punchQueued', token:tok, data:{}});
+      if(navigator.sendBeacon){ navigator.sendBeacon(url, new Blob([body],{type:'text/plain;charset=utf-8'})); return; }
+      fetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body,keepalive:true}).catch(function(){});
+    }catch(e){}
   }
   /* v335: the selfie, queued as its own job once the punch has told us which row it belongs to.
      Same store, same Background Sync wake-up, so it survives the app being closed a second after
