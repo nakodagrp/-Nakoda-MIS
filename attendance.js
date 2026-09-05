@@ -193,11 +193,24 @@
   function pqStage(rec){
     if(!PQ) return Promise.resolve();
     ATT.q.waiting = (ATT.q.waiting||[]).concat([rec]);   // paint from it immediately
+    /* v346: best-effort, fire-and-forget heads-up so the ADMIN side can tell "saved on this phone,
+       still syncing" apart from a genuine no-show -- never awaited, never allowed to affect the punch
+       itself. Uses sendBeacon so it survives the tab closing right after this call, same as the punch
+       queue itself is built to. See punchQueuedKey_ in Code.gs. */
+    if(rec && rec.kind && !PQ.isPhoto(rec)){ try{ pqPing(); }catch(ePing){} }
     return PQ.put(rec).then(function(){
       /* Register the OS-level wake-up as soon as there is something to send. If the app is
          killed one second later, this is the only thing that will still get the punch out. */
       return PQ.registerSync();
     }).catch(function(){});
+  }
+  function pqPing(){
+    try{
+      var url=myApiUrl(), tok=myToken(); if(!url||!tok) return;
+      var body=JSON.stringify({action:'punchQueued', token:tok, data:{}});
+      if(navigator.sendBeacon){ navigator.sendBeacon(url, new Blob([body],{type:'text/plain;charset=utf-8'})); return; }
+      fetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:body,keepalive:true}).catch(function(){});
+    }catch(e){}
   }
   /* v335: the selfie, queued as its own job once the punch has told us which row it belongs to.
      Same store, same Background Sync wake-up, so it survives the app being closed a second after
@@ -345,6 +358,21 @@
       .then(function(){ return (why==='online'||why==='login') ? PQ.clearCooldowns() : null; })
       .then(function(){ return PQ.registerSync(); })
       .then(function(){ return pqSync(); })
+      .then(function(){
+        /* v350: punchQueuedRecently_ on the server gives a queued punch a "still syncing" grace
+           window on the PC Monitor and the L (not-punched) list instead of a flat no-show -- but
+           that window is a single 2-hour ping fired once, back when the punch was first queued (see
+           pqPing above). If the punch is genuinely stuck longer than that -- iOS has no Background
+           Sync at all, so it only ever moves while the app is actually open; a branch's connection to
+           script.google.com can also simply be bad for hours -- the ping goes stale and the person
+           quietly reverts to looking exactly like someone who never punched, to every admin screen.
+           That is the "already punched but still shows not punched / still shows on the chase list"
+           report. Re-fire the same best-effort beacon every time pqWake runs (app opened, tab made
+           visible, focus, online, and the 45s foreground tick) for as long as something is still
+           actually waiting, so the window keeps renewing itself and only expires once nothing is
+           left queued -- never while a real punch is still sitting on the phone. */
+        if(qWaitingCount()>0){ try{ pqPing(); }catch(ePing){} }
+      })
       .catch(function(){});
   }
   try{ pqMigrateLegacy().then(function(){ pqRefresh(); pqWake('load'); }); }catch(e){}
@@ -472,31 +500,51 @@
       attMap[r.empId][day]=st==='present'?'P':st==='half'?'P/2':st==='leave'?'L':st==='holiday'?'WO':'A';
     });
     var days=[]; for(var i=1;i<=daysInMonth;i++) days.push(i);
-    var head=[['Emp','Name'].concat(days.map(String)).concat(['FD','HL','Abs'])];   // FD = full days only (half-days counted in HL, not here)
-    var body=employees.map(function(e){
-      var row=[e.EmpID||'',e.FullName||''], fd=0, hl=0, abs=0;
+    /* v355 — BRANCH COLUMN + BRANCH-WISE GROUPING.
+       Employees are sorted into the same order branches appear in the Branches admin page
+       (S.meta.branches — Corporate/HQ first, then whatever order that page lists the rest in),
+       and each branch's staff are kept together under a bold divider row naming the branch, so
+       the printed report reads branch-by-branch instead of one flat alphabetical list. A branch
+       not found in S.meta.branches (deleted/renamed) sorts to the end rather than breaking the
+       whole report. */
+    var branchOrder=((S.meta&&S.meta.branches)||[]).map(function(b){ return String(b.BranchID); });
+    function branchRank(id){ var i=branchOrder.indexOf(String(id||'')); return i<0?999999:i; }
+    var sortedEmps=employees.map(function(e,idx){ return {e:e,idx:idx}; }).sort(function(a,b){
+      var ra=branchRank(a.e.Branch), rb=branchRank(b.e.Branch);
+      return ra!==rb ? ra-rb : a.idx-b.idx;   // stable: keep original order within the same branch
+    }).map(function(x){ return x.e; });
+    var head=[['Emp','Name','Branch'].concat(days.map(String)).concat(['FD','HL','Abs'])];   // FD = full days only (half-days counted in HL, not here)
+    var totalCols=head[0].length;
+    var body=[], lastBranch=null;
+    sortedEmps.forEach(function(e){
+      var bName=(typeof branchName==='function'?branchName(e.Branch):'')||e.Branch||'—';
+      if(bName!==lastBranch){
+        body.push([{content:String(bName).toUpperCase(),colSpan:totalCols,styles:{fillColor:[45,45,45],textColor:255,fontStyle:'bold',halign:'left',fontSize:6.5,cellPadding:1.3}}]);
+        lastBranch=bName;
+      }
+      var row=[e.EmpID||'',e.FullName||'',bName], fd=0, hl=0, abs=0;
       for(var d=1;d<=daysInMonth;d++){
         var s=(attMap[e.EmpID]&&attMap[e.EmpID][d])||'A';
         if(s==='P') fd++; else if(s==='P/2'){ hl++; } else if(s==='A') abs++;   // FD = full days only, do not add half-days
         row.push(s);
       }
-      row.push(String(fd),String(hl),String(abs)); return row;
+      row.push(String(fd),String(hl),String(abs)); body.push(row);
     });
     var doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
     doc.setFontSize(11); doc.setTextColor(218,16,23);
     doc.text('Nakoda Diagnostics And Research Center',10,8);
     doc.setTextColor(60,60,60); doc.setFontSize(9);
     doc.text('Attendance Report — '+ym,10,14);
-    var colStyles={0:{cellWidth:12},1:{cellWidth:28}};
-    for(var c=2;c<daysInMonth+2;c++) colStyles[c]={cellWidth:5.5};
-    colStyles[daysInMonth+2]={cellWidth:8}; colStyles[daysInMonth+3]={cellWidth:8}; colStyles[daysInMonth+4]={cellWidth:8};
+    var colStyles={0:{cellWidth:11},1:{cellWidth:24},2:{cellWidth:16}};
+    for(var c=3;c<daysInMonth+3;c++) colStyles[c]={cellWidth:5.5};
+    colStyles[daysInMonth+3]={cellWidth:8}; colStyles[daysInMonth+4]={cellWidth:8}; colStyles[daysInMonth+5]={cellWidth:8};
     doc.autoTable({
       head:head, body:body, startY:18,
       styles:{fontSize:5.5,cellPadding:1,halign:'center'},
       headStyles:{fillColor:[218,16,23],textColor:255,fontStyle:'bold'},
       columnStyles:colStyles,
       didParseCell:function(d){
-        if(d.section==='body'&&d.column.index>=2&&d.column.index<=daysInMonth+1){
+        if(d.section==='body'&&d.column.index>=3&&d.column.index<=daysInMonth+2){
           var v=d.cell.text[0];
           if(v==='P') d.cell.styles.fillColor=[234,247,239];
           else if(v==='A') d.cell.styles.fillColor=[253,236,236];
@@ -515,6 +563,10 @@
     var rec=todayRec(), now=new Date();
     /* v201: a punch saved on the phone counts as done locally — no double punching, clear "waiting" label */
     var qIn=qToday('in'), qOut=qToday('out'), qN=qWaitingCount();
+    /* v350: how long the OLDEST still-waiting punch has been sitting unsent on this phone -- used
+       below to escalate the on-screen note once a punch has been stuck long enough that it is no
+       longer a normal, brief sync delay (see the qNote branches just below). */
+    var qOldestMin=(function(){ var w=(ATT.q&&ATT.q.waiting)||[]; if(!w.length) return 0; var oldest=Math.min.apply(null,w.map(function(r){return r.ts||Date.now();})); return Math.max(0,Math.floor((Date.now()-oldest)/60000)); })();
     if(!rec && qIn) rec={checkIn:qIn.time, checkOut:(qOut?qOut.time:''), _queued:true};
     else if(rec && rec.checkIn && !rec.checkOut && qOut) rec={checkIn:rec.checkIn, checkOut:qOut.time, attId:rec.attId, selfieInUrl:rec.selfieInUrl, selfieOutUrl:'x', _queued:true};
     var dutyTxt=(S.user&&S.user.DutyStart)?('Shift '+fmtDutyTime(S.user.DutyStart)+(S.user.DutyEnd?('–'+fmtDutyTime(S.user.DutyEnd)):'')+((S.user.AltDutyStart)?(' (or alt shift '+fmtDutyTime(S.user.AltDutyStart)+(S.user.AltDutyEnd?('–'+fmtDutyTime(S.user.AltDutyEnd)):'')+')'):'')):'';
@@ -548,12 +600,22 @@
        single wording ("☁ waiting to send") reads as background noise and staff reported not
        noticing it. Online-but-still-queued (normal, and usually brief) keeps the original note
        with its "Send now" link, which is nothing to press while there is no connection to send on. */
+    /* v350: once a queued punch has been stuck 15+ minutes, the calm "will send by itself" wording
+       stops being enough -- by then the person's manager is very possibly already looking at "Not
+       punched in" on the PC Monitor because the sync genuinely hasn't happened. Say so plainly and
+       tell them what actually gets it moving (reopen the app on a real connection), instead of
+       leaving them to assume "saved on this phone" already means "my manager can see this". */
+    var qStuck = qOldestMin>=15;
     var qNote = (qN && !_opt) ? (
       !navigator.onLine
-        ? '<div class="att-note" style="color:#8a5a00;font-weight:600;text-align:left;background:#FEF3E2;border:1px solid #f5c56b;border-radius:9px;padding:9px 11px;margin-top:8px">📶 <b>You\'re offline.</b> '+qN+' punch'+(qN>1?'es':'')+' saved on this phone — it will send by itself the moment you\'re back online. You don\'t need to do anything.</div>'
-        : '<div class="att-note" style="color:#854F0B;font-weight:600">☁ '+qN+' punch'+(qN>1?'es':'')+' saved on this phone — '+
+        ? '<div class="att-note" style="color:#8a5a00;font-weight:600;text-align:left;background:#FEF3E2;border:1px solid #f5c56b;border-radius:9px;padding:9px 11px;margin-top:8px">📶 <b>You\'re offline.</b> '+qN+' punch'+(qN>1?'es':'')+' saved on this phone — it will send by itself the moment you\'re back online. You don\'t need to do anything.'+
+          (qStuck?' <b>It has been waiting '+qOldestMin+' min</b> — your manager will keep seeing you as not punched in until it sends, so please get back online as soon as you can.':'')+
+          '</div>'
+        : '<div class="att-note" style="color:'+(qStuck?'#B23B3B':'#854F0B')+';font-weight:600'+(qStuck?';background:#fdf3f3;border:1px solid #f3c9c9;border-radius:9px;padding:9px 11px':'')+'">'+(qStuck?'⚠':'☁')+' '+qN+' punch'+(qN>1?'es':'')+' saved on this phone — '+
           'will send by '+(PQ&&self.SyncManager?'itself, even with the app closed':'itself when you next open the app with internet')+
-          '. <span id="attSendNow" style="text-decoration:underline;cursor:pointer;white-space:nowrap">Send now</span></div>'
+          '. <span id="attSendNow" style="text-decoration:underline;cursor:pointer;white-space:nowrap">Send now</span>'+
+          (qStuck?'<br><b>It has been waiting '+qOldestMin+' min without sending.</b> Please keep this app open for a moment on a strong Wi-Fi/data connection — your manager currently sees you as not punched in until it arrives.':'')+
+          '</div>'
     ) : '';
     /* v333 — PUNCHES THAT COULD NOT BE RECORDED ARE NOW SHOWN, NOT SWALLOWED.
        v325 counted a punch's failures and, on the twelfth, deleted it with a toast that was gone
@@ -724,11 +786,31 @@
      ============================================================================================ */
   function captureSelfie(cb){
     var _done=false, _poll=null, _focusT=null;
+    /* v351 — A HARD CEILING ON THE WHOLE CAPTURE, NOT JUST ITS KNOWN EXITS.
+       Every exit the code already knew about (Cancel, the modal's x/backdrop, a dismissed file
+       picker, a thrown exception in pickNow -- see v350 above) now calls done(). But there is at
+       least one more way in: navigator.mediaDevices.getUserMedia() itself can sit forever with
+       NEITHER its .then NOR its .catch ever firing -- reported in the field on some installed-PWA
+       + Android WebView combinations when the camera permission is stuck in a broken "ask" state
+       (getUserMedia does not error, it just never answers). Nothing downstream of a promise that
+       never settles can ever run: not the busy watchdog in doMark (that only forgives the NEXT tap,
+       90s later), not the v350 .catch on startMark's selfieP (nothing to catch -- it never rejects).
+       From the phone it looks exactly like "tapped Check out, saw the sending toast once, and
+       nothing ever completes, tap after tap" -- because every fresh tap re-enters this same code and
+       hangs the same way. A flat time limit on the capture itself, independent of which path is
+       taken or which browser API is involved, is the only thing that can recover from a hang with
+       no event and no rejection. */
+    var _hangT=setTimeout(function(){
+      if(_done) return;
+      toast('Camera took too long to respond — please try again.', true);
+      done(null);
+    }, 45000);
     function done(v){
       if(_done) return;
       _done=true;
       if(_poll){ clearInterval(_poll); _poll=null; }
       if(_focusT){ clearTimeout(_focusT); _focusT=null; }
+      if(_hangT){ clearTimeout(_hangT); _hangT=null; }
       try{ window.removeEventListener('focus', onFocusBack); }catch(e){}
       if(_pendingSelfieCb===done) _pendingSelfieCb=null;
       try{ cb(v); }catch(e){}
@@ -758,7 +840,16 @@
     function pickNow(){
       _pendingSelfieCb=done;
       try{ window.addEventListener('focus', onFocusBack); }catch(e){}
-      $id('attSelfie').click();
+      /* v350: this used to be a bare $id('attSelfie').click(). If the input was not in the DOM for
+         any reason, or .click() threw (seen on some Android WebViews when the camera permission is
+         in a broken state), the exception fired INSIDE the captureSelfie promise chain with nothing
+         downstream to catch it -- see the startMark().catch() added below. The whole punch died
+         silently right after the "Getting your location..." toast: no camera, no error, no way for
+         the person to know anything had gone wrong. Fail loud instead. */
+      var _inp=$id('attSelfie');
+      if(!_inp){ _pendingSelfieCb=null; toast('Could not open the camera -- please tap Check in again.',true); done(null); return; }
+      try{ _inp.click(); }
+      catch(eClick){ _pendingSelfieCb=null; toast('Could not open the camera -- please tap Check in again.',true); done(null); }
     }
     function useFilePicker(){ pickNow(); }          /* only safe inside the original tap */
     function askForPhoto(msg){                       /* safe anywhere — the user provides the gesture */
@@ -924,6 +1015,15 @@
             submitMark(kind,b64);
           });
       });
+    }).catch(function(errCap){
+      /* v350: captureSelfie failed to ever call its callback at all (see the pickNow() guard above,
+         and the getUserMedia() path a few lines up which already has its own .catch for a hard
+         camera failure -- this is the safety net for anything neither of those anticipated). Without
+         it the promise chain just died here: no camera, no punch, no error, and ATT.busy stayed true
+         until the 90s watchdog in doMark cleared it. This is exactly the "Getting your location...
+         then nothing" report. */
+      ATT.busy=false; paintMe();
+      toast('Could not open the camera — please tap Check in again.',true);
     });
   }
   function doMark(kind){
@@ -1001,8 +1101,18 @@
       '<div style="font-size:13px;color:#555;margin-bottom:14px">You are '+dist+'. If you are working from home, tap <b>Yes</b> — your attendance will be sent for approval. Otherwise you cannot punch.</div>'+
       '<div style="display:flex;gap:10px;justify-content:center"><button class="btn ghost" id="wfhNo">No</button><button class="btn" id="wfhYes">Yes, work from home</button></div></div>','');
     var y=document.getElementById('wfhYes'), n=document.getElementById('wfhNo');
-    if(y) y.onclick=function(){ closeModal(); cb(true); };
-    if(n) n.onclick=function(){ closeModal(); cb(false); };
+    // v349: this dialog has a real decision behind it (a rejected punch either stays rejected or
+    // gets resubmitted as WFH), so "closing" it can't be a silent no-op. openModal's generic X /
+    // tap-outside used to just call closeModal() directly and never reach cb at all -- dismissing
+    // this one dialog any way other than the No button left the answer undecided and skipped the
+    // "not allowed" toast. Every way of leaving this dialog now resolves it as an explicit No.
+    var _answered=false;
+    function decide(yes){ if(_answered) return; _answered=true; closeModal(); cb(yes); }
+    if(y) y.onclick=function(){ decide(true); };
+    if(n) n.onclick=function(){ decide(false); };
+    var ov=document.getElementById('ov'), xBtn=ov&&ov.querySelector('.modal-head .x');
+    if(xBtn) xBtn.onclick=function(){ decide(false); };
+    if(ov) ov.addEventListener('mousedown', function(ev){ if(ev.target===ov) decide(false); });
   }
   function submitMark(kind, selfie){
     // Selfie goes in the same call as the punch (uploaded synchronously server-side) so it can never go
@@ -1023,6 +1133,11 @@
     var _tapDate=_tt.getFullYear()+'-'+String(_tt.getMonth()+1).padStart(2,'0')+'-'+String(_tt.getDate()).padStart(2,'0');
     var _tapTime=String(_tt.getHours()).padStart(2,'0')+':'+String(_tt.getMinutes()).padStart(2,'0');
     var _pid=ATT.punchId||(ATT.punchId=punchUuid());
+    // v349 -- snapshot today's record BEFORE any optimistic paint, so a rejected punch (e.g.
+    // wfhPrompt) can put the screen back exactly as it was instead of leaving a fake "done"
+    // behind (see _fastFired / revertOptimisticPaint below).
+    var _prevRec=(function(){ var r=todayRec(); return r?JSON.parse(JSON.stringify(r)):null; })();
+    var _fastFired=false;
     /* ============================================================================================
        v335 — THE PHOTO NO LONGER HOLDS THE PUNCH UP.
 
@@ -1209,10 +1324,25 @@
       if(ATT.sending !== kind) return;              // the reply already landed — nothing to do
       ATT.sending = null;
       ATT.optUntil = Date.now() + 30000;            // don't say "waiting to send" about a punch that is in flight
+      _fastFired=true;                               // v349: remember this ran, so it can be undone if the server rejects the punch
       applyLocalPunch(kind==='in' ? {checkIn:_tapTime, status:'present'} : {checkOut:_tapTime});
       paintMe();
     }, FAST_MS);
     function stopFast(){ if(_fastT){ clearTimeout(_fastT); _fastT=null; } }
+    // v349 -- undo exactly what the FAST_MS paint above did, for the one case it can be wrong: the
+    // punch turns out to need a WFH decision. Without this, a rejected punch that already got its
+    // optimistic "Done for today" painted (a normal race on branch wifi/mobile data -- the geofence
+    // round trip often takes longer than FAST_MS) stayed on screen looking successful no matter what
+    // the person answered, because nothing ever put ATT.recs back the way it was.
+    function revertOptimisticPaint(){
+      if(!_fastFired) return;
+      _fastFired=false;
+      var t=todayS(), recs=(ATT.recs||[]), idx=-1;
+      for(var i=0;i<recs.length;i++){ if(String(recs[i].date).slice(0,10)===t){ idx=i; break; } }
+      if(_prevRec){ if(idx>=0) recs[idx]=_prevRec; else recs.push(_prevRec); }
+      else if(idx>=0){ recs.splice(idx,1); }
+      ATT.recs=recs;
+    }
 
     if(!navigator.onLine){ handOff('No internet — punch saved on this phone ✓ It will send by itself.'); return; }
     var tries=0, _forceFull=false, _resent=false;
@@ -1239,7 +1369,9 @@
         if(r&&r.wfhPrompt){
           // Not at the branch. The punch is not valid as it stands, so take the staged copy back out —
           // answering "Yes, work from home" re-enters submitMark and stages a fresh one.
-          dropStaged(); ATT.sending=null; ATT.optUntil=0; stopFast(); paintMe();
+          // v349: also undo the optimistic FAST_MS paint if it already fired -- otherwise the screen
+          // can still be showing a fake "Done for today" underneath this dialog, whatever gets answered below.
+          dropStaged(); ATT.sending=null; ATT.optUntil=0; stopFast(); revertOptimisticPaint(); paintMe();
           promptWfh(r, function(yes){ if(yes){ ATT.wfh=true; submitMark(kind, selfie); } else { ATT.wfh=false; toast('You are not at the centre — '+(kind==='in'?'check-in':'check-out')+' not allowed.',true); paintMe(); } });
           return;
         }
