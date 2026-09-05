@@ -567,7 +567,11 @@
        below to escalate the on-screen note once a punch has been stuck long enough that it is no
        longer a normal, brief sync delay (see the qNote branches just below). */
     var qOldestMin=(function(){ var w=(ATT.q&&ATT.q.waiting)||[]; if(!w.length) return 0; var oldest=Math.min.apply(null,w.map(function(r){return r.ts||Date.now();})); return Math.max(0,Math.floor((Date.now()-oldest)/60000)); })();
-    if(!rec && qIn) rec={checkIn:qIn.time, checkOut:(qOut?qOut.time:''), _queued:true};
+    /* v356 -- only trust a queued check-out here if it could genuinely belong to THIS check-in (its
+       queue timestamp is not older than the check-in's). Guards against a stray/stuck check-out left
+       over in the offline queue from a different day painting "Done for today" the instant someone
+       checks in, before they have ever tapped Check out. */
+    if(!rec && qIn) rec={checkIn:qIn.time, checkOut:(qOut && qOut.ts>=qIn.ts ? qOut.time : ''), _queued:true};
     else if(rec && rec.checkIn && !rec.checkOut && qOut) rec={checkIn:rec.checkIn, checkOut:qOut.time, attId:rec.attId, selfieInUrl:rec.selfieInUrl, selfieOutUrl:'x', _queued:true};
     var dutyTxt=(S.user&&S.user.DutyStart)?('Shift '+fmtDutyTime(S.user.DutyStart)+(S.user.DutyEnd?('–'+fmtDutyTime(S.user.DutyEnd)):'')+((S.user.AltDutyStart)?(' (or alt shift '+fmtDutyTime(S.user.AltDutyStart)+(S.user.AltDutyEnd?('–'+fmtDutyTime(S.user.AltDutyEnd)):'')+')'):'')):'';
     var inb = !rec || !rec.checkIn;

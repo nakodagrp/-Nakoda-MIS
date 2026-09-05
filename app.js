@@ -31,7 +31,23 @@ document.addEventListener('DOMContentLoaded', function(){
         else if(r&&!r.offline){ API.clearLocal(); show('view-login'); }
       }).catch(function(){});
     } else if(token){
-      API.validate().then(function(r){ if(r.ok){ afterAuth(r.mustChange); } else { show('view-login'); } }).catch(function(){ show('view-login'); });
+      /* v356 -- a single flaky network moment right after this page reloads (e.g. Android backgrounding
+         the tab while the native camera was open for a punch photo, then reloading it) used to log the
+         person straight out here, even though their token was still perfectly valid -- unlike the
+         branch above, there is no cached profile on THIS particular boot to show while retrying. One
+         short retry before giving up tells a real "not authenticated" apart from a one-off hiccup,
+         without changing the outcome for either case: an actually invalid session still ends on the
+         login screen, just a beat later. */
+      (function tryValidate(retried){
+        API.validate().then(function(r){
+          if(r&&r.ok){ afterAuth(r.mustChange); }
+          else if(!retried){ setTimeout(function(){ tryValidate(true); }, 1500); }
+          else { show('view-login'); }
+        }).catch(function(){
+          if(!retried){ setTimeout(function(){ tryValidate(true); }, 1500); }
+          else { show('view-login'); }
+        });
+      })(false);
     } else { show('view-login'); if(navigator.onLine&&API.warm) API.warm(); }   // v187: wake the server while the user types
   });
 });
@@ -125,7 +141,13 @@ function initInstall(){
    someone their app is stale, which matters a lot here: staff who assumed the mismatch banner was just
    always-on noise had no reliable signal to go tap "Check update" after a real deploy. Bump this to
    match sw.js's CACHE_VERSION on every deploy that changes sw.js — the two must always agree. */
-var APP_BUILD='v348';   /* v348: the selfie now travels INSIDE the punch instead of following it as a separate job, so a
+var APP_BUILD='v349';   /* v349: Patient CRM round 3. Pending card now decides who holds a membership card by looking their
+   MOBILE NUMBER up in the card sheet instead of trusting a column on the patient row, so counter-issued cards and a relative's
+   card on the same family number finally count. The next-call-date field became a box you type the GAP into — 3m, 2w, 7,
+   25/11 — with the real date spelled out beside it and a warning when that day is already overloaded; no date picker opens
+   unless you ask for one. And from a call, "Book a home visit" now opens the same booking popup the dashboard opens, with the
+   patient filled in, instead of the log-a-collected-sample form that demanded tests and a prescription nobody has yet. */
+/* v348:   /* v348: the selfie now travels INSIDE the punch instead of following it as a separate job, so a
    punch is either recorded complete (time + location + photo) or not recorded at all. There is no longer a state where the
    attendance row exists and the photo quietly does not — which is why the Approve screen was showing "No selfie". A missing
    selfie now also shows red on the Approve screen instead of grey, because it is required of everyone. Carries v345, which
@@ -682,6 +704,10 @@ function loadDashboard(){
        with no explanation — the figure is correct, but "correct and unexplained" is indistinguishable
        from "wrong" to anyone looking at it, and that is how people stop trusting a number. */
     API.pendingDaily().then(function(r){ if(r&&r.ok){ DASH.pendingDaily=r.pending||[]; renderDashboard(); } }).catch(function(){});
+    /* Expenses column on the by-branch table — same Acc_Ledger rows Accounts uses, filtered to
+       type=expense and not rejected/deleted (mirrors ledCounts_ on the server), summed per branch
+       for the dashboard month. */
+    API.listLedger('', ym, false).then(function(r){ if(r&&r.ok){ DASH.ledger=r.ledger||[]; renderDashboard(); } }).catch(function(){});
   }
   /* v307: the org-wide trainingStats fetch is gone. Its only consumer was the "Staff Training" tile on
      the department board — with the board removed the call was a round trip whose result nothing read. */
@@ -728,6 +754,10 @@ function renderDashboard(){
      you can't deposit more cash than you collected, so cash never goes negative (business total unchanged). */
   var _depByBr={};
   (DASH.deposits||[]).forEach(function(d){ if(String(d.status)!=='approved') return; var b=String(d.branchId||''); if(!b) return; _depByBr[b]=(_depByBr[b]||0)+(Number(d.amount)||0); });
+  /* Expenses per branch for the by-branch table — a row counts if it is not rejected and not deleted
+     (same rule as ledCounts_ server-side), so pending expenses show up here too, not just approved ones. */
+  var expByBr={};
+  (DASH.ledger||[]).forEach(function(r){ var st=String(r.status||''); if(st==='rejected'||st==='deleted') return; if(String(r.type)!=='expense') return; var b=String(r.branchId||''); if(!b) return; expByBr[b]=(expByBr[b]||0)+(Number(r.amount)||0); });
   Object.keys(_depByBr).forEach(function(b){ var o=dailyByBr[b]||(dailyByBr[b]={cash:0,bank:0,other:0,pat:0,test:0}); var shift=Math.min(_depByBr[b], Math.max(0,o.cash)); o.cash-=shift; o.bank+=shift; });
   var cashMTD=0,bankMTD=0,otherMTD=0,patMTD=0,testMTD=0;
   _dcounted.forEach(function(d){ if(effBranch && String(d.branchId)!==String(effBranch)) return; cashMTD+=Number(d.cashIn)||0; bankMTD+=Number(d.bankIn)||0; otherMTD+=Number(d.other)||0; patMTD+=Number(d.patients)||0; testMTD+=Number(d.tests)||0; });
@@ -765,12 +795,12 @@ function renderDashboard(){
       var brev=bc.reduce(function(s,c){return s+(Number(c.amount)||0);},0);
       var dd=dailyByBr[bid]||{cash:0,bank:0,other:0,pat:0,test:0};
       var biz=dd.cash+dd.bank+dd.other;
-      return {name:branchName(bid),staff:be,cards:bc.length,rev:brev,cash:dd.cash,bank:dd.bank,other:dd.other,biz:biz,pat:dd.pat,test:dd.test,
+      return {name:branchName(bid),staff:be,cards:bc.length,rev:brev,cash:dd.cash,bank:dd.bank,other:dd.other,biz:biz,pat:dd.pat,test:dd.test,exp:(expByBr[bid]||0),
         avg:(dd.pat>0?Math.round(biz/dd.pat):0), rTest:(dd.test>0?Math.round(biz/dd.test):0), rStaff:(be>0?Math.round(biz/be):0)};
     }).sort(function(a,b){return b.biz-a.biz;});
     html+=heldBackStrip();
-    html+='<div class="section-label">By branch · business this month</div><div class="card"><div class="table-wrap swipe"><table><thead><tr><th>Branch</th><th>Business (MTD)</th><th>Cash</th><th>Bank / UPI</th><th>Other</th><th>Patients</th><th>Avg / patient</th><th>Tests</th><th>Rev / test</th><th>No. of cards</th><th>Card business</th><th>Staff</th><th>Rev / staff</th></tr></thead><tbody>'+
-      rows.map(function(r){return '<tr><td><b>'+esc(r.name)+'</b></td><td>₹'+fmtMoney(r.biz)+'</td><td>₹'+fmtMoney(r.cash)+'</td><td>₹'+fmtMoney(r.bank)+'</td><td>₹'+fmtMoney(r.other)+'</td><td>'+r.pat+'</td><td>₹'+fmtMoney(r.avg)+'</td><td>'+r.test+'</td><td>₹'+fmtMoney(r.rTest)+'</td><td>'+r.cards+'</td><td>₹'+fmtMoney(r.rev)+'</td><td>'+r.staff+'</td><td>₹'+fmtMoney(r.rStaff)+'</td></tr>';}).join('')+'</tbody></table></div></div>';
+    html+='<div class="section-label">By branch · business this month</div><div class="card"><div class="table-wrap swipe"><table><thead><tr><th>Branch</th><th>Business (MTD)</th><th>Cash</th><th>Bank / UPI</th><th>Expenses</th><th>Other</th><th>Patients</th><th>Avg / patient</th><th>Tests</th><th>Rev / test</th><th>No. of cards</th><th>Card business</th><th>Staff</th><th>Rev / staff</th></tr></thead><tbody>'+
+      rows.map(function(r){return '<tr><td><b>'+esc(r.name)+'</b></td><td>₹'+fmtMoney(r.biz)+'</td><td>₹'+fmtMoney(r.cash)+'</td><td>₹'+fmtMoney(r.bank)+'</td><td>₹'+fmtMoney(r.exp)+'</td><td>₹'+fmtMoney(r.other)+'</td><td>'+r.pat+'</td><td>₹'+fmtMoney(r.avg)+'</td><td>'+r.test+'</td><td>₹'+fmtMoney(r.rTest)+'</td><td>'+r.cards+'</td><td>₹'+fmtMoney(r.rev)+'</td><td>'+r.staff+'</td><td>₹'+fmtMoney(r.rStaff)+'</td></tr>';}).join('')+'</tbody></table></div></div>';
   }
   /* v276 (task 4): the cards board is a MONTH SNAPSHOT now, not "whatever is live right now".
      Two different questions get asked about cards: how many did we sell that month (Issued), and how

@@ -1487,7 +1487,23 @@ document.addEventListener('DOMContentLoaded', function(){
         else if(r&&!r.offline){ API.clearLocal(); show('view-login'); }
       }).catch(function(){});
     } else if(token){
-      API.validate().then(function(r){ if(r.ok){ afterAuth(r.mustChange); } else { show('view-login'); } }).catch(function(){ show('view-login'); });
+      /* v356 -- a single flaky network moment right after this page reloads (e.g. Android backgrounding
+         the tab while the native camera was open for a punch photo, then reloading it) used to log the
+         person straight out here, even though their token was still perfectly valid -- unlike the
+         branch above, there is no cached profile on THIS particular boot to show while retrying. One
+         short retry before giving up tells a real "not authenticated" apart from a one-off hiccup,
+         without changing the outcome for either case: an actually invalid session still ends on the
+         login screen, just a beat later. */
+      (function tryValidate(retried){
+        API.validate().then(function(r){
+          if(r&&r.ok){ afterAuth(r.mustChange); }
+          else if(!retried){ setTimeout(function(){ tryValidate(true); }, 1500); }
+          else { show('view-login'); }
+        }).catch(function(){
+          if(!retried){ setTimeout(function(){ tryValidate(true); }, 1500); }
+          else { show('view-login'); }
+        });
+      })(false);
     } else { show('view-login'); if(navigator.onLine&&API.warm) API.warm(); }   // v187: wake the server while the user types
   });
 });
@@ -6134,7 +6150,11 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
        below to escalate the on-screen note once a punch has been stuck long enough that it is no
        longer a normal, brief sync delay (see the qNote branches just below). */
     var qOldestMin=(function(){ var w=(ATT.q&&ATT.q.waiting)||[]; if(!w.length) return 0; var oldest=Math.min.apply(null,w.map(function(r){return r.ts||Date.now();})); return Math.max(0,Math.floor((Date.now()-oldest)/60000)); })();
-    if(!rec && qIn) rec={checkIn:qIn.time, checkOut:(qOut?qOut.time:''), _queued:true};
+    /* v356 -- only trust a queued check-out here if it could genuinely belong to THIS check-in (its
+       queue timestamp is not older than the check-in's). Guards against a stray/stuck check-out left
+       over in the offline queue from a different day painting "Done for today" the instant someone
+       checks in, before they have ever tapped Check out. */
+    if(!rec && qIn) rec={checkIn:qIn.time, checkOut:(qOut && qOut.ts>=qIn.ts ? qOut.time : ''), _queued:true};
     else if(rec && rec.checkIn && !rec.checkOut && qOut) rec={checkIn:rec.checkIn, checkOut:qOut.time, attId:rec.attId, selfieInUrl:rec.selfieInUrl, selfieOutUrl:'x', _queued:true};
     var dutyTxt=(S.user&&S.user.DutyStart)?('Shift '+fmtDutyTime(S.user.DutyStart)+(S.user.DutyEnd?('–'+fmtDutyTime(S.user.DutyEnd)):'')+((S.user.AltDutyStart)?(' (or alt shift '+fmtDutyTime(S.user.AltDutyStart)+(S.user.AltDutyEnd?('–'+fmtDutyTime(S.user.AltDutyEnd)):'')+')'):'')):'';
     var inb = !rec || !rec.checkIn;
