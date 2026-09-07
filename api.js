@@ -52,10 +52,13 @@
     checkIn:1,checkOut:1,setAttendance:1,overrideAttendance:1,applyLeave:1,setLeave:1,cancelLeave:1,saveHoliday:1,savePolicy:1,ackPolicy:1,submitClaim:1,setClaim:1,runPayroll:1,approvePayroll:1,confirmAbsent:1,
     saveDaily:1,verifyDaily:1,rejectDaily:1,addLedger:1,setLedger:1,saveInvoice:1,recordPayment:1,saveBankRows:1,saveBankRule:1,
     saveDeposit:1,verifyDeposit:1,rejectDeposit:1,
+    /* pc1 — Patient CRM writes. pcLogCall/pcSave queue offline like any other write, so a
+       caller in a basement still records the call and it syncs when the signal returns. */
+    pcSave:1,pcLogCall:1,pcAddNote:1,pcLinkSample:1,pcLinkCard:1,pcImport:1,
     saveItem:1,deleteItem:1,saveVendor:1,deleteVendor:1,saveConsumption:1,saveManualConsumption:1,raiseIndent:1,advanceIndent:1,saveAudit:1,approveAudit:1,
     createPayRequest:1,setPayRequest:1,
     saveSection:1,deleteSection:1,saveVideo:1,deleteVideo:1,submitQuiz:1,saveAsset:1,deleteAsset:1,logRepeat:1,
-    login:1,validate:1,logout:1,uploadFile:1,importOldCards:1,attachSelfie:1,waTest:1,waSendCard:1,waCardMedia:1,waBulkSend:1,saveWaTemplate:1,waTestTemplate:1,
+    login:1,validate:1,logout:1,uploadFile:1,importOldCards:1,attachSelfie:1,waTest:1,waSendCard:1,waCardMedia:1,waBulkSend:1,waBenefitsSend:1,saveWaTemplate:1,waTestTemplate:1,
     submitSuggestion:1,replySuggestion:1,saveFixedAsset:1,deleteFixedAsset:1,completeFollowup:1,
     /* v309 — operations. Both queue: a technician records a sample with no signal and it syncs
        later, and a hand delivery can be recorded the same way. saveSample carries a clientId the
@@ -63,7 +66,11 @@
     saveSample:1,sendSampleReport:1,
     /* All four stage moves queue like the rest: a phlebotomist in a stairwell can still complete a
        visit, and it syncs when the signal comes back. */
-    saveOrder:1,completeVisit:1,submitResult:1,verifyReport:1,saveLabVisit:1,saveOutsource:1};
+    saveOrder:1,completeVisit:1,submitResult:1,verifyReport:1,saveLabVisit:1,saveOutsource:1,
+    /* v350 — "Message patient" / "Message phlebotomist" on the booking popup. Both send a live
+       WhatsApp template through whatsbizapi.com; see the NOQUEUE note just below for why they
+       must never sit in the offline outbox. */
+    opsMessagePatient:1,opsMessagePhlebotomist:1,opsMessageFeedback:1};
   /* Writes that already do their own optimistic queueing inside the method (don't double-queue here). */
   var SELF_QUEUE={createEmployee:1,updateEmployee:1,setStatus:1,issueCard:1,renewCard:1,cancelCard:1,markCardSent:1,markCardActivated:1,
     createTask:1,updateTask:1,setTaskStatus:1,deleteTask:1,createCalEntry:1,updateCalEntry:1,attachSelfie:1};
@@ -80,7 +87,8 @@
 
      The way back to offline booking is a failed-items tray the desk can see and retry, not a change
      here. Until that exists, this is the honest setting. */
-  var NOQUEUE={login:1,validate:1,logout:1,changePassword:1,resetPassword:1,checkIn:1,checkOut:1,runPayroll:1,approvePayroll:1,confirmAbsent:1,uploadFile:1,importOldCards:1,submitQuiz:1,waTest:1,waSendCard:1,waCardMedia:1,waBulkSend:1,saveWaTemplate:1,waTestTemplate:1,saveOrder:1,saveLabVisit:1};   /* v319: a chair is exclusive too */
+  var NOQUEUE={pcImport:1,login:1,validate:1,logout:1,changePassword:1,resetPassword:1,checkIn:1,checkOut:1,runPayroll:1,approvePayroll:1,confirmAbsent:1,uploadFile:1,importOldCards:1,submitQuiz:1,waTest:1,waSendCard:1,waCardMedia:1,waBulkSend:1,waBenefitsSend:1,saveWaTemplate:1,waTestTemplate:1,saveOrder:1,saveLabVisit:1,
+    opsMessagePatient:1,opsMessagePhlebotomist:1,opsMessageFeedback:1};   /* v319: a chair is exclusive too. v350/v353: a WhatsApp send has nothing useful to replay offline. v(new): waBenefitsSend joins for the same reason as waBulkSend. */
   /* ---------------- ATTACHMENTS ----------------------------------------------------
      A phone photo of a report is 4-8 MB. Sent as base64 it grows by a third, so ~10 MB was
      going up a branch connection against a hard 60-second abort — the request was killed
@@ -206,6 +214,17 @@
     if(queueable && !navigator.onLine) return enqueue(action,payload);     /* WRITE offline: save instantly to outbox */
     if(queueable) return NET(action,payload,timeoutMs).catch(function(){ return enqueue(action,payload); });
     return NET(action,payload,timeoutMs);            /* self-queued (method handles) or online-only */
+  }
+  /* v351 -- SAME FIX AS login (see the v295 note above): a single 30s shot at an online-only action
+     fails outright the moment Apps Script is busy (>30 concurrent executions -- happens any time
+     several staff tap something at once, not just "morning rush"). "Message patient" / "Message
+     phlebotomist" are online-only (NOQUEUE -- nothing useful to replay offline), so they got no retry
+     at all and any transient busy-server moment showed the user "signal is aborted without reason"
+     even though the WhatsApp send itself is fine. Retry once with a fresh 25s window before giving up. */
+  function callRetryOnce_(action,payload,timeoutMs){
+    return call(action,payload,timeoutMs).catch(function(e){
+      return call(action,payload,timeoutMs).catch(function(e2){ throw e2; });
+    });
   }
 
   /* ---------- status broadcasting ---------- */
@@ -430,6 +449,14 @@
       return call('waBulkSend',{token:getToken(),jobs:jobs||[],opts:{allowResend:!!allowResend}}, 300000)
         .then(function(r){ if(r.ok && API.refreshCards) API.refreshCards(); return r; }); },
     waBranchCheck:function(){ return call('waBranchCheck',{token:getToken()}, 60000); },
+    /* ---- Membership Benefits & Referral — kept separate from the v316 bulk-card-image calls
+       above on purpose; see the matching comment in Code.gs. ---- */
+    waBenefitsPreview:function(cardNumbers,allowResend){
+      return call('waBenefitsPreview',{token:getToken(),cardNumbers:cardNumbers||[],opts:{allowResend:!!allowResend}}, 60000); },
+    waBenefitsSend:function(cardNumbers,allowResend){
+      if(!navigator.onLine) return Promise.resolve({ok:false,error:'Sending needs an internet connection.'});
+      return call('waBenefitsSend',{token:getToken(),cardNumbers:cardNumbers||[],opts:{allowResend:!!allowResend}}, 300000)
+        .then(function(r){ if(r.ok && API.refreshCards) API.refreshCards(); return r; }); },
     saveWaTemplate:function(data){
       if(!navigator.onLine) return Promise.resolve({ok:false,error:'Saving templates needs an internet connection.'});
       return call('saveWaTemplate',{token:getToken(),data:data});
@@ -504,6 +531,10 @@
     qcInvItems:function(){ return call('qcInvItems',{token:getToken()}); },
     logRepeat:function(d){ return call('logRepeat',{token:getToken(),data:d}); },
     financeDashboard:function(ym,branch){ return call('financeDashboard',{token:getToken(),ym:ym||'',branch:branch||''}); },
+    /* v343: UNUSED. The Log call / Log meeting / Log activity tiles that called this were
+       removed from the dashboard — nothing in the app writes to Activity_Log any more. The
+       server action and the sheet's history are both untouched, so this still works if it is
+       ever wanted again. Left here deliberately rather than deleted. */
     quickLog:function(d){ return call('quickLog',{token:getToken(),data:d}); },
     /* v307: getKpiConfig / saveKpiTarget / saveWeights removed with the KPI & Scoring page. The saved
        targets still drive the profile KPI box server-side; they are just not editable in the app. */
@@ -573,12 +604,43 @@
     sendSampleReport:function(id,d){ return call('sendSampleReport',{token:getToken(),sampleId:id,data:d||{}}); },
     opsSummary:function(b){ return call('opsSummary',{token:getToken(),branch:b||''}); },
     opsCollectors:function(){ return call('opsCollectors',{token:getToken()}); },   /* v310 */
+
+    /* ---------- pc1 · PATIENT CRM ----------
+       Replaces the Sales CRM. Reads are cache-first like every other read in this file, so the
+       calling list opens instantly and still works with no signal. */
+    pcMeta:function(){ return call('pcMeta',{token:getToken()}); },
+    pcList:function(tab,branch,q,tag,page){
+      return call('pcList',{token:getToken(),tab:tab||'followups',branch:branch||'',q:q||'',tag:tag||'',page:page||0}); },
+    pcGet:function(id){ return call('pcGet',{token:getToken(),patientId:id}); },
+    /* Type a number, see everything the business already knows about it — the patient row,
+       their membership cards, and every sample they have ever given. */
+    pcLookup:function(n){ return call('pcLookup',{token:getToken(),number:n||''}); },
+    pcSave:function(d){ return call('pcSave',{token:getToken(),data:d||{}}); },
+    pcLogCall:function(d){ return call('pcLogCall',{token:getToken(),data:d||{}}); },
+    pcAddNote:function(id,msg){ return call('pcAddNote',{token:getToken(),patientId:id,message:msg||''}); },
+    pcLinkSample:function(pid,sid,cid){ return call('pcLinkSample',{token:getToken(),patientId:pid,sampleId:sid,callId:cid||''}); },
+    pcLinkCard:function(pid,cn,cid){ return call('pcLinkCard',{token:getToken(),patientId:pid,cardNumber:cn,callId:cid||''}); },
+    pcImport:function(d){ return call('pcImport',{token:getToken(),data:d||{}},120000); },
+    pcDash:function(branch,ym){ return call('pcDash',{token:getToken(),branch:branch||'',ym:ym||''}); },
+    pcHours:function(branch,date){ return call('pcHours',{token:getToken(),branch:branch||'',date:date||''}); },
+    /* v349 — how many calls each future day already holds, for the busy-day warning on the
+       next-call-date box. A pure read, so it never queues; if it fails the box simply shows no
+       warning rather than blocking anybody from saving a call. */
+    pcDayLoad:function(branch,mineOnly){ return call('pcDayLoad',{token:getToken(),branch:branch||'',mineOnly:!!mineOnly}); },
     /* v314 — the five-stage pipeline */
     saveOrder:function(d){ return call('saveOrder',{token:getToken(),data:d}); },
     completeVisit:function(id,d){ return call('completeVisit',{token:getToken(),sampleId:id,data:d||{}}); },
     submitResult:function(id,d){ return call('submitResult',{token:getToken(),sampleId:id,data:d||{}}); },
     verifyReport:function(id,d){ return call('verifyReport',{token:getToken(),sampleId:id,data:d||{}}); },
     opsPeople:function(b){ return call('opsPeople',{token:getToken(),branch:b||''}); },
+    /* v350 — "Message patient" / "Message phlebotomist" buttons on the booking popup. `d` carries
+       branchId, patientName, mobile, address, appointmentDate, appointmentAt, empId (phlebotomist),
+       remark, sampleId(optional) — whatever the popup currently holds. The server resolves the
+       template, the phlebotomist's phone, and the branch's WhatsApp key; nothing sensitive is
+       decided on the client. */
+    opsMessagePatient:function(d){ return callRetryOnce_('opsMessagePatient',{token:getToken(),data:d||{}}, 25000); },
+    opsMessagePhlebotomist:function(d){ return callRetryOnce_('opsMessagePhlebotomist',{token:getToken(),data:d||{}}, 25000); },
+    opsMessageFeedback:function(sampleId){ return callRetryOnce_('opsMessageFeedback',{token:getToken(),sampleId:sampleId}, 25000); },
     /* v317 — one call answers the whole picker: the week strip and every box for the chosen day.
        Two calls would be tidier and twice as slow, and this runs while a patient waits on the phone. */
     opsSlots:function(empId,date,month){ return call('opsSlots',{token:getToken(),empId:empId||'',date:date||'',month:month||''}); },

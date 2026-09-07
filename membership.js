@@ -159,7 +159,7 @@
     opts = opts || {};
     var W = CIMG.W, PAD = CIMG.PAD;
     var CARDW = W - PAD*2, CARDH = Math.round(CARDW * 638 / 1012);
-    var theme = resolveTheme(type), foil = theme.foil;
+    var theme = resolveTheme(type), foil = theme.foil, isLight = !!theme.light;   /* v367 */
     var typeName = String((type && type.name) || 'Membership').toUpperCase();
     var bens = (opts.benefits && opts.benefits.length) ? opts.benefits : cardBenefitLines(type, []);
     var textMaxW = CARDW - CIMG.PX*2 - CIMG.TICK;
@@ -184,12 +184,17 @@
     cv.width = W; cv.height = H;
     var ctx = cv.getContext('2d');
 
-    /* ── background ───────────────────────────────────────────────────────── */
+    /* ── background ─────────────────────────────────────────────────────────
+       v367: this used to be dark green (Hunter Green) for every card type, so a light theme like
+       Champagne Gold got wrapped in a colour its own front never uses — the front looked gold, the
+       picture around it looked green. Now it follows the resolved theme's own light/dark flag, the
+       same one drawCard() already uses for the card front. */
     var bg = ctx.createLinearGradient(0, 0, W*0.35, H);
-    bg.addColorStop(0, '#0A2419'); bg.addColorStop(0.45, '#061912'); bg.addColorStop(1, '#02100B');
+    if(isLight){ bg.addColorStop(0, '#FAF6EA'); bg.addColorStop(0.45, '#F3ECD6'); bg.addColorStop(1, '#EADFC0'); }
+    else       { bg.addColorStop(0, '#0A2419'); bg.addColorStop(0.45, '#061912'); bg.addColorStop(1, '#02100B'); }
     ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
     ctx.save();
-    ctx.strokeStyle = 'rgba(236,200,87,0.16)'; ctx.lineWidth = 2;
+    ctx.strokeStyle = isLight ? 'rgba(120,90,20,0.20)' : 'rgba(236,200,87,0.16)'; ctx.lineWidth = 2;
     roundRect(ctx, 7, 7, W-14, H-14, 30); ctx.stroke();
     ctx.restore();
 
@@ -203,15 +208,18 @@
     ctx.save(); roundRect(ctx, PAD, PAD, CARDW, CARDH, 26); ctx.clip();
     ctx.drawImage(off, PAD, PAD, CARDW, CARDH); ctx.restore();
     ctx.save(); roundRect(ctx, PAD, PAD, CARDW, CARDH, 26);
-    ctx.strokeStyle = 'rgba(236,200,87,0.30)'; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
+    ctx.strokeStyle = isLight ? 'rgba(120,90,20,0.30)' : 'rgba(236,200,87,0.30)'; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
 
-    /* ── benefits panel ───────────────────────────────────────────────────── */
+    /* ── benefits panel ─────────────────────────────────────────────────────
+       v367: same fix as the outer background above — follows the theme's light/dark flag instead
+       of always being dark green. */
     var py = PAD + CARDH + CIMG.GAP;
     var pg = ctx.createLinearGradient(PAD, py, PAD + CARDW, py + panelH);
-    pg.addColorStop(0, '#0C3325'); pg.addColorStop(0.55, '#08241B'); pg.addColorStop(1, '#051A13');
+    if(isLight){ pg.addColorStop(0, '#FFFCF2'); pg.addColorStop(0.55, '#FBF2D8'); pg.addColorStop(1, '#F3E6BE'); }
+    else       { pg.addColorStop(0, '#0C3325'); pg.addColorStop(0.55, '#08241B'); pg.addColorStop(1, '#051A13'); }
     ctx.save();
     ctx.fillStyle = pg; roundRect(ctx, PAD, py, CARDW, panelH, 26); ctx.fill();
-    ctx.strokeStyle = 'rgba(236,200,87,0.26)'; ctx.lineWidth = 2;
+    ctx.strokeStyle = isLight ? 'rgba(120,90,20,0.35)' : 'rgba(236,200,87,0.26)'; ctx.lineWidth = 2;
     roundRect(ctx, PAD, py, CARDW, panelH, 26); ctx.stroke();
     ctx.restore();
 
@@ -229,7 +237,7 @@
 
     /* sub-title */
     ctx.font = 'italic 400 ' + CIMG.SUB + 'px Georgia, "Times New Roman", serif';
-    ctx.fillStyle = 'rgba(236,200,87,0.62)'; ctx.textAlign = 'center';
+    ctx.fillStyle = isLight ? 'rgba(120,80,10,0.65)' : 'rgba(236,200,87,0.62)'; ctx.textAlign = 'center';
     ctx.fillText(String(opts.labelText || 'Nakoda Diagnostics & Research Center'), cx, y);
     y += CIMG.SUB + 24;
 
@@ -250,13 +258,13 @@
       ctx.restore();
 
       ctx.font = '400 ' + CIMG.BEN + 'px -apple-system,"Segoe UI",Roboto,Arial,sans-serif';
-      ctx.fillStyle = '#EDE6D2';
+      ctx.fillStyle = isLight ? '#3D2400' : '#EDE6D2';
       for(var l=0;l<lines.length;l++) ctx.fillText(lines[l], tx + CIMG.TICK, ty + 2 + l*CIMG.LINE);
 
       y += rowH;
       if(i < rows.length - 1){
         ctx.save();
-        ctx.strokeStyle = 'rgba(236,200,87,0.15)'; ctx.lineWidth = 1;
+        ctx.strokeStyle = isLight ? 'rgba(120,90,20,0.18)' : 'rgba(236,200,87,0.15)'; ctx.lineWidth = 1;
         if(ctx.setLineDash) ctx.setLineDash([5, 6]);
         ctx.beginPath(); ctx.moveTo(PAD + CIMG.PX, y + 0.5); ctx.lineTo(PAD + CARDW - CIMG.PX, y + 0.5); ctx.stroke();
         ctx.restore();
@@ -266,33 +274,35 @@
     /* ── footer: card number left, lab number right ───────────────────────── */
     y += 18;
     ctx.save();
-    ctx.strokeStyle = 'rgba(236,200,87,0.20)'; ctx.lineWidth = 1;
+    ctx.strokeStyle = isLight ? 'rgba(120,90,20,0.22)' : 'rgba(236,200,87,0.20)'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(PAD + CIMG.PX, y + 0.5); ctx.lineTo(PAD + CARDW - CIMG.PX, y + 0.5); ctx.stroke();
     ctx.restore();
     y += 20;
 
     var lab = String(opts.labPhone || '').replace(/\D/g, '');
+    var footLabel = isLight ? 'rgba(90,65,10,0.65)' : 'rgba(220,210,170,0.60)';   /* v367 */
+    var footValue = isLight ? '#3D2400' : '#EDE6D2';                             /* v367 */
     ctx.textBaseline = 'top';
     ctx.font = '400 ' + CIMG.FOOT + 'px -apple-system,"Segoe UI",Roboto,Arial,sans-serif';
-    ctx.fillStyle = 'rgba(220,210,170,0.60)'; ctx.textAlign = 'left';
+    ctx.fillStyle = footLabel; ctx.textAlign = 'left';
     var lbl = 'Card no. ';
     ctx.fillText(lbl, PAD + CIMG.PX, y);
     var lblW = ctx.measureText(lbl).width;
     ctx.font = '700 ' + CIMG.FOOT + 'px -apple-system,"Segoe UI",Roboto,Arial,sans-serif';
-    ctx.fillStyle = '#EDE6D2';
+    ctx.fillStyle = footValue;
     ctx.fillText(String(card.cardNumber || ''), PAD + CIMG.PX + lblW, y);
     if(lab){
       ctx.textAlign = 'right';
       ctx.font = '400 ' + CIMG.FOOT + 'px -apple-system,"Segoe UI",Roboto,Arial,sans-serif';
-      ctx.fillStyle = 'rgba(220,210,170,0.60)';
+      ctx.fillStyle = footLabel;
       var rt = 'Nakoda Lab ';
       var rw = ctx.measureText(rt).width;
       ctx.font = '700 ' + CIMG.FOOT + 'px -apple-system,"Segoe UI",Roboto,Arial,sans-serif';
-      ctx.fillStyle = '#EDE6D2';
+      ctx.fillStyle = footValue;
       ctx.fillText(lab, PAD + CARDW - CIMG.PX, y);
       var numW = ctx.measureText(lab).width;
       ctx.font = '400 ' + CIMG.FOOT + 'px -apple-system,"Segoe UI",Roboto,Arial,sans-serif';
-      ctx.fillStyle = 'rgba(220,210,170,0.60)';
+      ctx.fillStyle = footLabel;
       ctx.textAlign = 'left';
       ctx.fillText(rt, PAD + CARDW - CIMG.PX - numW - rw, y);
     }
@@ -383,13 +393,27 @@
       box.innerHTML='<div class="table-wrap"><table><thead><tr><th>Card No</th><th>Name</th><th>Mobile</th><th>Type</th><th>Branch</th><th>Valid thru</th><th>Status</th><th></th></tr></thead><tbody>'+
         list.map(function(c){ var t=TYPEMAP[c.typeId];
           return '<tr class="crow" data-cn="'+esc(c.cardNumber)+'" style="cursor:pointer">'+
-            '<td><b>'+esc(c.cardNumber)+'</b></td><td>'+esc(c.holderName)+'</td><td>'+esc(c.mobile||'—')+'</td><td>'+esc(t?t.name:c.typeId)+'</td><td>'+esc(bName(c.branchId))+'</td><td>'+esc(fmtExpiry(c.expiryDate))+'</td><td>'+cstatus(c.status)+'</td><td><button class="btn ghost sm">View</button></td></tr>';
+            '<td><b>'+esc(c.cardNumber)+'</b></td><td>'+esc(c.holderName)+'</td><td>'+esc(c.mobile||'—')+'</td><td>'+esc(t?t.name:c.typeId)+'</td><td>'+esc(bName(c.branchId))+'</td><td>'+esc(fmtExpiry(c.expiryDate))+'</td><td>'+cstatus(c.status)+'</td><td><div style="display:flex;gap:6px;justify-content:flex-end">'+benefitsBtn(c)+'<button class="btn ghost sm">View</button></div></td></tr>';
         }).join('')+'</tbody></table></div>';
       box.querySelectorAll('.crow').forEach(function(el){ el.onclick=function(){ openCardDetail(el.getAttribute('data-cn')); }; });
+      box.querySelectorAll('.wabnRowBtn').forEach(function(el){
+        el.onclick=function(ev){ ev.stopPropagation(); if(window.WABulk) WABulk.sendBenefitsOne(el.getAttribute('data-cn')); };
+      });
       if(window.WABulk) WABulk.attach(box, list, TYPEMAP, _canIssue);   /* v316 tick boxes */
     }
   }
   function cstatus(s){ var m={active:'#1a7f37',expired:'#9aa0a6',cancelled:'#C0392B',renewed:'#185fa5'}; return '<span class="badge" style="background:'+(m[s]||'#999')+'22;color:'+(m[s]||'#999')+'">'+esc(s||'active')+'</span>'; }
+  /* v(new) — per-row Membership Benefits & Referral button, next to View. Hidden for a card that
+     cannot receive it (cancelled / no usable mobile) or if this signed-in user cannot issue cards
+     at all (same gate v316's tick-box column already uses). Already-sent cards show a plain,
+     unclickable "Sent" pill instead of the button, driven by benefitsSentAt (Code.gs v(new)). */
+  function benefitsBtn(c){
+    if(!_canIssue) return '';
+    if(String(c.status||'active')==='cancelled') return '';
+    if(String(c.mobile||'').replace(/\D/g,'').length<10) return '';
+    if(c.benefitsSentAt) return '<span class="badge" style="background:#f2f2f3;color:#9aa0a6;white-space:nowrap">&#10003; Sent</span>';
+    return '<button class="btn ghost sm wabnRowBtn" data-cn="'+esc(c.cardNumber)+'" style="background:#eefaf1;color:#1a7f37;border-color:#cfe3d6;white-space:nowrap">&#128227; Benefits</button>';
+  }
   function bName(id){ var b=((S.meta&&S.meta.branches)||[]).filter(function(x){return String(x.BranchID)===String(id);})[0]; return b?b.BranchName:(id||'—'); }
 
   /* ── card detail ──────────────────────────────────────────────────────── */
@@ -433,14 +457,28 @@
     got.then(function(r){
       if(!r.ok){ toast(r.error,true); return; }
       var c=r.card, t=r.type, msg=buildMessage(c,t,r.branchName,branchPhone(c.branchId));
+      /* v366 — a card issued from the Patient CRM while offline used to land here with nothing
+         but Download Image, because r.canIssue only ever comes from a live server response and
+         the offline queueIssue() in api.js has no server to ask. That made the CRM's card popup
+         look broken next to this same screen opened from the Membership Cards tool. Sharing the
+         image (Options 1 & 2) is purely local — the device's own share sheet, or a wa.me link —
+         so it does not actually need r.canIssue; only the official-API send and Activate/Cancel/
+         Renew genuinely need the server, and act on a permanent card number that does not exist
+         yet for a card still tagged _pending (its id is a placeholder like "PENDING-xxxx" until
+         the outbox syncs), so those stay off until then. */
+      var isPending = !!(c && c._pending);
+      var canManage = !!r.canIssue && !isPending;
+      var canShareLocally = !!r.canIssue || isPending;
+      var msgForShare = isPending ? msg.replace(/Membership Number: PENDING-[^\n]*\n?/, '') : msg;
       var info='<div class="grid2" style="font-size:13px;margin-top:12px">'+
         '<div><b>Holder:</b> '+esc(c.holderName)+'</div><div><b>Mobile:</b> '+esc(c.mobile)+'</div>'+
         '<div><b>Type:</b> '+esc(t?t.name:c.typeId)+'</div><div><b>Branch:</b> '+esc(r.branchName)+'</div>'+
         '<div><b>Issued:</b> '+fmtDate(c.issuedDate)+'</div><div><b>Valid till:</b> '+fmtDate(c.expiryDate)+'</div>'+
-        '<div><b>Amount:</b> ₹'+esc(c.amount||0)+'</div><div><b>Status:</b> '+cstatus(c.status)+'</div></div>';
-      var sendBlock=r.canIssue?(
+        '<div><b>Amount:</b> ₹'+esc(c.amount||0)+'</div><div><b>Status:</b> '+cstatus(c.status)+'</div></div>'+
+        (isPending?'<div style="margin-top:10px;background:#FFF6E5;border:1px solid #F0D999;border-radius:9px;padding:9px 11px;font-size:12px;color:#8a6416">⏳ Saved on this device — it gets its permanent card number once you\'re back online. You can still share the image now.</div>':'');
+      var sendBlock=canShareLocally?(
         '<div style="font-size:12px;color:#888;margin:14px 0 4px">Message to send (you can edit before sending)</div>'+
-        '<textarea id="cdMsg" rows="6" style="width:100%;font-size:12.5px;border:1px solid #e3e5ea;border-radius:8px;padding:8px">'+esc(msg)+'</textarea>'+
+        '<textarea id="cdMsg" rows="6" style="width:100%;font-size:12.5px;border:1px solid #e3e5ea;border-radius:8px;padding:8px">'+esc(msgForShare)+'</textarea>'+
         '<div style="background:#f6f7f9;border-radius:10px;padding:12px;margin-top:10px">'+
           '<div style="font-weight:600;font-size:13px;margin-bottom:6px">Send to customer</div>'+
           '<div style="font-size:11.5px;color:#888;margin-bottom:4px">Option 1 · Auto-attach image + text (pick contact)</div>'+
@@ -448,17 +486,19 @@
           '<div style="font-size:11.5px;color:#888;margin:10px 0 4px">Option 2 · Direct chat with customer</div>'+
           '<div style="display:flex;gap:8px"><input id="cdNum" value="'+esc(c.mobile||'')+'" style="flex:1;border:1px solid #e3e5ea;border-radius:8px;padding:9px" inputmode="numeric"><button class="btn ghost" id="cdChat" style="white-space:nowrap">💬 Open Chat</button></div>'+
           '<div style="font-size:11px;color:#999;font-style:italic;margin-top:4px">Image goes into your clipboard — paste it inside WhatsApp.</div>'+
-          '<div style="font-size:11.5px;color:#888;margin:10px 0 4px">Option 3 · Official WhatsApp API — sends card + message automatically from the branch\'s WhatsApp number</div>'+
-          '<button class="btn" id="cdApiSend" style="width:100%;background:#1a7f37">🚀 Send via Official API</button>'+
-          '<div id="cdApiStatus" style="font-size:11px;color:#999;font-style:italic;margin-top:4px">Uses this branch\'s approved template — the text box above does not apply to this option.</div>'+
+          (canManage?(
+            '<div style="font-size:11.5px;color:#888;margin:10px 0 4px">Option 3 · Official WhatsApp API — sends card + message automatically from the branch\'s WhatsApp number</div>'+
+            '<button class="btn" id="cdApiSend" style="width:100%;background:#1a7f37">🚀 Send via Official API</button>'+
+            '<div id="cdApiStatus" style="font-size:11px;color:#999;font-style:italic;margin-top:4px">Uses this branch\'s approved template — the text box above does not apply to this option.</div>'
+          ):(isPending?'<div style="font-size:11px;color:#999;font-style:italic;margin-top:10px">The official-API send, and Activate/Cancel/Renew, unlock once this card finishes syncing.</div>':''))+
         '</div>'):'';
       /* v332: the benefits are inside the picture now, so the grey text block under the modal was
          saying the same thing twice. Kept as a one-line reminder of where the wording is edited. */
       var benefits='<div style="font-size:11.5px;color:#999;margin-top:10px">Benefits shown on the card image come from <b>Card types \u25B8 '+esc(t?t.name:'')+'</b>.</div>';
       var actions='<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn ghost" id="cdDl" style="flex:1;min-width:110px">⬇ Download Image</button>'+
-        (r.canIssue&&!c.activatedAt&&c.status==='active'?'<button class="btn ghost" id="cdActivate" style="flex:1;min-width:110px;color:#1a7f37">✓ Mark activated</button>':'')+
-        (r.canIssue&&c.status==='active'?'<button class="btn ghost" id="cdCancel" style="flex:1;min-width:110px;color:#C0392B">Cancel Card</button>':'')+
-        (r.canIssue?'<button class="btn ghost" id="cdRenew" style="flex:1;min-width:110px">↻ Renew</button>':'')+'</div>';
+        (canManage&&!c.activatedAt&&c.status==='active'?'<button class="btn ghost" id="cdActivate" style="flex:1;min-width:110px;color:#1a7f37">✓ Mark activated</button>':'')+
+        (canManage&&c.status==='active'?'<button class="btn ghost" id="cdCancel" style="flex:1;min-width:110px;color:#C0392B">Cancel Card</button>':'')+
+        (canManage?'<button class="btn ghost" id="cdRenew" style="flex:1;min-width:110px">↻ Renew</button>':'')+'</div>';
       openModal('Card · '+c.cardNumber, '<div id="cardCanvasBox"></div>'+info+sendBlock+benefits+actions, '<button class="btn ghost" onclick="closeModal()">Close</button>');
       /* v332. ONE canvas from here down. Everything below — the preview, Download, Share, Open Chat
          and the official API send — reads this same `cv`, so the staff member is looking at exactly
@@ -481,7 +521,13 @@
         var b64=cardSendJpeg(cv).split(',')[1];
         API.waSendCard(c.cardNumber, b64, phone).then(function(rr){
           ap.disabled=false; ap.textContent='🚀 Send via Official API';
-          if(rr.ok){ st.innerHTML='<span style="color:#1a7f37">✓ '+esc(rr.message||'Sent!')+'</span>'; toast('Card sent on WhatsApp ✓'); }
+          /* v366 — a send that used the unreliable Google-Drive image fallback (imageRisk:true,
+             set in waSendCardCore_ when whatsbizapi's own upload rejected our key) is NOT shown as a
+             plain green success: WhatsApp may have silently dropped the picture, so staff need to
+             notice and double-check rather than trust a checkmark that looks identical to a normal
+             send. */
+          if(rr.ok && rr.imageRisk){ st.innerHTML='<span style="color:#BA7517">⚠ '+esc(rr.message||'Sent — please confirm the customer got the picture.')+'</span>'; toast('Card sent — but please confirm the picture arrived',true); }
+          else if(rr.ok){ st.innerHTML='<span style="color:#1a7f37">✓ '+esc(rr.message||'Sent!')+'</span>'; toast('Card sent on WhatsApp ✓'); }
           else { st.innerHTML='<span style="color:#C0392B">✗ '+esc(rr.error||'Failed')+'</span>'; toast(rr.error||'Send failed',true); }
         }).catch(function(){ ap.disabled=false; ap.textContent='🚀 Send via Official API'; st.textContent='Network error — try again.'; toast('Network error — sending via API needs internet.',true); });
       };
