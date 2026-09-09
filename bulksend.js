@@ -102,7 +102,8 @@
       '<span style="flex:1"></span>' +
       '<button class="btn ghost" id="wabClr" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,.5);padding:7px 11px">Clear</button>' +
       '<button class="btn" id="wabGo" style="background:#fff;color:#DA1017;font-weight:700;padding:7px 14px">🚀 Send ' + n + ' Cards</button>' +
-      '<button class="btn" id="wabnGo" style="background:#1a7f37;color:#fff;font-weight:700;padding:7px 14px">📢 Send ' + n + ' Benefits</button>';
+      '<button class="btn" id="wabnGo" style="background:#1a7f37;color:#fff;font-weight:700;padding:7px 14px">📢 Send ' + n + ' Benefits</button>' +
+      '<button class="btn" id="wapGo" style="background:#b7791f;color:#fff;font-weight:700;padding:7px 14px">📣 Send ' + n + ' Promo</button>';
     document.getElementById('wabClr').onclick = function(){
       clear();
       document.querySelectorAll('.wabBox').forEach(function(cb){ cb.checked = false; });
@@ -111,6 +112,7 @@
     };
     document.getElementById('wabGo').onclick = function(){ openPreview(Object.keys(SEL)); };
     document.getElementById('wabnGo').onclick = function(){ openBenefitsPreview(Object.keys(SEL)); };   /* v(new) */
+    document.getElementById('wapGo').onclick = function(){ openPromoPreview(Object.keys(SEL)); };       /* Home Services Promo */
   }
 
   /* ── "send all unsent" — one tap, no ticking ───────────────────────────── */
@@ -416,6 +418,116 @@
     if(window.renderMembershipCards && !bad.length) setTimeout(function(){ /* list refreshes on next paint */ }, 0);
   }
 
+  /* ==========================================================================================
+   *  HOME SERVICES PROMO — mirrors the MEMBERSHIP BENEFITS & REFERRAL block just above almost
+   *  line for line, on purpose: same shape, same modal-building code, different template
+   *  (promo_home_services) and different sent-once flag (promoSentAt) server-side.
+   * ======================================================================================== */
+  function sendPromoOne(cardNumber){
+    if(!cardNumber) return;
+    openPromoPreview([cardNumber]);
+  }
+
+  function openPromoPreview(nums, allowResend){
+    if(!nums || !nums.length){ say('Select at least one card.', true); return; }
+    openModal('Checking ' + nums.length + ' card' + (nums.length===1?'':'s') + '…',
+      '<div class="center-load" style="padding:26px"><span class="loader dark"></span> Reading branches, template and numbers…</div>',
+      '<button class="btn ghost" onclick="closeModal()">Cancel</button>');
+
+    API.waPromoPreview(nums, !!allowResend).then(function(r){
+      if(!r.ok){ closeModal(); say(r.error, true); return; }
+      var ok = r.items.filter(function(i){ return i.ok; });
+      var no = r.items.filter(function(i){ return !i.ok; });
+      var capWarn = (r.caps || []).filter(function(c){ return c.over; });
+
+      var rowHtml = function(i, good){
+        return '<div style="display:flex;gap:8px;align-items:flex-start;padding:7px 9px;border:1px solid #e3e5ea;border-radius:8px;margin-bottom:5px;background:#fff">' +
+          '<div style="flex:1;min-width:0">' +
+            '<div style="font-size:12.5px;font-weight:600">' + esc2(i.cardNumber) + ' · ' + esc2(i.holderName || '—') + '</div>' +
+            '<div style="font-size:11px;color:#8a8f97">' + esc2(i.branchName) + (i.phone ? (' · +' + esc2(i.phone)) : '') +
+              (good && i.template ? (' · template ' + esc2(i.template)) : '') + '</div>' +
+            (!good ? '<div style="font-size:11px;color:#C0392B;margin-top:2px">' + esc2(i.reason) + '</div>' : '') +
+          '</div>' +
+          '<span class="badge" style="background:' + (good ? '#e6f4ea;color:#1a7f37' : '#fdeaea;color:#C0392B') + ';font-size:10.5px;white-space:nowrap">' +
+            (good ? 'Ready' : 'Skip') + '</span>' +
+        '</div>';
+      };
+
+      var body =
+        '<div style="background:' + (ok.length ? '#e6f4ea' : '#fdeaea') + ';border-radius:10px;padding:11px 13px;margin-bottom:12px">' +
+          '<div style="font-weight:700;font-size:14px;color:' + (ok.length ? '#1a7f37' : '#C0392B') + '">' +
+            ok.length + ' promo message' + (ok.length === 1 ? '' : 's') + ' will be sent' + (no.length ? (' · ' + no.length + ' skipped') : '') + '</div>' +
+          '<div style="font-size:11.5px;color:#4a4f57;margin-top:3px">No images to prepare — this takes a few seconds.</div>' +
+        '</div>' +
+        (capWarn.length ? '<div style="background:#fff7e6;border:1px solid #f3d98a;border-radius:9px;padding:9px 11px;font-size:12px;color:#7a5b00;margin-bottom:10px">⚠ Daily limit: ' +
+            capWarn.map(function(c){ return esc2(c.branchName) + ' has ' + c.left + ' send(s) left today (you selected ' + c.want + ')'; }).join('; ') + '. The extra ones will be refused — send them tomorrow.</div>' : '') +
+        '<label style="display:flex;gap:7px;align-items:center;font-size:12px;color:#5a5f67;margin-bottom:10px">' +
+          '<input type="checkbox" id="wapResend"' + (allowResend ? ' checked' : '') + ' style="width:15px;height:15px"> Send again even though this card already received it</label>' +
+        '<div style="max-height:44vh;overflow:auto;background:#f6f7f9;border-radius:10px;padding:8px">' +
+          (ok.length ? ok.map(function(i){ return rowHtml(i, true); }).join('') : '') +
+          (no.length ? ('<div style="font-size:11px;color:#8a8f97;margin:8px 0 5px;font-weight:600">SKIPPED</div>' + no.map(function(i){ return rowHtml(i, false); }).join('')) : '') +
+        '</div>';
+
+      openModal('Send ' + ok.length + ' promo message' + (ok.length===1?'':'s'), body,
+        '<button class="btn ghost" onclick="closeModal()">Cancel</button>' +
+        (ok.length ? '<button class="btn" id="wapSend" style="background:#b7791f">📣 Send ' + ok.length + ' now</button>' : ''));
+
+      var rs = document.getElementById('wapResend');
+      if(rs) rs.onchange = function(){ openPromoPreview(nums, rs.checked); };
+      var go = document.getElementById('wapSend');
+      if(go) go.onclick = function(){ runPromoBatch(ok.map(function(i){ return i.cardNumber; }), !!(rs && rs.checked)); };
+    }).catch(function(){ closeModal(); say('Could not reach the server — sending needs internet.', true); });
+  }
+
+  function runPromoBatch(cardNumbers, allowResend){
+    openModal('Sending ' + cardNumbers.length + ' promo message' + (cardNumbers.length===1?'':'s'),
+      '<div style="padding:6px 2px">' +
+        '<div style="font-size:13px;font-weight:600;margin-bottom:8px">Sending to WhatsApp…</div>' +
+        '<div style="background:#eef0f3;border-radius:20px;height:9px;overflow:hidden"><i style="display:block;height:100%;background:#b7791f;width:55%;transition:width .25s"></i></div>' +
+        '<div style="font-size:11.5px;color:#8a8f97;margin-top:7px">Keep this open for a few seconds — after this it is out of your hands and on WhatsApp.</div>' +
+      '</div>', '');
+
+    API.waPromoSend(cardNumbers, allowResend).then(function(r){
+      if(!r.ok){ closeModal(); say(r.error, true); return; }
+      showPromoResults(r.results || []);
+    }).catch(function(){
+      closeModal(); say('Network problem during the batch — check the Cards list before re-sending.', true);
+    });
+  }
+
+  function showPromoResults(results){
+    var good = results.filter(function(r){ return r.ok; });
+    var bad  = results.filter(function(r){ return !r.ok; });
+
+    var line = function(x, ok){
+      return '<div style="padding:7px 9px;border:1px solid #e3e5ea;border-radius:8px;margin-bottom:5px;background:#fff">' +
+        '<div style="font-size:12.5px;font-weight:600">' + (ok ? '✓ ' : '✗ ') + esc2(x.cardNumber) + ' · ' + esc2(x.holderName || '') + '</div>' +
+        (ok ? '' : '<div style="font-size:11px;color:#C0392B;margin-top:2px">' + esc2(x.error) + '</div>') + '</div>';
+    };
+
+    var body =
+      '<div style="background:' + (good.length ? '#e6f4ea' : '#fdeaea') + ';border-radius:10px;padding:12px 13px;margin-bottom:12px">' +
+        '<div style="font-weight:700;font-size:16px;color:' + (good.length ? '#1a7f37' : '#C0392B') + '">' +
+          good.length + ' sent' + (bad.length ? (' · ' + bad.length + ' failed') : ' ✓') + '</div>' +
+        '<div style="font-size:11.5px;color:#4a4f57;margin-top:3px">Every attempt is recorded in the WA_Log sheet with the exact request that went out.</div>' +
+      '</div>' +
+      '<div style="max-height:44vh;overflow:auto;background:#f6f7f9;border-radius:10px;padding:8px">' +
+        (bad.length ? ('<div style="font-size:11px;color:#8a8f97;margin:0 0 5px;font-weight:600">NOT SENT</div>' + bad.map(function(x){ return line(x, false); }).join('')) : '') +
+        (good.length ? ('<div style="font-size:11px;color:#8a8f97;margin:8px 0 5px;font-weight:600">SENT</div>' + good.map(function(x){ return line(x, true); }).join('')) : '') +
+      '</div>';
+
+    openModal('Promo batch finished', body,
+      (bad.length ? '<button class="btn ghost" id="wapRetry">↻ Retry the ' + bad.length + ' failed</button>' : '') +
+      '<button class="btn" onclick="closeModal()">Done</button>');
+
+    var rt = document.getElementById('wapRetry');
+    if(rt) rt.onclick = function(){ openPromoPreview(bad.map(function(x){ return x.cardNumber; }), true); };
+
+    good.forEach(function(g){ delete SEL[g.cardNumber]; });
+    bar();
+    if(window.renderMembershipCards && !bad.length) setTimeout(function(){ /* list refreshes on next paint */ }, 0);
+  }
+
   /* ── branch health check (Director) ─────────────────────────────────────── */
   function branchCheck(){
     openModal('Checking branches…', '<div class="center-load" style="padding:26px"><span class="loader dark"></span> Reading keys and templates…</div>', '');
@@ -437,5 +549,6 @@
 
   window.WABulk = { attach: attach, toggleMode: toggleMode, sendAllUnsent: sendAllUnsent,
                     branchCheck: branchCheck, isMode: function(){ return MODE; },
-                    sendBenefitsOne: sendBenefitsOne, openBenefitsPreview: openBenefitsPreview };   /* v(new) */
+                    sendBenefitsOne: sendBenefitsOne, openBenefitsPreview: openBenefitsPreview,
+                    sendPromoOne: sendPromoOne, openPromoPreview: openPromoPreview };   /* Home Services Promo */
 })();

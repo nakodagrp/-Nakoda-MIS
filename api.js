@@ -58,7 +58,7 @@
     saveItem:1,deleteItem:1,saveVendor:1,deleteVendor:1,saveConsumption:1,saveManualConsumption:1,raiseIndent:1,advanceIndent:1,saveAudit:1,approveAudit:1,
     createPayRequest:1,setPayRequest:1,
     saveSection:1,deleteSection:1,saveVideo:1,deleteVideo:1,submitQuiz:1,saveAsset:1,deleteAsset:1,logRepeat:1,
-    login:1,validate:1,logout:1,uploadFile:1,importOldCards:1,attachSelfie:1,waTest:1,waSendCard:1,waCardMedia:1,waBulkSend:1,waBenefitsSend:1,saveWaTemplate:1,waTestTemplate:1,
+    login:1,validate:1,logout:1,uploadFile:1,importOldCards:1,attachSelfie:1,waTest:1,waSendCard:1,waCardMedia:1,waBulkSend:1,waBenefitsSend:1,waPromoSend:1,saveWaTemplate:1,waTestTemplate:1,
     submitSuggestion:1,replySuggestion:1,saveFixedAsset:1,deleteFixedAsset:1,completeFollowup:1,
     /* v309 — operations. Both queue: a technician records a sample with no signal and it syncs
        later, and a hand delivery can be recorded the same way. saveSample carries a clientId the
@@ -87,7 +87,7 @@
 
      The way back to offline booking is a failed-items tray the desk can see and retry, not a change
      here. Until that exists, this is the honest setting. */
-  var NOQUEUE={pcImport:1,login:1,validate:1,logout:1,changePassword:1,resetPassword:1,checkIn:1,checkOut:1,runPayroll:1,approvePayroll:1,confirmAbsent:1,uploadFile:1,importOldCards:1,submitQuiz:1,waTest:1,waSendCard:1,waCardMedia:1,waBulkSend:1,waBenefitsSend:1,saveWaTemplate:1,waTestTemplate:1,saveOrder:1,saveLabVisit:1,
+  var NOQUEUE={pcImport:1,login:1,validate:1,logout:1,changePassword:1,resetPassword:1,checkIn:1,checkOut:1,runPayroll:1,approvePayroll:1,confirmAbsent:1,uploadFile:1,importOldCards:1,submitQuiz:1,waTest:1,waSendCard:1,waCardMedia:1,waBulkSend:1,waBenefitsSend:1,waPromoSend:1,saveWaTemplate:1,waTestTemplate:1,saveOrder:1,saveLabVisit:1,
     opsMessagePatient:1,opsMessagePhlebotomist:1,opsMessageFeedback:1};   /* v319: a chair is exclusive too. v350/v353: a WhatsApp send has nothing useful to replay offline. v(new): waBenefitsSend joins for the same reason as waBulkSend. */
   /* ---------------- ATTACHMENTS ----------------------------------------------------
      A phone photo of a report is 4-8 MB. Sent as base64 it grows by a third, so ~10 MB was
@@ -456,6 +456,14 @@
     waBenefitsSend:function(cardNumbers,allowResend){
       if(!navigator.onLine) return Promise.resolve({ok:false,error:'Sending needs an internet connection.'});
       return call('waBenefitsSend',{token:getToken(),cardNumbers:cardNumbers||[],opts:{allowResend:!!allowResend}}, 300000)
+        .then(function(r){ if(r.ok && API.refreshCards) API.refreshCards(); return r; }); },
+    /* ---- Home Services Promo — mirrors Membership Benefits just above; separate template
+       purpose (promo_home_services) and separate sent-once flag (promoSentAt) server-side. ---- */
+    waPromoPreview:function(cardNumbers,allowResend){
+      return call('waPromoPreview',{token:getToken(),cardNumbers:cardNumbers||[],opts:{allowResend:!!allowResend}}, 60000); },
+    waPromoSend:function(cardNumbers,allowResend){
+      if(!navigator.onLine) return Promise.resolve({ok:false,error:'Sending needs an internet connection.'});
+      return call('waPromoSend',{token:getToken(),cardNumbers:cardNumbers||[],opts:{allowResend:!!allowResend}}, 300000)
         .then(function(r){ if(r.ok && API.refreshCards) API.refreshCards(); return r; }); },
     saveWaTemplate:function(data){
       if(!navigator.onLine) return Promise.resolve({ok:false,error:'Saving templates needs an internet connection.'});

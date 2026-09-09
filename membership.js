@@ -393,11 +393,14 @@
       box.innerHTML='<div class="table-wrap"><table><thead><tr><th>Card No</th><th>Name</th><th>Mobile</th><th>Type</th><th>Branch</th><th>Valid thru</th><th>Status</th><th></th></tr></thead><tbody>'+
         list.map(function(c){ var t=TYPEMAP[c.typeId];
           return '<tr class="crow" data-cn="'+esc(c.cardNumber)+'" style="cursor:pointer">'+
-            '<td><b>'+esc(c.cardNumber)+'</b></td><td>'+esc(c.holderName)+'</td><td>'+esc(c.mobile||'—')+'</td><td>'+esc(t?t.name:c.typeId)+'</td><td>'+esc(bName(c.branchId))+'</td><td>'+esc(fmtExpiry(c.expiryDate))+'</td><td>'+cstatus(c.status)+'</td><td><div style="display:flex;gap:6px;justify-content:flex-end">'+benefitsBtn(c)+'<button class="btn ghost sm">View</button></div></td></tr>';
+            '<td><b>'+esc(c.cardNumber)+'</b></td><td>'+esc(c.holderName)+'</td><td>'+esc(c.mobile||'—')+'</td><td>'+esc(t?t.name:c.typeId)+'</td><td>'+esc(bName(c.branchId))+'</td><td>'+esc(fmtExpiry(c.expiryDate))+'</td><td>'+cstatus(c.status)+'</td><td><div style="display:flex;gap:6px;justify-content:flex-end">'+benefitsBtn(c)+promoBtn(c)+'<button class="btn ghost sm">View</button></div></td></tr>';
         }).join('')+'</tbody></table></div>';
       box.querySelectorAll('.crow').forEach(function(el){ el.onclick=function(){ openCardDetail(el.getAttribute('data-cn')); }; });
       box.querySelectorAll('.wabnRowBtn').forEach(function(el){
         el.onclick=function(ev){ ev.stopPropagation(); if(window.WABulk) WABulk.sendBenefitsOne(el.getAttribute('data-cn')); };
+      });
+      box.querySelectorAll('.wapRowBtn').forEach(function(el){
+        el.onclick=function(ev){ ev.stopPropagation(); if(window.WABulk) WABulk.sendPromoOne(el.getAttribute('data-cn')); };
       });
       if(window.WABulk) WABulk.attach(box, list, TYPEMAP, _canIssue);   /* v316 tick boxes */
     }
@@ -413,6 +416,14 @@
     if(String(c.mobile||'').replace(/\D/g,'').length<10) return '';
     if(c.benefitsSentAt) return '<span class="badge" style="background:#f2f2f3;color:#9aa0a6;white-space:nowrap">&#10003; Sent</span>';
     return '<button class="btn ghost sm wabnRowBtn" data-cn="'+esc(c.cardNumber)+'" style="background:#eefaf1;color:#1a7f37;border-color:#cfe3d6;white-space:nowrap">&#128227; Benefits</button>';
+  }
+  /* Home Services Promo — same gating as benefitsBtn(), own sent flag (promoSentAt). */
+  function promoBtn(c){
+    if(!_canIssue) return '';
+    if(String(c.status||'active')==='cancelled') return '';
+    if(String(c.mobile||'').replace(/\D/g,'').length<10) return '';
+    if(c.promoSentAt) return '<span class="badge" style="background:#f2f2f3;color:#9aa0a6;white-space:nowrap">&#10003; Sent</span>';
+    return '<button class="btn ghost sm wapRowBtn" data-cn="'+esc(c.cardNumber)+'" style="background:#fff4e0;color:#7a5b00;border-color:#f0d9a3;white-space:nowrap">&#128227; Promo</button>';
   }
   function bName(id){ var b=((S.meta&&S.meta.branches)||[]).filter(function(x){return String(x.BranchID)===String(id);})[0]; return b?b.BranchName:(id||'—'); }
 

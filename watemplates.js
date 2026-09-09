@@ -7,6 +7,7 @@
   var HEADER_TYPES=[['none','No header'],['text','Text header'],['image','Image header'],['document','Document (PDF) header'],['video','Video header']];
   var PURPOSES=[['general','General / promotional'],['membership_card','Membership card (used by Cards ▸ Send via Official API)'],
     ['membership_benefits','Membership benefits & referral (Cards ▸ Benefits button, one-time per card)'],
+    ['promo_home_services','Home services promo (Cards ▸ Promo button)'],
     ['sample_collection_patient','Sample collection · message to patient (booking popup)'],
     ['sample_collection_phlebotomist','Sample collection · message to phlebotomist (booking popup)'],
     ['sample_collection_feedback','Sample collection · feedback request (with rating buttons)']];
@@ -15,6 +16,7 @@
   function purposeBadge(p,cardTypeId){
     if(p==='membership_card') return '<span class="badge" style="background:#185fa522;color:#185fa5">Membership card'+(cardTypeId?(' · '+esc(cardTypeId)):' · all types')+'</span>';
     if(p==='membership_benefits') return '<span class="badge" style="background:#4a53c922;color:#4a53c9">Benefits &amp; referral</span>';
+    if(p==='promo_home_services') return '<span class="badge" style="background:#b7791f22;color:#b7791f">Home services promo</span>';
     if(p==='sample_collection_patient') return '<span class="badge" style="background:#1a7f3722;color:#1a7f37">Message · patient</span>';
     if(p==='sample_collection_phlebotomist') return '<span class="badge" style="background:#7a5b0022;color:#7a5b00">Message · phlebotomist</span>';
     if(p==='sample_collection_feedback') return '<span class="badge" style="background:#8e44ad22;color:#8e44ad">Feedback · rating</span>';
