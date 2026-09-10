@@ -353,6 +353,7 @@
       '<div class="card"><div class="toolbar">'+
         '<input class="search" id="cardSearch" placeholder="Search name, number, mobile…">'+
         '<select id="cardStatus"><option value="">All status</option><option value="active">Active</option><option value="expired">Expired</option><option value="cancelled">Cancelled</option><option value="renewed">Renewed</option></select>'+
+        '<select id="cardBenefits" title="Filter by Membership Benefits send status"><option value="">All — Benefits</option><option value="sent">Benefits: Sent</option><option value="notsent">Benefits: Not sent</option></select>'+
       '</div><div id="cardList" class="center-load"><span class="loader dark"></span> Loading…</div></div>';
     document.getElementById('issueCardBtn').onclick=function(){ openIssueCardModal(); };
     /* v316: bulk WhatsApp send — all the logic lives in bulksend.js */
@@ -364,6 +365,7 @@
     var ALLCARDS=[];
     var deb; document.getElementById('cardSearch').addEventListener('input',function(){ clearTimeout(deb); deb=setTimeout(paint,120); });
     document.getElementById('cardStatus').addEventListener('change',paint);
+    document.getElementById('cardBenefits').addEventListener('change',paint);
     loadTypes().then(load);
     API.cardSummary().then(function(r){ if(r.ok){ var b=document.getElementById('cardExpBanner'); if(r.expiringSoon>0) b.innerHTML='<div style="background:#fff7e6;border:1px solid #f3d98a;border-radius:10px;padding:9px 12px;font-size:13px;color:#7a5b00;margin-bottom:12px">⏳ '+r.expiringSoon+' card(s) expiring within 7 days</div>'; } });
 
@@ -384,23 +386,23 @@
     function paint(){
       var box=document.getElementById('cardList'); box.className='';
       var q=document.getElementById('cardSearch').value.trim().toLowerCase(), st=document.getElementById('cardStatus').value;
+      var bf=document.getElementById('cardBenefits').value;   /* v(new): 'sent' / 'notsent' / '' */
       var list=ALLCARDS.filter(function(c){
         if(st && String(c.status)!==st) return false;
+        if(bf==='sent' && !c.benefitsSentAt) return false;
+        if(bf==='notsent' && c.benefitsSentAt) return false;
         if(q && (String(c.cardNumber)+' '+(c.holderName||'')+' '+(c.mobile||'')).toLowerCase().indexOf(q)<0) return false;
         return true;
       });
-      if(!list.length){ box.innerHTML='<div class="empty">No cards'+((q||st)?' match your filter.':' yet. Tap “+ Issue card”.')+'</div>'; return; }
+      if(!list.length){ box.innerHTML='<div class="empty">No cards'+((q||st||bf)?' match your filter.':' yet. Tap “+ Issue card”.')+'</div>'; return; }
       box.innerHTML='<div class="table-wrap"><table><thead><tr><th>Card No</th><th>Name</th><th>Mobile</th><th>Type</th><th>Branch</th><th>Valid thru</th><th>Status</th><th></th></tr></thead><tbody>'+
         list.map(function(c){ var t=TYPEMAP[c.typeId];
           return '<tr class="crow" data-cn="'+esc(c.cardNumber)+'" style="cursor:pointer">'+
-            '<td><b>'+esc(c.cardNumber)+'</b></td><td>'+esc(c.holderName)+'</td><td>'+esc(c.mobile||'—')+'</td><td>'+esc(t?t.name:c.typeId)+'</td><td>'+esc(bName(c.branchId))+'</td><td>'+esc(fmtExpiry(c.expiryDate))+'</td><td>'+cstatus(c.status)+'</td><td><div style="display:flex;gap:6px;justify-content:flex-end">'+benefitsBtn(c)+promoBtn(c)+'<button class="btn ghost sm">View</button></div></td></tr>';
+            '<td><b>'+esc(c.cardNumber)+'</b></td><td>'+esc(c.holderName)+'</td><td>'+esc(c.mobile||'—')+'</td><td>'+esc(t?t.name:c.typeId)+'</td><td>'+esc(bName(c.branchId))+'</td><td>'+esc(fmtExpiry(c.expiryDate))+'</td><td>'+cstatus(c.status)+'</td><td><div style="display:flex;gap:6px;justify-content:flex-end">'+benefitsBtn(c)+'<button class="btn ghost sm">View</button></div></td></tr>';
         }).join('')+'</tbody></table></div>';
       box.querySelectorAll('.crow').forEach(function(el){ el.onclick=function(){ openCardDetail(el.getAttribute('data-cn')); }; });
       box.querySelectorAll('.wabnRowBtn').forEach(function(el){
         el.onclick=function(ev){ ev.stopPropagation(); if(window.WABulk) WABulk.sendBenefitsOne(el.getAttribute('data-cn')); };
-      });
-      box.querySelectorAll('.wapRowBtn').forEach(function(el){
-        el.onclick=function(ev){ ev.stopPropagation(); if(window.WABulk) WABulk.sendPromoOne(el.getAttribute('data-cn')); };
       });
       if(window.WABulk) WABulk.attach(box, list, TYPEMAP, _canIssue);   /* v316 tick boxes */
     }
@@ -414,16 +416,8 @@
     if(!_canIssue) return '';
     if(String(c.status||'active')==='cancelled') return '';
     if(String(c.mobile||'').replace(/\D/g,'').length<10) return '';
-    if(c.benefitsSentAt) return '<span class="badge" style="background:#f2f2f3;color:#9aa0a6;white-space:nowrap">&#10003; Sent</span>';
+    if(c.benefitsSentAt) return '<span class="badge" title="Membership Benefits sent '+esc(fmtDate(c.benefitsSentAt))+'" style="background:#f2f2f3;color:#9aa0a6;white-space:nowrap;cursor:default">&#10003; Sent</span>';
     return '<button class="btn ghost sm wabnRowBtn" data-cn="'+esc(c.cardNumber)+'" style="background:#eefaf1;color:#1a7f37;border-color:#cfe3d6;white-space:nowrap">&#128227; Benefits</button>';
-  }
-  /* Home Services Promo — same gating as benefitsBtn(), own sent flag (promoSentAt). */
-  function promoBtn(c){
-    if(!_canIssue) return '';
-    if(String(c.status||'active')==='cancelled') return '';
-    if(String(c.mobile||'').replace(/\D/g,'').length<10) return '';
-    if(c.promoSentAt) return '<span class="badge" style="background:#f2f2f3;color:#9aa0a6;white-space:nowrap">&#10003; Sent</span>';
-    return '<button class="btn ghost sm wapRowBtn" data-cn="'+esc(c.cardNumber)+'" style="background:#fff4e0;color:#7a5b00;border-color:#f0d9a3;white-space:nowrap">&#128227; Promo</button>';
   }
   function bName(id){ var b=((S.meta&&S.meta.branches)||[]).filter(function(x){return String(x.BranchID)===String(id);})[0]; return b?b.BranchName:(id||'—'); }
 
