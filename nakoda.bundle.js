@@ -5820,6 +5820,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
   var MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   function $id(i){ return document.getElementById(i); }
   function ymNow(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+  function prevYm(ym){ var p=String(ym).split('-'), y=Number(p[0]), m=Number(p[1])-1; if(m<1){ m=12; y--; } return y+'-'+String(m).padStart(2,'0'); }
   function todayS(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
   function attMode(){ return String((S.user&&S.user.AttendanceMode)||''); }
   function needSelfie(){ return true; }  // selfie required for all modes
@@ -6388,7 +6389,22 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
        over in the offline queue from a different day painting "Done for today" the instant someone
        checks in, before they have ever tapped Check out. */
     if(!rec && qIn) rec={checkIn:qIn.time, checkOut:(qOut && qOut.ts>=qIn.ts ? qOut.time : ''), _queued:true};
-    else if(rec && rec.checkIn && !rec.checkOut && qOut) rec={checkIn:rec.checkIn, checkOut:qOut.time, attId:rec.attId, selfieInUrl:rec.selfieInUrl, selfieOutUrl:'x', _queued:true};
+    else if(rec && rec.checkIn && !rec.checkOut && qOut){
+      /* v-fix ("Done for today" flash): doMark() already refuses to even QUEUE a check-out less than
+         3 minutes after this check-in (see the v333 note above doMark), and the server enforces the
+         same floor with PUNCH_TOO_SOON for one that reaches it late. What was missing was here: this
+         merge painted ANY queued check-out onto today's card at face value, so a check-out the server
+         is about to reject still showed "✓ Done for today" for a few seconds until the rejection
+         came back and the stray queue entry was dropped — the exact flash reported from the branches.
+         Apply the same >=3-minute sanity check before trusting it. */
+      var _tooSoon=false;
+      if(/^\d{1,2}:\d{2}$/.test(String(rec.checkIn)) && /^\d{1,2}:\d{2}$/.test(String(qOut.time))){
+        var _ip=String(rec.checkIn).split(':'), _op=String(qOut.time).split(':');
+        var _diffM=((+_op[0])*60+(+_op[1])) - ((+_ip[0])*60+(+_ip[1]));
+        _tooSoon=(_diffM>=0 && _diffM<3);
+      }
+      if(!_tooSoon) rec={checkIn:rec.checkIn, checkOut:qOut.time, attId:rec.attId, selfieInUrl:rec.selfieInUrl, selfieOutUrl:'x', _queued:true};
+    }
     var dutyTxt=(S.user&&S.user.DutyStart)?('Shift '+fmtDutyTime(S.user.DutyStart)+(S.user.DutyEnd?('–'+fmtDutyTime(S.user.DutyEnd)):'')+((S.user.AltDutyStart)?(' (or alt shift '+fmtDutyTime(S.user.AltDutyStart)+(S.user.AltDutyEnd?('–'+fmtDutyTime(S.user.AltDutyEnd)):'')+')'):'')):'';
     var inb = !rec || !rec.checkIn;
     /* v295: a punch in flight now OWNS the button. Previously the only feedback was a toast that faded
@@ -6489,9 +6505,25 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
       qNote+
       deadNote+
       sundayNote+'</div>'+
-      monthStrip();
+      monthStrip()+
+      renderHistSection();
     if(!ATT.sending) pqSync();   // v201: any saved punches get a sync chance every time this screen paints
     var b=$id('attBtn'); if(b && !ATT.sending) b.onclick=function(){ doMark(inb?'in':'out'); };
+    box.querySelectorAll('[data-hist]').forEach(function(el){
+      el.onclick=function(){
+        var ym=el.getAttribute('data-hist');
+        if(ym===ATT.histYm) return;
+        ATT.histYm=ym;
+        if(ym===ymNow()){ paintMe(); return; }
+        if(ATT.histRecsYm===ym && ATT.histRecs){ paintMe(); return; }
+        paintMe();   // repaint now so the loading state shows immediately, then fill it in once the month arrives
+        API.myAttendance(ym).then(function(r){
+          ATT.histRecs=(r&&r.ok)?(r.records||[]):[];
+          ATT.histRecsYm=ym;
+          if(ATT.histYm===ym) paintMe();
+        }).catch(function(){ ATT.histRecs=[]; ATT.histRecsYm=ym; if(ATT.histYm===ym) paintMe(); });
+      };
+    });
     box.querySelectorAll('.attDeadOk').forEach(function(el){
       el.onclick=function(){ if(PQ) PQ.dismiss(el.getAttribute('data-p')).then(function(){ pqRefresh(); }); };
     });
@@ -6554,6 +6586,50 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
       cells+='<span class="wd '+cls+'" title="'+ds+'">'+ch+'</span>';
     }
     return '<div class="att-month"><div class="att-mh">This month</div><div class="att-strip">'+cells+'</div><div class="att-legend">P present · ½ half · L leave · A absent</div></div>';
+  }
+  /* v-fix (items 2+3): everyone's own attendance page now shows the same day-by-day detail — selfies,
+     in/out time, notes — that used to exist only on the admin Approve screen, for this month AND last
+     month, always read-only here. Changing a status stays exclusively MIS / Operations Manager /
+     Director, on the Approve screen, and — per the own-row lock above — never on their own day either.
+     This never touches ATT.recs (which the punch button and calendar strip read from) and only ever
+     fetches last month's data on demand, so it cannot affect punch-in/out speed. */
+  function historyDayCard(r){
+    var savedBadge='<span style="position:absolute;bottom:-5px;right:-5px;background:#1a8f4c;color:#fff;font-size:9px;font-weight:800;width:15px;height:15px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #fff">✓</span>';
+    function thumb(url, missing){
+      if(url) return '<div style="position:relative;display:inline-block"><img src="'+esc(driveImg(url))+'" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:9px;border:1px solid #ddd;display:block" onerror="this.style.background=\'#f3f4f6\';this.style.border=\'1px dashed #ccc\'">'+savedBadge+'</div>';
+      return '<div style="width:56px;height:56px;border-radius:9px;border:1px dashed #ccc;background:#f9fafb;display:flex;align-items:center;justify-content:center;font-size:9px;color:#aaa;text-align:center">'+(missing?'No photo':'—')+'</div>';
+    }
+    var dp=String(r.date||'').split('-'), dlabel=(dp.length===3)?(dp[2]+' '+(MON[Number(dp[1])-1]||'')+' '+dp[0]):esc(r.date||'');
+    return '<div class="att-row" style="align-items:flex-start">'+
+      '<div class="att-mid" style="flex:1">'+
+        '<div class="att-nm"><b>'+esc(dlabel)+'</b>'+dayBadge(r.status)+(/work from home/i.test(String(r.notes||''))?' <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:#eeedfe;color:#534AB7">🏠 WFH</span>':'')+'</div>'+
+        '<div class="att-m">In '+esc(r.checkIn||'—')+(r.checkOut?(' · Out '+esc(r.checkOut)):'')+((r.workHours&&!isNaN(Number(r.workHours)))?(' · '+esc(r.workHours)+'h'):'')+'</div>'+
+        (r.notes?'<div class="att-m" style="color:#a3271f;font-weight:600">📝 '+esc(r.notes)+'</div>':'')+
+        '<div style="margin:8px 0;display:flex;gap:10px">'+
+          '<div style="text-align:center">'+thumb(r.selfieInUrl, true)+'<div style="font-size:9px;font-weight:600;color:#888;letter-spacing:.04em;margin-top:3px">IN</div></div>'+
+          '<div style="text-align:center">'+thumb(r.selfieOutUrl, !!r.checkOut)+'<div style="font-size:9px;font-weight:600;color:#888;letter-spacing:.04em;margin-top:3px">OUT</div></div>'+
+        '</div>'+
+      '</div>'+
+      '<span style="font-size:10.5px;font-weight:600;color:#aaa;flex-shrink:0;white-space:nowrap" title="Only MIS / Operations Manager / Director can change a status, and never on their own day.">👁 view only</span>'+
+    '</div>';
+  }
+  function renderHistSection(){
+    var ym=ATT.histYm||ymNow(), isCur=(ym===ymNow()), lastYm=prevYm(ymNow());
+    var recs=isCur ? (ATT.recs||[]) : (ATT.histRecs||[]);
+    var days=(recs||[]).filter(function(r){ return r&&r.checkIn; }).slice().sort(function(a,b){ return String(a.date)<String(b.date)?1:-1; });
+    var loading=(!isCur && ATT.histRecsYm!==ym);
+    var body=loading ? '<div class="center-load"><span class="loader dark"></span></div>'
+      : (days.length ? days.map(historyDayCard).join('') : '<div class="empty" style="font-size:12px;color:#888;padding:10px 2px">No punched days '+(isCur?'yet this month.':'last month.')+'</div>');
+    return '<div class="att-month" style="margin-top:14px">'+
+      '<div class="att-mh" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">'+
+        '<span>Your attendance — day by day</span>'+
+        '<span style="display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden">'+
+          '<span data-hist="'+esc(lastYm)+'" style="cursor:pointer;padding:5px 11px;font-size:11px;font-weight:600;'+(isCur?'color:#888':'background:#DA1017;color:#fff')+'">Last month</span>'+
+          '<span data-hist="'+esc(ymNow())+'" style="cursor:pointer;padding:5px 11px;font-size:11px;font-weight:600;'+(isCur?'background:#DA1017;color:#fff':'color:#888')+'">This month</span>'+
+        '</span>'+
+      '</div>'+
+      '<div style="margin-top:10px">'+body+'</div>'+
+    '</div>';
   }
 
   // Selfies only need to be big enough to identify someone in an 80x80 thumbnail — shrinking before upload
@@ -7245,13 +7321,17 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     var active=(ATT.apFilter===statusKey);
     return '<span'+(clickable?' data-f="'+esc(statusKey)+'"':'')+' style="'+(clickable?'cursor:pointer;':'')+'font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;background:'+bg+';color:'+fg+';'+(active?'box-shadow:0 0 0 2px '+fg+';':'')+'" title="'+(clickable?('Tap to show '+esc(letter)):(esc(letter)+' = active staff minus Full day and Half day — staff with no punch today (on leave, absent, or not yet checked in)'))+'">'+esc(letter)+' '+n+'</span>';
   }
-  function renderApSummary(recs){
+  function renderApSummary(recs, scoped){
     var box=$id('attApSummary'); if(!box) return;
     var c={present:0,half:0,leave:0,absent:0};
     (recs||[]).forEach(function(r){ var s=String(r.status||'present'); if(c[s]!==undefined) c[s]++; else c.present++; });
-    // L = active staff in scope minus (Full day + Half day) — anyone with no punch today at all, not just explicit "leave" records
-    var activeStaff=_approveCache.activeStaff||0;
-    var leaveCount=Math.max(0, activeStaff-c.present-c.half);
+    /* v-fix: "L = active staff minus Full+Half" only means anything for the whole-company, single-day
+       view ("who hasn't punched today at all"). Once the list is scoped to a name search it no longer
+       does — which is why the P.H.L.W count used to stay frozen at the whole company's numbers even
+       while typing a name. When scoped, count the explicit "leave" records actually in view instead. */
+    var leaveCount;
+    if(scoped){ leaveCount=c.leave; }
+    else { var activeStaff=_approveCache.activeStaff||0; leaveCount=Math.max(0, activeStaff-c.present-c.half); }
     var wfhCount=(recs||[]).filter(function(r){ return /work from home/i.test(String(r.notes||'')); }).length;
     box.innerHTML='<span style="display:inline-flex;gap:6px;flex-wrap:wrap">'+
       chip('#eaf7ef','#1a8f4c','P',c.present,'present',true)+
@@ -7335,24 +7415,37 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
   }
   function renderApproveRecs(recs){
     var box=$id('attApprove'); if(!box) return;
-    renderApSummary(recs);
+    /* v-fix: the P.H.L.W count above the list now follows whatever name is typed (and whatever date
+       range is already loaded) instead of always showing the whole company's totals for today — scope
+       the recs BEFORE handing them to renderApSummary, not after. */
+    var nq=(($id('attApName')||{}).value||'').trim().toLowerCase();
+    var nameScoped=nq ? (recs||[]).filter(function(r){ return String(r.empName||'').toLowerCase().indexOf(nq)>=0 || String(r.empId||'').toLowerCase().indexOf(nq)>=0; }) : (recs||[]);
+    renderApSummary(nameScoped, !!nq);
     if(ATT.apFilter==='leave'){ renderNotPunched(); return; }
     var shown=ATT.apFilter ? (ATT.apFilter==='wfh'
-      ? recs.filter(function(r){ return /work from home/i.test(String(r.notes||'')); })
-      : recs.filter(function(r){ return String(r.status||'present')===ATT.apFilter; })) : recs;
-    var nq=(($id('attApName')||{}).value||'').trim().toLowerCase();
-    if(nq) shown=shown.filter(function(r){ return String(r.empName||'').toLowerCase().indexOf(nq)>=0 || String(r.empId||'').toLowerCase().indexOf(nq)>=0; });
+      ? nameScoped.filter(function(r){ return /work from home/i.test(String(r.notes||'')); })
+      : nameScoped.filter(function(r){ return String(r.status||'present')===ATT.apFilter; })) : nameScoped;
     if(!shown.length){ box.innerHTML='<div class="empty">'+(nq?'No one matches "'+esc(nq)+'".':('No '+(ATT.apFilter==='wfh'?'work-from-home ':ATT.apFilter?(stLabel(ATT.apFilter)+' '):'')+'attendance marked for this date.'))+'</div>'; return; }
     box.innerHTML=shown.map(function(a){
       var ap=String(a.approvalStatus)==='approved';
+      /* v-fix: nobody edits their own attendance, including MIS / Operations Manager / Director — the
+         server already refuses it (apiSetAttendanceStatus / apiOverrideAttendance both hard-block "you
+         cannot change your own attendance"); this keeps the dropdown/Approve button from ever being
+         shown as tappable on your own row in the first place, instead of tapping through to a
+         confusing server rejection. */
+      var isOwn=!!(S.user && String(a.empId)===String(S.user.EmpID||S.user.empId||''));
       // Inline selfie thumbnails — punch-in (IN) and punch-out (OUT) side by side, no PDF link.
       // Always render both boxes (with a placeholder when missing) so a missing selfie is visible on
       // the card instead of the whole row just silently not appearing.
+      /* v-fix: a small persistent "saved" checkmark on any thumbnail that actually has a URL, so a
+         synced photo reads as confirmed instead of leaving the approver to guess whether a slow
+         offline sync means "lost" or just "not here yet". */
+      var savedBadge='<span style="position:absolute;bottom:-5px;right:-5px;background:#1a8f4c;color:#fff;font-size:9px;font-weight:800;width:15px;height:15px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #fff">✓</span>';
       var inBox = a.selfieInUrl
-        ? '<img src="'+esc(driveImg(a.selfieInUrl))+'" alt="In" style="width:80px;height:80px;object-fit:cover;border-radius:10px;border:1px solid #ddd;display:block" onerror="this.style.background=\'#f3f4f6\';this.style.border=\'1px dashed #ccc\'">'
+        ? '<div style="position:relative;display:inline-block"><img src="'+esc(driveImg(a.selfieInUrl))+'" alt="In" style="width:80px;height:80px;object-fit:cover;border-radius:10px;border:1px solid #ddd;display:block" onerror="this.style.background=\'#f3f4f6\';this.style.border=\'1px dashed #ccc\'">'+savedBadge+'</div>'
         : '<div style="width:80px;height:80px;border-radius:10px;border:1px dashed #e0a1a1;background:#fdf2f2;display:flex;align-items:center;justify-content:center;font-size:10px;color:#a3271f;text-align:center">No selfie</div>';
       var outBox;
-      if(a.selfieOutUrl) outBox='<img src="'+esc(driveImg(a.selfieOutUrl))+'" alt="Out" style="width:80px;height:80px;object-fit:cover;border-radius:10px;border:1px solid #ddd;display:block" onerror="this.style.background=\'#f3f4f6\';this.style.border=\'1px dashed #ccc\'">';
+      if(a.selfieOutUrl) outBox='<div style="position:relative;display:inline-block"><img src="'+esc(driveImg(a.selfieOutUrl))+'" alt="Out" style="width:80px;height:80px;object-fit:cover;border-radius:10px;border:1px solid #ddd;display:block" onerror="this.style.background=\'#f3f4f6\';this.style.border=\'1px dashed #ccc\'">'+savedBadge+'</div>';
       else if(a.checkOut) outBox='<div style="width:80px;height:80px;border-radius:10px;border:1px dashed #e0a1a1;background:#fdf2f2;display:flex;align-items:center;justify-content:center;font-size:10px;color:#a3271f;text-align:center">No selfie</div>';
       else outBox='<div style="width:80px;height:80px;border-radius:10px;border:1px dashed #ccc;background:#f9fafb;display:flex;align-items:center;justify-content:center;font-size:10px;color:#aaa;text-align:center">No punch-out yet</div>';
       var thumbs='<div style="text-align:center;display:inline-block;margin-right:10px;vertical-align:top">'+inBox+'<span style="font-size:10px;font-weight:600;color:#888;letter-spacing:.04em">IN</span></div>'+
@@ -7368,8 +7461,10 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
           selfieBlock+
         '</div>'+
         '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">'+
-          (ap?'<span class="att-ok">✓ approved</span>':'<button class="btn sm" data-ap="'+esc(a.attId)+'">Approve</button>')+
-          '<select class="att-sel" data-nocombo data-st="'+esc(a.attId)+'" data-prev="'+esc(a.status)+'">'+['present','half','leave','absent'].map(function(s){return '<option value="'+s+'"'+(s===a.status?' selected':'')+'>'+esc(stLabel(s))+'</option>';}).join('')+'</select>'+
+          (isOwn
+            ? '<span style="font-size:10.5px;font-weight:600;color:#888;background:#f1efe8;border:1px solid var(--line);border-radius:999px;padding:5px 10px;white-space:nowrap" title="You cannot change your own attendance — ask another MIS / Operations Manager / Director.">🔒 your record</span>'
+            : ((ap?'<span class="att-ok">✓ approved</span>':'<button class="btn sm" data-ap="'+esc(a.attId)+'">Approve</button>')+
+              '<select class="att-sel" data-nocombo data-st="'+esc(a.attId)+'" data-prev="'+esc(a.status)+'">'+['present','half','leave','absent'].map(function(s){return '<option value="'+s+'"'+(s===a.status?' selected':'')+'>'+esc(stLabel(s))+'</option>';}).join('')+'</select>'))+
         '</div>'+
         '</div>';
     }).join('');
