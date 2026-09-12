@@ -28,7 +28,11 @@
     'New':      { bg:'#E6F1FB', fg:'#0C447C', pill:'#185FA5' },
     'Chronic':  { bg:'#FCEBEB', fg:'#A32D2D', pill:'#A32D2D' },
     'Healthy':  { bg:'#EAF3DE', fg:'#3B6D11', pill:'#1a7f37' },
-    'Old data': { bg:'#EFF1F3', fg:'#5C646E', pill:'#686868' }
+    'Old data': { bg:'#EFF1F3', fg:'#5C646E', pill:'#686868' },
+    /* v365 — not a pickable Tag chip (deliberately left out of pcMeta's tags list, so it never
+       shows up in the Add/Edit popup or the bulk-upload "tag all as" dropdown); it only ever gets
+       set by the row's own "mark lost" icon. Still needs a color here so tagChip() can render it. */
+    'Lost lead':{ bg:'#F5E6E6', fg:'#6b2737', pill:'#6b2737' }
   };
   var OUTLABEL = { answered:'Answered', no_answer:'No answer', busy:'Busy', wrong_number:'Wrong number' };
   /* v358: Follow-ups tab restored on request — the calling workflow itself stays removed
@@ -514,13 +518,15 @@
       $id('pcMore').innerHTML=''; return;
     }
     box.innerHTML=PC.rows.map(function(p){
-      var c=hue(p.name), noCard=(p.cardStatus!=='issued');
+      var c=hue(p.name), noCard=(p.cardStatus!=='issued'), isLost=(p.tag==='Lost lead');
       /* v360: "more attractive" pass — a thin colored stripe on the row's left edge shows card
          status at a glance (gold=no card, teal=has card); the avatar gets a subtle ring so it
          doesn't blend into the white row; card status moved up next to the name as a chip instead
          of sitting in the contact line; a phone glyph leads the contact line. All still just this
-         one row's own inline styles — .tcard/.tbody/.ttitle/.tmeta stay untouched for tasks.js/app.js. */
-      return '<div class="tcard" data-id="'+esc(p.patientId)+'" style="align-items:center;border-left:4px solid '+(noCard?'#c9962c':'#0e6f5c')+'">'+
+         one row's own inline styles — .tcard/.tbody/.ttitle/.tmeta stay untouched for tasks.js/app.js.
+         v365: a lost lead overrides the stripe with maroon and dims the whole row — the fastest way
+         to tell, scrolling fast, which rows are dead. */
+      return '<div class="tcard" data-id="'+esc(p.patientId)+'" style="align-items:center;border-left:4px solid '+(isLost?'#6b2737':(noCard?'#c9962c':'#0e6f5c'))+(isLost?';opacity:.72':'')+'">'+
         '<div style="width:40px;height:40px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;background:'+c[0]+';color:'+c[1]+';box-shadow:0 0 0 3px #fff,0 0 0 4px #ecedf0">'+esc(initials(p.name))+'</div>'+
         '<div class="tbody">'+
           '<div class="ttitle" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><b style="color:#000;font-weight:700">'+esc(p.name)+'</b> '+tagChip(p.tag)+' '+cardChip(p)+' '+dueChip(p)+'</div>'+
@@ -537,12 +543,27 @@
            white outline, so the row is scannable by color instead of by reading the tiny glyph.
            v360: added justify-content:center — the buttons only had align-items:center (from the
            shared .btn class), which centers vertically but left the glyph hugging the left edge
-           of the box instead of sitting dead-centre; also bumped 34px→36px and the radius slightly. */
+           of the box instead of sitting dead-centre; also bumped 34px→36px and the radius slightly.
+           v365: two fixes together.
+           (1) these icons never gave any visible response to a hover or a tap — the .pcActBtn class
+           below (see styles.css) adds a hover glow and a press state (darken + shrink-in-place +
+           ring) so a tap visibly registers instead of feeling dead. A plain mousedown listener,
+           wired below, stops the button stealing keyboard focus on tap, which is what was making
+           the page hop up a few pixels on touch — focusing a button near the edge of a scrolling
+           list makes the browser scroll it into view.
+           (2) a 5th icon marks/unmarks a lead as lost, right on the row — no popup. Marking it sets
+           the tag to "Lost lead" (own maroon color, excluded from the Tag picker on purpose — see
+           TAGMETA above); it leaves any existing next-call date untouched, since "Lost lead" has no
+           follow-up interval to re-base it to (same rule as any other zero-interval tag change).
+           unmarking puts it back in "Old data" so it re-enters the ordinary cold-leads pool. */
         '<div style="display:flex;gap:6px;flex:none" data-stop="1">'+
-          (noCard?'<button class="btn sm" data-card="'+esc(p.patientId)+'" title="Issue card" style="width:36px;height:36px;padding:0;border:0;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#e8c568,#c9962c);color:#4a3200;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">◆</button>':'')+
-          '<button class="btn sm" data-samp="'+esc(p.patientId)+'" title="Book sample" style="width:36px;height:36px;padding:0;border:0;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#3fcfae,#0e6f5c);color:#fff;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">\u{1F9EA}</button>'+
-          '<button class="btn sm" data-edit="'+esc(p.patientId)+'" title="Edit" style="width:36px;height:36px;padding:0;border:0;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#6d93ef,#3a5a9b);color:#fff;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">✎</button>'+
-          '<button class="btn sm" data-notes="'+esc(p.patientId)+'" title="Notes" style="width:36px;height:36px;padding:0;border:0;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#c98ee6,#8e44ad);color:#fff;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">\u{1F4DD}</button>'+
+          (noCard?'<button class="btn sm pcActBtn" data-card="'+esc(p.patientId)+'" title="Issue card" style="width:36px;height:36px;padding:0;border:0;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#e8c568,#c9962c);color:#4a3200;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">◆</button>':'')+
+          '<button class="btn sm pcActBtn" data-samp="'+esc(p.patientId)+'" title="Book sample" style="width:36px;height:36px;padding:0;border:0;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#3fcfae,#0e6f5c);color:#fff;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">\u{1F9EA}</button>'+
+          '<button class="btn sm pcActBtn" data-edit="'+esc(p.patientId)+'" title="Edit" style="width:36px;height:36px;padding:0;border:0;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#6d93ef,#3a5a9b);color:#fff;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">✎</button>'+
+          '<button class="btn sm pcActBtn" data-notes="'+esc(p.patientId)+'" title="Notes" style="width:36px;height:36px;padding:0;border:0;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#c98ee6,#8e44ad);color:#fff;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">\u{1F4DD}</button>'+
+          (isLost
+            ? '<button class="btn sm pcActBtn" data-lost="'+esc(p.patientId)+'" title="Reopen this lead" style="width:36px;height:36px;padding:0;border:0;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#8fd0b8,#2f8f6f);color:#fff;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">\u{21BB}</button>'
+            : '<button class="btn sm pcActBtn" data-lost="'+esc(p.patientId)+'" title="Mark as lost lead" style="width:36px;height:36px;padding:0;border:0;border-radius:11px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#9a9a9a,#5a5a5a);color:#fff;box-shadow:0 2px 5px -2px rgba(0,0,0,.25)">\u{1F6AB}</button>')+
         '</div>'+
       '</div>';
     }).join('');
@@ -571,6 +592,37 @@
     });
     box.querySelectorAll('[data-notes]').forEach(function(b){
       b.onclick=function(ev){ ev.stopPropagation(); openPatient(b.getAttribute('data-notes')); };
+    });
+    /* v365 — mark/unmark lost, straight from the row, no popup. cur.tag on the client is only
+       updated after the server confirms (same as every other action here) so a slow connection
+       never shows a lead as lost when it was not actually saved.
+       v366 fix: this used to call load() on success, a full server re-fetch using whatever tab/
+       tag/search filter is currently active. If the caller had the Tag filter set to the lead's
+       OLD tag (e.g. filtering "Old data" while working through it), the re-fetch would ask the
+       server for patients tagged "Old data" — but this patient is now tagged "Lost lead", so the
+       server correctly left them out of the answer and the row vanished from the screen. The
+       approved design calls for the row staying put and just changing how it looks, so this now
+       repaints locally from the already-updated PC.rows instead of asking the server again. */
+    box.querySelectorAll('[data-lost]').forEach(function(b){
+      b.onclick=function(ev){ ev.stopPropagation();
+        var id=b.getAttribute('data-lost'), p=null;
+        for(var i=0;i<PC.rows.length;i++){ if(PC.rows[i].patientId===id){ p=PC.rows[i]; break; } }
+        if(!p) return;
+        var newTag=(p.tag==='Lost lead')?'Old data':'Lost lead';
+        b.disabled=true;
+        API.pcSave({patientId:id, name:p.name, tag:newTag}).then(function(r){
+          b.disabled=false;
+          if(r&&r.ok){ p.tag=newTag; paintList(); }
+          else toast((r&&r.error)||'Could not update this lead.',true);
+        }, function(){ b.disabled=false; toast('Could not reach the server.',true); });
+      };
+    });
+    /* v365 — stop these icons stealing keyboard focus on a tap. A button focused near the edge
+       of a scrolling list makes the browser scroll it into view, which read as the row "jumping
+       up" the moment it was touched. preventDefault on mousedown blocks the focus without
+       blocking the click that follows it. */
+    box.querySelectorAll('.pcActBtn').forEach(function(b){
+      b.addEventListener('mousedown', function(e){ e.preventDefault(); });
     });
 
     /* Real pages, not an infinite “show more” — load() replaces the list rather than appending,
@@ -601,7 +653,7 @@
       var curTag=p.tag||'New';
 
       var body='<div class="grid2">'+
-        '<div class="field full"><label>Name *</label><input id="pf_name" value="'+esc(p.name||'')+'" placeholder="Kiritbhai Desai"></div>'+
+        '<div class="field full"><label>Name *</label><div class="ops-pt-wrap"><input id="pf_name" autocomplete="off" value="'+esc(p.name||'')+'" placeholder="Kiritbhai Desai"><div class="ops-pt-drop" id="pf_ptN"></div></div></div>'+
         '<div class="field"><label>Mobile number '+(isNew?'*':'')+'</label><input id="pf_num" inputmode="numeric" maxlength="10" value="'+esc(p.number||'')+'" placeholder="9879533021"></div>'+
         (META.canViewAll
           ? '<div class="field"><label>Branch</label><select id="pf_branch">'+branchOptions(p.branchId||PC.branch||META.myBranch,'')+'</select></div>'
@@ -774,6 +826,47 @@
         numEl.addEventListener('blur',runLookup);
         if(mobile(numEl.value).length===10) runLookup();
       }
+
+      /* ---- v364: type a name -> offer a match already on file, autofill number/address ----
+         Two people can share a name (this file already has two separate "Ajay Kumar Jain" rows),
+         so this shows a small picklist instead of guessing — same UX as the sample-collection
+         popup's patient search (ops.js wirePatientSearch), just backed by the CRM's own list
+         search (pcList) since this form works off the Patients sheet, not Ops_Samples. Only fills
+         a field that is still empty, same rule the mobile lookup above already follows. */
+      (function(){
+        var nameEl=$id('pf_name'), drop=$id('pf_ptN');
+        if(!nameEl || !drop) return;
+        var timer=null, pfNameList=[];
+        nameEl.addEventListener('input', function(){
+          var q=(nameEl.value||'').trim();
+          if(timer) clearTimeout(timer);
+          if(q.length<2){ drop.innerHTML=''; drop.style.display='none'; return; }
+          timer=setTimeout(function(){
+            API.pcList('all','',q,'',0).then(function(r){
+              pfNameList=((r&&r.ok&&r.patients)||[])
+                .filter(function(x){ return String(x.patientId)!==String(p.patientId||''); })
+                .slice(0,8);
+              if(!pfNameList.length){ drop.innerHTML=''; drop.style.display='none'; return; }
+              drop.innerHTML=pfNameList.map(function(x,i){
+                return '<div class="ops-pt-it" data-i="'+i+'"><b>'+esc(x.name)+'</b>'+
+                  '<span>'+esc(x.number||'—')+(x.address?(' · '+esc(x.address)):'')+'</span></div>';
+              }).join('');
+              drop.style.display='block';
+            }, function(){ drop.style.display='none'; });
+          }, 300);
+        });
+        drop.addEventListener('mousedown', function(e){
+          var it=e.target.closest && e.target.closest('.ops-pt-it'); if(!it) return;
+          e.preventDefault();
+          var x=pfNameList[Number(it.getAttribute('data-i'))]; if(!x) return;
+          nameEl.value=x.name||nameEl.value;
+          var numEl2=$id('pf_num'), addrEl2=$id('pf_addr');
+          if(numEl2 && !numEl2.value && x.number){ numEl2.value=x.number; runLookup(); }
+          if(addrEl2 && !addrEl2.value && x.address) addrEl2.value=x.address;
+          drop.style.display='none';
+        });
+        nameEl.addEventListener('blur', function(){ setTimeout(function(){ drop.style.display='none'; }, 150); });
+      })();
 
       /* ---- issue a card straight from this form ----
          A card needs a saved patient to attach to, so this saves first and then opens the card
@@ -1204,10 +1297,10 @@
       '</div>'+
       '<label style="display:block;border:2px dashed #CFD5DD;border-radius:12px;padding:24px 16px;text-align:center;background:#fff;color:#686868;font-size:12.5px;cursor:pointer;margin-top:4px">'+
         '<div style="font-size:26px;margin-bottom:6px">⬆</div>'+
-        '<div id="bu_fname"><b>Choose a CSV file</b></div>'+
-        '<div style="font-size:11px;margin-top:4px">Export your old patient list as CSV and drop it here</div>'+
-        '<input type="file" id="bu_file" accept=".csv,text/csv" hidden></label>'+
-      '<div id="bu_map"></div><div id="bu_msg"></div>';
+        '<div id="bu_fname"><b>Choose a CSV or Excel file</b></div>'+
+        '<div style="font-size:11px;margin-top:4px">Export your old patient list as CSV or Excel (.xlsx) and drop it here</div>'+
+        '<input type="file" id="bu_file" accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden></label>'+
+      '<div id="bu_map"></div><div id="bu_msg"></div><div id="bu_prog" style="margin-top:10px"></div>';
 
       openModal('Bulk upload patients', body,
         '<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="bu_go" disabled>Import</button>');
@@ -1218,14 +1311,40 @@
         var f=this.files && this.files[0];
         if(!f) return;
         $id('bu_fname').innerHTML='<b>'+esc(f.name)+'</b>';
+        var isCsv=/\.csv$/i.test(f.name);
         var fr=new FileReader();
-        fr.onload=function(){
-          var rows=parseCSV(fr.result);
+        function fromGrid(rows){
+          rows=(rows||[]).filter(function(r){ return r.some(function(c){ return String(c==null?'':c).trim()!==''; }); })
+                          .map(function(r){ return r.map(function(c){ return c==null?'':String(c); }); });
           if(rows.length<2){ $id('bu_msg').innerHTML='<div class="msg error">That file has no data rows.</div>'; return; }
           parsed={ headers:rows[0], body:rows.slice(1), fileName:f.name };
           paintMap();
+        }
+        fr.onload=function(){
+          if(isCsv){ fromGrid(parseCSV(fr.result)); return; }
+          /* Excel support is loaded on demand, same pattern as the bank-statement importer in
+             accounts.js — no point shipping the ~900KB XLSX library to everyone who only ever
+             uploads CSV. */
+          function parseXl(){
+            try{
+              var wb=XLSX.read(new Uint8Array(fr.result),{type:'array'});
+              var rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:''});
+              $id('bu_msg').innerHTML='';
+              fromGrid(rows);
+            }catch(e){ $id('bu_msg').innerHTML='<div class="msg error">Could not read that Excel file.</div>'; }
+          }
+          if(typeof XLSX==='undefined'){
+            $id('bu_msg').innerHTML='<div class="msg">Loading Excel support…</div>';
+            var s=document.createElement('script');
+            s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+            s.onload=parseXl;
+            s.onerror=function(){ $id('bu_msg').innerHTML='<div class="msg error">Excel parser needs internet — save the file as CSV instead.</div>'; };
+            document.head.appendChild(s);
+          } else {
+            parseXl();
+          }
         };
-        fr.readAsText(f);
+        if(isCsv) fr.readAsText(f); else fr.readAsArrayBuffer(f);
       };
 
       function paintMap(){
@@ -1304,21 +1423,61 @@
           toast('That is '+b.rows.length+' rows. Split the file — 3,000 at a time is the safe limit.',true);
           return;
         }
-        var btn=$id('bu_go'); btn.disabled=true; btn.innerHTML='<span class="loader"></span> Importing…';
-        API.pcImport({
-          branchId:$id('bu_branch').value, tag:$id('bu_tag').value,
-          assignedToEmpId:$id('bu_assign').value||'',
-          fileName:parsed.fileName, rows:b.rows
-        }).then(function(r){
-          if(r&&r.ok){
-            closeModal();
-            toast(r.added+' added · '+r.existing+' already on file');
-            PC.tab='cold'; PC.page=0; paintTabs(); load();
-          } else {
-            toast((r&&r.error)||'Import failed',true);
-            btn.disabled=false; btn.textContent='Import '+b.rows.length+' patients';
-          }
-        });
+        /* v: large files go up in batches instead of one all-or-nothing request. Each batch is
+           its own pcImport call, so the button can show real progress ("420 of 999 sent") instead
+           of sitting on a spinner for however long the whole file takes, and a batch that fails
+           partway through leaves everything already sent safely saved on the sheet — Retry only
+           resends what is left, instead of starting the whole file over. */
+        var CHUNK=150;
+        var chunks=[];
+        for(var i=0;i<b.rows.length;i+=CHUNK) chunks.push(b.rows.slice(i,i+CHUNK));
+        var branchId=$id('bu_branch').value, tag=$id('bu_tag').value, assignedToEmpId=$id('bu_assign').value||'';
+        var btn=$id('bu_go'), prog=$id('bu_prog'), file=$id('bu_file');
+        var totals={added:0,existing:0,skipped:0}, sent=0;
+        btn.disabled=true; file.disabled=true;
+
+        function paint(label){
+          var pct=Math.round(sent/b.rows.length*100);
+          prog.innerHTML=
+            '<div style="background:#ecedf0;border-radius:6px;height:8px;overflow:hidden">'+
+              '<div style="width:'+pct+'%;height:100%;background:#0e6f5c;transition:width .3s"></div>'+
+            '</div>'+
+            '<div style="font-size:11px;color:#686868;margin-top:5px">'+esc(label)+'</div>';
+        }
+
+        function fail(idx, msg){
+          btn.disabled=false; file.disabled=false;
+          var left=b.rows.length-sent;
+          btn.textContent='Retry remaining '+left+' patient'+(left===1?'':'s');
+          btn.onclick=function(){ btn.disabled=true; file.disabled=true; run(idx); };
+          toast(msg+' — '+sent+' of '+b.rows.length+' already saved, '+left+' left to retry.',true);
+        }
+
+        function run(idx){
+          btn.innerHTML='<span class="loader"></span> Importing…';
+          paint('Sending batch '+(idx+1)+' of '+chunks.length+' — '+sent+' of '+b.rows.length+' patients sent so far');
+          API.pcImport({
+            branchId:branchId, tag:tag, assignedToEmpId:assignedToEmpId,
+            fileName:parsed.fileName, rows:chunks[idx]
+          }).then(function(r){
+            if(!(r&&r.ok)){ fail(idx,(r&&r.error)||'Import failed'); return; }
+            totals.added+=r.added||0; totals.existing+=r.existing||0; totals.skipped+=r.skipped||0;
+            sent+=chunks[idx].length;
+            if(idx+1<chunks.length){
+              paint(sent+' of '+b.rows.length+' patients sent — '+totals.added+' added so far');
+              run(idx+1);
+            } else {
+              paint('Done');
+              closeModal();
+              toast(totals.added+' added · '+totals.existing+' already on file'+(totals.skipped?(' · '+totals.skipped+' skipped'):''));
+              PC.tab='cold'; PC.page=0; paintTabs(); load();
+            }
+          }, function(){
+            fail(idx,'Connection dropped');
+          });
+        }
+
+        run(0);
       };
     });
   }
