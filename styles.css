@@ -839,6 +839,10 @@ html,body{overflow-x:hidden}
   table tr:hover{background:#fff}
   table td{display:flex;justify-content:space-between;align-items:center;gap:14px;border:none!important;padding:8px 14px;white-space:normal;text-align:right;font-size:13.5px}
   table td:before{content:attr(data-label);font-weight:600;color:var(--muted);text-align:left;flex-shrink:0}
+  /* v-rowcolour-mobile: the rule above kills every table border on phones (needed for the plain
+     stacked-card look), but it was also erasing the coloured left accent bar on Membership Cards /
+     Branches rows. Bring just that one border back, scoped to table.rowsep only. */
+  table.rowsep tbody td:first-child{border-left:4px solid var(--row-accent,var(--red))!important}
   table td:empty{display:none}
   .table-wrap{overflow:visible}
   th{position:static}

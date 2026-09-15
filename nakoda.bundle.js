@@ -3532,7 +3532,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
       if(!list.length){ box.innerHTML='<div class="empty">No cards'+((q||st||bf)?' match your filter.':' yet. Tap “+ Issue card”.')+'</div>'; return; }
       box.innerHTML='<div class="table-wrap"><table class="rowsep"><thead><tr><th>Card No</th><th>Name</th><th>Mobile</th><th>Type</th><th>Branch</th><th>Valid thru</th><th>Status</th><th></th></tr></thead><tbody>'+
         list.map(function(c){ var t=TYPEMAP[c.typeId], typeName=t?t.name:c.typeId;
-          var ac=rowAccent(typeName), avatar='<span class="rowavatar" style="background:'+ac.bg+';color:'+ac.col+'">'+esc(rowInitials(c.holderName))+'</span>';
+          var ac=rowAccent(c.cardNumber+'|'+c.holderName), avatar='<span class="rowavatar" style="background:'+ac.bg+';color:'+ac.col+'">'+esc(rowInitials(c.holderName))+'</span>';
           return '<tr class="crow" data-cn="'+esc(c.cardNumber)+'" style="cursor:pointer;--row-accent:'+ac.col+';background:linear-gradient(115deg,'+ac.bg+' 0%,#ffffff 60%)">'+
             '<td><b>'+esc(c.cardNumber)+'</b></td><td>'+avatar+esc(c.holderName)+'</td><td>'+esc(c.mobile||'—')+'</td><td>'+esc(typeName)+'</td><td>'+esc(bName(c.branchId))+'</td><td>'+esc(fmtExpiry(c.expiryDate))+'</td><td>'+cstatus(c.status)+'</td><td><div style="display:flex;gap:6px;justify-content:flex-end">'+benefitsBtn(c)+'<button class="btn ghost sm">View</button></div></td></tr>';
         }).join('')+'</tbody></table></div>';
