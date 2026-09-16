@@ -818,8 +818,36 @@
         }
       })
       .catch(function(){
+        /* The fetch itself died — a dropped mobile connection, a backgrounded tab — which is not
+           the same thing as the send failing. The server can easily have finished the whole job
+           (uploaded the image, told WhatsApp, logged it) and simply never gotten the reply back to
+           this phone. Ask it directly before scaring the member with "could not reach WhatsApp":
+           this is a one-row read, nothing like the send itself, so it comes back in under a second
+           even when the network is still shaky. */
+        confirmSendOutcome();
+      });
+  }
+
+  /* v(fix) — DON'T TRUST "NO REPLY" TO MEAN "IT FAILED".
+     Only ever called after a publicSendCard fetch has already thrown. Checks the one fact that
+     actually matters — does this card's row show a sentAt now — instead of assuming silence means
+     the card never went out. onSent/onNotSent let the two callers (the silent auto-send, and the
+     member's own "Send again" tap) each finish their own UI; both fall back to the original
+     warning + retry button if this check is itself unreachable. */
+  function confirmSendOutcome(onSent, onNotSent){
+    post('publicCardSendStatus', {cardNumber:CARD.cardNumber}, 12000, 2)
+      .then(function(r){
+        if(r && r.ok && r.sent){
+          setStat('done', 'Sent ✓  Open WhatsApp on +91 ' + CARD.mobile + ' — your card is there.');
+          if(onSent) onSent();
+        } else {
+          setStat('warn', 'Could not reach WhatsApp just now — your card is saved on this phone. Tap below to try again.');
+          if(onNotSent) onNotSent(); else { show($('wa')); waFallback(); }
+        }
+      })
+      .catch(function(){
         setStat('warn', 'Could not reach WhatsApp just now — your card is saved on this phone. Tap below to try again.');
-        show($('wa')); waFallback();
+        if(onNotSent) onNotSent(); else { show($('wa')); waFallback(); }
       });
   }
 
@@ -887,8 +915,7 @@
       })
       .catch(function(){
         btn.disabled = false; btn.textContent = 'Send again on WhatsApp';
-        setStat('warn', 'Could not reach WhatsApp right now — your card is saved on this phone.');
-        waFallback();
+        confirmSendOutcome(function(){ hide($('wa')); hide($('waOpen')); }, function(){ waFallback(); });
       });
   });
 
