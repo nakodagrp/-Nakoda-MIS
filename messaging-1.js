@@ -59,7 +59,10 @@
   }
   function tplOpts(cur){
     if(!TPLS.length) return '<option value="">'+esc(TPL_ERR ? ('Error: '+TPL_ERR) : 'No active templates — add one on WhatsApp Templates')+'</option>';
-    return TPLS.map(function(t){ return '<option value="'+esc(t.tplId)+'"'+(String(t.tplId)===String(cur)?' selected':'')+'>'+esc(t.name)+'</option>'; }).join('');
+    return TPLS.map(function(t){
+      var flag=tplNeedsMoreThanBasics_(t)?' — needs more than branch/name':'';
+      return '<option value="'+esc(t.tplId)+'"'+(String(t.tplId)===String(cur)?' selected':'')+'>'+esc(t.name)+esc(flag)+'</option>';
+    }).join('');
   }
   function tagOpts(cur, withAll){
     var tags=['Healthy','Chronic','New'];
@@ -150,36 +153,22 @@
     }).catch(function(e){ TPL_ERR = 'Could not reach the server (' + (e && e.message ? e.message : 'network error') + ').'; return TPLS; });
   }
 
-  /* Extra fields — only shown when the selected template actually needs more than {{1}} branch
-     name / {{2}} lead name, or has a media header. Keeps the page identical to the approved
-     mockup for the common case (a 2-variable template), per 01_FEATURE_SPEC.md §5's mapping. */
+  /* Removed at your request (17 Sep) — Campaign Setup no longer shows the media-header upload
+     or the raw {{3}}..{{n}} value fields. saveCampaign() below now blocks Save/Start outright,
+     with a clear message, for any template that actually needs them — rather than silently
+     sending a broken message. Only templates needing exactly {{1}} branch / {{2}} lead name can
+     be used here now; anything else needs those extra values, which this page has no way to
+     collect any more. */
   function paintExtraFields(){
-    var box=$('bm_extra'); if(!box) return;
-    var t=TPLMAP[F.tplId];
-    if(!t){ box.innerHTML=''; return; }
+    var box=$('bm_extra'); if(box) box.innerHTML='';
+  }
+  /* True when this template needs anything beyond {{1}} branch name / {{2}} lead name — the only
+     two values Bulk Message Send can supply since the extra-fields UI was removed. */
+  function tplNeedsMoreThanBasics_(t){
+    if(!t) return false;
     var extraCount=Math.max(0,(Number(t.paramCount)||0)-2);
     var needsMedia=['image','document','video'].indexOf(String(t.headerType))>=0;
-    if(!extraCount && !needsMedia){ box.innerHTML=''; return; }
-    var html='<div class="grid2" style="margin-top:14px;grid-template-columns:repeat(3,1fr)">';
-    if(needsMedia){
-      html+='<div class="field full" style="grid-column:1/-1"><label>'+esc(t.headerType)+' header — upload once for this campaign</label>'+
-        '<input type="file" id="bm_media" accept="'+(t.headerType==='image'?'image/*':(t.headerType==='video'?'video/*':'application/pdf'))+'">'+
-        '<div id="bm_mediaStatus" style="font-size:11px;color:var(--muted);margin-top:4px">'+(box.getAttribute('data-media')?'Uploaded ✓':'This template needs one to send.')+'</div></div>';
-    }
-    for(var i=0;i<extraCount;i++){
-      html+='<div class="field"><label>{{'+(i+3)+'}}'+(t.paramHints?'':'')+'</label><input class="bm_fixed" data-i="'+i+'" placeholder="Value for {{'+(i+3)+'}}"></div>';
-    }
-    html+='</div>';
-    if(t.paramHints) html+='<div style="font-size:11px;color:var(--muted);margin-top:6px">Hints from the template registry: '+esc(t.paramHints)+'</div>';
-    box.innerHTML=html;
-    var mf=$('bm_media');
-    if(mf) mf.onchange=function(){
-      var f=this.files&&this.files[0]; if(!f) return;
-      var st=$('bm_mediaStatus');
-      API.upload(f,'Messaging',function(m){ st.textContent=m; }).then(function(r){
-        box.setAttribute('data-media', r.url); st.innerHTML='Uploaded ✓';
-      }, function(e){ st.textContent=(e&&e.message)||'Upload failed'; mf.value=''; });
-    };
+    return !!(extraCount || needsMedia);
   }
 
   function paintAutoNote(){
@@ -211,13 +200,15 @@
     if(!t){ toast('Pick a template first.',true); return; }
     var branchId=$('bm_branch').value;
     if(!branchId){ toast('Pick a branch — "All Branches" is for browsing history, not for starting a campaign.',true); return; }
-    var extraCount=Math.max(0,(Number(t.paramCount)||0)-2);
+    /* Bulk Message Send can only fill {{1}} branch name and {{2}} lead name — the media-header
+       upload and {{3}}..{{n}} value fields were removed. Anything this template needs beyond
+       those two is blocked here, loudly, instead of sending a broken message. */
+    if(tplNeedsMoreThanBasics_(t)){
+      toast('"'+t.name+'" needs more than Bulk Message Send can fill in (a '+(t.headerType&&t.headerType!=='none'?t.headerType+' header and/or ':'')+'extra template values). Pick a template that only uses {{1}} branch name and {{2}} lead name, or ask for this template to be supported here.', true);
+      return;
+    }
     var fixedParams=[];
-    document.querySelectorAll('.bm_fixed').forEach(function(inp){ fixedParams[Number(inp.getAttribute('data-i'))]=inp.value||''; });
-    for(var i=0;i<extraCount;i++){ if(!fixedParams[i]){ fixedParams[i]=''; } }
-    var needsMedia=['image','document','video'].indexOf(String(t.headerType))>=0;
-    var headerMediaUrl=$('bm_extra').getAttribute('data-media')||'';
-    if(status==='scheduled' && needsMedia && !headerMediaUrl){ toast('Upload the '+t.headerType+' this template needs before starting the campaign.',true); return; }
+    var headerMediaUrl='';
 
     var data={ branchId:branchId, tplId:F.tplId, tag:$('bm_tag').value||'', sendTime:$('bm_time').value||'02:00',
                fixedParams:fixedParams, headerMediaUrl:headerMediaUrl, status:status };
@@ -237,6 +228,7 @@
       if(!r.ok){ toast(r.error||'Could not load campaign history.',true); return; }
       CAMPS=r.campaigns||[];
       paintHistory();
+      maybeShowDeleteSample();
     }).catch(function(){ toast('Campaign history needs an internet connection.',true); });
   }
   function paintHistory(){
