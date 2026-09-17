@@ -72,6 +72,10 @@
     saveSection:1,deleteSection:1,saveVideo:1,deleteVideo:1,submitQuiz:1,saveAsset:1,deleteAsset:1,logRepeat:1,
     login:1,validate:1,logout:1,uploadFile:1,importOldCards:1,attachSelfie:1,waTest:1,waSendCard:1,waCardMedia:1,waBulkSend:1,waBenefitsSend:1,saveWaTemplate:1,waTestTemplate:1,
     submitSuggestion:1,replySuggestion:1,saveFixedAsset:1,deleteFixedAsset:1,completeFollowup:1,
+    /* Messaging — Bulk Message Send. messaging.js has no offline handling (unlike createEmployee
+       etc, which self-queue), so these five all join NOQUEUE below too — same treatment as
+       saveWaTemplate just above. */
+    msgSaveCampaign:1,msgSetCampaignStatus:1,msgAddRecipients:1,msgDeleteRecipient:1,msgDeleteSampleData:1,
     /* v309 — operations. Both queue: a technician records a sample with no signal and it syncs
        later, and a hand delivery can be recorded the same way. saveSample carries a clientId the
        device minted first, so a replay updates its own row instead of creating a second sample. */
@@ -100,7 +104,8 @@
      The way back to offline booking is a failed-items tray the desk can see and retry, not a change
      here. Until that exists, this is the honest setting. */
   var NOQUEUE={pcImport:1,login:1,validate:1,logout:1,changePassword:1,resetPassword:1,checkIn:1,checkOut:1,runPayroll:1,approvePayroll:1,confirmAbsent:1,uploadFile:1,importOldCards:1,submitQuiz:1,waTest:1,waSendCard:1,waCardMedia:1,waBulkSend:1,waBenefitsSend:1,saveWaTemplate:1,waTestTemplate:1,saveOrder:1,saveLabVisit:1,
-    opsMessagePatient:1,opsMessagePhlebotomist:1,opsMessageFeedback:1};   /* v319: a chair is exclusive too. v350/v353: a WhatsApp send has nothing useful to replay offline. v(new): waBenefitsSend joins for the same reason as waBulkSend. */
+    opsMessagePatient:1,opsMessagePhlebotomist:1,opsMessageFeedback:1,
+    msgSaveCampaign:1,msgSetCampaignStatus:1,msgAddRecipients:1,msgDeleteRecipient:1,msgDeleteSampleData:1};   /* v319: a chair is exclusive too. v350/v353: a WhatsApp send has nothing useful to replay offline. v(new): waBenefitsSend joins for the same reason as waBulkSend. Messaging joins for the same reason as saveWaTemplate — no offline UI built for it. */
   /* ---------------- ATTACHMENTS ----------------------------------------------------
      A phone photo of a report is 4-8 MB. Sent as base64 it grows by a third, so ~10 MB was
      going up a branch connection against a hard 60-second abort — the request was killed
@@ -293,6 +298,19 @@
     fixedAssets:function(branch){ return call('fixedAssets',{token:getToken(),branch:branch||''}); },
     saveFixedAsset:function(data){ return call('saveFixedAsset',{token:getToken(),data:data}); },
     deleteFixedAsset:function(assetId){ return call('deleteFixedAsset',{token:getToken(),assetId:assetId}); },
+
+    /* ---- Messaging — Bulk Message Send (27_Messaging.gs) ----
+       msgListTemplates/msgListCampaigns/msgCampaignStats/msgListRecipients are plain reads (cache-first,
+       like everything else above); the other five are online-only writes — see NOQUEUE above. */
+    msgListTemplates:function(){ return call('msgListTemplates',{token:getToken()}); },
+    msgListCampaigns:function(filter){ return call('msgListCampaigns',{token:getToken(),filter:filter||{}}); },
+    msgSaveCampaign:function(data){ return call('msgSaveCampaign',{token:getToken(),data:data}); },
+    msgSetCampaignStatus:function(campaignId,status){ return call('msgSetCampaignStatus',{token:getToken(),campaignId:campaignId,status:status}); },
+    msgCampaignStats:function(branchId,tplId){ return call('msgCampaignStats',{token:getToken(),branchId:branchId||'',tplId:tplId||''}); },
+    msgAddRecipients:function(data){ return call('msgAddRecipients',{token:getToken(),data:data}); },
+    msgListRecipients:function(campaignId,filter){ return call('msgListRecipients',{token:getToken(),campaignId:campaignId,filter:filter||{}}); },
+    msgDeleteRecipient:function(recipientId){ return call('msgDeleteRecipient',{token:getToken(),recipientId:recipientId}); },
+    msgDeleteSampleData:function(){ return call('msgDeleteSampleData',{token:getToken()}); },
 
     /* v295: login had NO explicit timeout, so it inherited NET's 60-second default — and bindAuth
        retries it three times. Worst case was 60 + 1.5 + 60 + 3 + 60 = about THREE MINUTES of
@@ -4434,7 +4452,10 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
   }
   function tplOpts(cur){
     if(!TPLS.length) return '<option value="">'+esc(TPL_ERR ? ('Error: '+TPL_ERR) : 'No active templates — add one on WhatsApp Templates')+'</option>';
-    return TPLS.map(function(t){ return '<option value="'+esc(t.tplId)+'"'+(String(t.tplId)===String(cur)?' selected':'')+'>'+esc(t.name)+'</option>'; }).join('');
+    return TPLS.map(function(t){
+      var flag=tplNeedsMoreThanBasics_(t)?' — needs more than branch/name':'';
+      return '<option value="'+esc(t.tplId)+'"'+(String(t.tplId)===String(cur)?' selected':'')+'>'+esc(t.name)+esc(flag)+'</option>';
+    }).join('');
   }
   function tagOpts(cur, withAll){
     var tags=['Healthy','Chronic','New'];
@@ -4525,36 +4546,22 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     }).catch(function(e){ TPL_ERR = 'Could not reach the server (' + (e && e.message ? e.message : 'network error') + ').'; return TPLS; });
   }
 
-  /* Extra fields — only shown when the selected template actually needs more than {{1}} branch
-     name / {{2}} lead name, or has a media header. Keeps the page identical to the approved
-     mockup for the common case (a 2-variable template), per 01_FEATURE_SPEC.md §5's mapping. */
+  /* Removed at your request (17 Sep) — Campaign Setup no longer shows the media-header upload
+     or the raw {{3}}..{{n}} value fields. saveCampaign() below now blocks Save/Start outright,
+     with a clear message, for any template that actually needs them — rather than silently
+     sending a broken message. Only templates needing exactly {{1}} branch / {{2}} lead name can
+     be used here now; anything else needs those extra values, which this page has no way to
+     collect any more. */
   function paintExtraFields(){
-    var box=$('bm_extra'); if(!box) return;
-    var t=TPLMAP[F.tplId];
-    if(!t){ box.innerHTML=''; return; }
+    var box=$('bm_extra'); if(box) box.innerHTML='';
+  }
+  /* True when this template needs anything beyond {{1}} branch name / {{2}} lead name — the only
+     two values Bulk Message Send can supply since the extra-fields UI was removed. */
+  function tplNeedsMoreThanBasics_(t){
+    if(!t) return false;
     var extraCount=Math.max(0,(Number(t.paramCount)||0)-2);
     var needsMedia=['image','document','video'].indexOf(String(t.headerType))>=0;
-    if(!extraCount && !needsMedia){ box.innerHTML=''; return; }
-    var html='<div class="grid2" style="margin-top:14px;grid-template-columns:repeat(3,1fr)">';
-    if(needsMedia){
-      html+='<div class="field full" style="grid-column:1/-1"><label>'+esc(t.headerType)+' header — upload once for this campaign</label>'+
-        '<input type="file" id="bm_media" accept="'+(t.headerType==='image'?'image/*':(t.headerType==='video'?'video/*':'application/pdf'))+'">'+
-        '<div id="bm_mediaStatus" style="font-size:11px;color:var(--muted);margin-top:4px">'+(box.getAttribute('data-media')?'Uploaded ✓':'This template needs one to send.')+'</div></div>';
-    }
-    for(var i=0;i<extraCount;i++){
-      html+='<div class="field"><label>{{'+(i+3)+'}}'+(t.paramHints?'':'')+'</label><input class="bm_fixed" data-i="'+i+'" placeholder="Value for {{'+(i+3)+'}}"></div>';
-    }
-    html+='</div>';
-    if(t.paramHints) html+='<div style="font-size:11px;color:var(--muted);margin-top:6px">Hints from the template registry: '+esc(t.paramHints)+'</div>';
-    box.innerHTML=html;
-    var mf=$('bm_media');
-    if(mf) mf.onchange=function(){
-      var f=this.files&&this.files[0]; if(!f) return;
-      var st=$('bm_mediaStatus');
-      API.upload(f,'Messaging',function(m){ st.textContent=m; }).then(function(r){
-        box.setAttribute('data-media', r.url); st.innerHTML='Uploaded ✓';
-      }, function(e){ st.textContent=(e&&e.message)||'Upload failed'; mf.value=''; });
-    };
+    return !!(extraCount || needsMedia);
   }
 
   function paintAutoNote(){
@@ -4586,13 +4593,15 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     if(!t){ toast('Pick a template first.',true); return; }
     var branchId=$('bm_branch').value;
     if(!branchId){ toast('Pick a branch — "All Branches" is for browsing history, not for starting a campaign.',true); return; }
-    var extraCount=Math.max(0,(Number(t.paramCount)||0)-2);
+    /* Bulk Message Send can only fill {{1}} branch name and {{2}} lead name — the media-header
+       upload and {{3}}..{{n}} value fields were removed. Anything this template needs beyond
+       those two is blocked here, loudly, instead of sending a broken message. */
+    if(tplNeedsMoreThanBasics_(t)){
+      toast('"'+t.name+'" needs more than Bulk Message Send can fill in (a '+(t.headerType&&t.headerType!=='none'?t.headerType+' header and/or ':'')+'extra template values). Pick a template that only uses {{1}} branch name and {{2}} lead name, or ask for this template to be supported here.', true);
+      return;
+    }
     var fixedParams=[];
-    document.querySelectorAll('.bm_fixed').forEach(function(inp){ fixedParams[Number(inp.getAttribute('data-i'))]=inp.value||''; });
-    for(var i=0;i<extraCount;i++){ if(!fixedParams[i]){ fixedParams[i]=''; } }
-    var needsMedia=['image','document','video'].indexOf(String(t.headerType))>=0;
-    var headerMediaUrl=$('bm_extra').getAttribute('data-media')||'';
-    if(status==='scheduled' && needsMedia && !headerMediaUrl){ toast('Upload the '+t.headerType+' this template needs before starting the campaign.',true); return; }
+    var headerMediaUrl='';
 
     var data={ branchId:branchId, tplId:F.tplId, tag:$('bm_tag').value||'', sendTime:$('bm_time').value||'02:00',
                fixedParams:fixedParams, headerMediaUrl:headerMediaUrl, status:status };
