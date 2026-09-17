@@ -4385,7 +4385,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
  * style copied from the Branches page" the spec asks for, not a new component.
  */
 (function(){
-  var TPLS=[], TPLMAP={};
+  var TPLS=[], TPLMAP={}, TPL_ERR='';
   var CAMPS=[];
   var F={ branchId:'', tplId:'', tag:'', tab:'all' };   /* current Campaign Setup + history filter */
 
@@ -4433,7 +4433,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     return html;
   }
   function tplOpts(cur){
-    if(!TPLS.length) return '<option value="">No active templates — add one on WhatsApp Templates</option>';
+    if(!TPLS.length) return '<option value="">'+esc(TPL_ERR ? ('Error: '+TPL_ERR) : 'No active templates — add one on WhatsApp Templates')+'</option>';
     return TPLS.map(function(t){ return '<option value="'+esc(t.tplId)+'"'+(String(t.tplId)===String(cur)?' selected':'')+'>'+esc(t.name)+'</option>'; }).join('');
   }
   function tagOpts(cur, withAll){
@@ -4518,7 +4518,11 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
   }
 
   function ensureTemplates(){
-    return API.msgListTemplates().then(function(r){ if(r.ok){ TPLS=r.templates||[]; TPLMAP={}; TPLS.forEach(function(t){ TPLMAP[t.tplId]=t; }); } return TPLS; }).catch(function(){ return TPLS; });
+    return API.msgListTemplates().then(function(r){
+      if(r.ok){ TPLS=r.templates||[]; TPLMAP={}; TPLS.forEach(function(t){ TPLMAP[t.tplId]=t; }); TPL_ERR=''; if(!TPLS.length) TPL_ERR='No templates are saved as Active on the WhatsApp Templates page yet.'; }
+      else { TPL_ERR = r.error || 'Request failed.'; }
+      return TPLS;
+    }).catch(function(e){ TPL_ERR = 'Could not reach the server (' + (e && e.message ? e.message : 'network error') + ').'; return TPLS; });
   }
 
   /* Extra fields — only shown when the selected template actually needs more than {{1}} branch
