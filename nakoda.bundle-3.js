@@ -75,7 +75,7 @@
     /* Messaging — Bulk Message Send. messaging.js has no offline handling (unlike createEmployee
        etc, which self-queue), so these five all join NOQUEUE below too — same treatment as
        saveWaTemplate just above. */
-    msgSaveCampaign:1,msgSetCampaignStatus:1,msgAddRecipients:1,msgDeleteRecipient:1,msgDeleteSampleData:1,
+    msgSaveCampaign:1,msgSetCampaignStatus:1,msgAddRecipients:1,msgDeleteRecipient:1,msgDeleteSampleData:1,msgDeleteCampaign:1,
     /* v309 — operations. Both queue: a technician records a sample with no signal and it syncs
        later, and a hand delivery can be recorded the same way. saveSample carries a clientId the
        device minted first, so a replay updates its own row instead of creating a second sample. */
@@ -105,7 +105,7 @@
      here. Until that exists, this is the honest setting. */
   var NOQUEUE={pcImport:1,login:1,validate:1,logout:1,changePassword:1,resetPassword:1,checkIn:1,checkOut:1,runPayroll:1,approvePayroll:1,confirmAbsent:1,uploadFile:1,importOldCards:1,submitQuiz:1,waTest:1,waSendCard:1,waCardMedia:1,waBulkSend:1,waBenefitsSend:1,saveWaTemplate:1,waTestTemplate:1,saveOrder:1,saveLabVisit:1,
     opsMessagePatient:1,opsMessagePhlebotomist:1,opsMessageFeedback:1,
-    msgSaveCampaign:1,msgSetCampaignStatus:1,msgAddRecipients:1,msgDeleteRecipient:1,msgDeleteSampleData:1};   /* v319: a chair is exclusive too. v350/v353: a WhatsApp send has nothing useful to replay offline. v(new): waBenefitsSend joins for the same reason as waBulkSend. Messaging joins for the same reason as saveWaTemplate — no offline UI built for it. */
+    msgSaveCampaign:1,msgSetCampaignStatus:1,msgAddRecipients:1,msgDeleteRecipient:1,msgDeleteSampleData:1,msgDeleteCampaign:1};   /* v319: a chair is exclusive too. v350/v353: a WhatsApp send has nothing useful to replay offline. v(new): waBenefitsSend joins for the same reason as waBulkSend. Messaging joins for the same reason as saveWaTemplate — no offline UI built for it. msgDeleteCampaign (19 Sep) is a hard, irreversible delete — the last thing it should ever do is sit in an offline outbox and fire again later. */
   /* ---------------- ATTACHMENTS ----------------------------------------------------
      A phone photo of a report is 4-8 MB. Sent as base64 it grows by a third, so ~10 MB was
      going up a branch connection against a hard 60-second abort — the request was killed
@@ -311,6 +311,10 @@
     msgListRecipients:function(campaignId,filter){ return call('msgListRecipients',{token:getToken(),campaignId:campaignId,filter:filter||{}}); },
     msgDeleteRecipient:function(recipientId){ return call('msgDeleteRecipient',{token:getToken(),recipientId:recipientId}); },
     msgDeleteSampleData:function(){ return call('msgDeleteSampleData',{token:getToken()}); },
+    /* 19 Sep — "Cancel" on Campaign History now hard-deletes (see messaging.js) instead of just
+       flipping status to 'cancelled'. Wipes the campaign row AND every one of its recipient rows
+       server-side — see apiMsgDeleteCampaign in 27_Messaging.gs. */
+    msgDeleteCampaign:function(campaignId){ return call('msgDeleteCampaign',{token:getToken(),campaignId:campaignId}); },
 
     /* v295: login had NO explicit timeout, so it inherited NET's 60-second default — and bindAuth
        retries it three times. Worst case was 60 + 1.5 + 60 + 3 + 60 = about THREE MINUTES of
@@ -4850,14 +4854,39 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
         API.msgSetCampaignStatus(id, st).then(function(r){ if(!r.ok){ toast(r.error,true); return; } toast('Updated.'); loadHistory(); });
       };
     });
+    /* 19 Sep — "Cancel" hard-deletes now (see deleteCampaign_ below), not a status change, so it
+       gets its own attribute/handler instead of joining the data-setstatus wiring above. */
+    body.querySelectorAll('[data-delete]').forEach(function(b){
+      b.onclick=function(){ deleteCampaign_(b.getAttribute('data-delete'), b.getAttribute('data-code')); };
+    });
   }
   function actionButtons(c){
     var s=String(c.status);
     var html=' <button class="btn ghost sm" data-addleads="'+esc(c.campaignId)+'">+ Leads</button>';
     if(s==='scheduled'||s==='in_progress') html+=' <button class="btn ghost sm" data-setstatus="'+esc(c.campaignId)+'" data-tostatus="paused">Pause</button>';
     if(s==='paused'||s==='draft') html+=' <button class="btn ghost sm" data-setstatus="'+esc(c.campaignId)+'" data-tostatus="scheduled">'+(s==='draft'?'Start':'Resume')+'</button>';
-    if(['scheduled','in_progress','paused','draft'].indexOf(s)>=0) html+=' <button class="btn ghost sm danger" data-setstatus="'+esc(c.campaignId)+'" data-tostatus="cancelled">Cancel</button>';
+    if(['scheduled','in_progress','paused','draft'].indexOf(s)>=0) html+=' <button class="btn ghost sm danger" data-delete="'+esc(c.campaignId)+'" data-code="'+esc(c.code)+'">Cancel</button>';
     return html;
+  }
+  /* 19 Sep — Cancel now means what it says nowhere near loosely: it hard-deletes the campaign row
+     AND every one of its recipient rows server-side (apiMsgDeleteCampaign in 27_Messaging.gs) —
+     permanently, not a soft "cancelled" status you could Resume from any more. One confirm() before
+     it fires, same as Delete on WhatsApp Templates. After a successful delete: drop it from CAMPS
+     so the table updates immediately without waiting on a reload, and re-run paintStats() — Leads
+     in Queue / Sent Today / Pending in Queue / Today's Daily Limit are all computed fresh from the
+     server on every paintStats() call, so this is all it takes for them to stop counting the
+     deleted campaign's leads. */
+  function deleteCampaign_(campaignId, code){
+    if(!confirm('Delete campaign '+(code||'')+' for good?\n\nThis removes it AND every lead on it from the database. It cannot be undone.')) return;
+    API.msgDeleteCampaign(campaignId).then(function(r){
+      if(!r.ok){ toast(r.error,true); return; }
+      toast('Campaign deleted'+(r.removedRecipients?(' — '+r.removedRecipients+' lead'+(r.removedRecipients===1?'':'s')+' removed with it'):'')+'.');
+      CAMPS = CAMPS.filter(function(x){ return x.campaignId!==campaignId; });
+      if(F.lastCampaignId===campaignId){ F.lastCampaignId=''; F.lastKey=''; }
+      paintHistory();
+      paintStats();
+      maybeShowDeleteSample();
+    }).catch(function(){ toast('Deleting needs an internet connection.',true); });
   }
 
   function exportHistory(){

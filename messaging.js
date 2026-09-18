@@ -455,14 +455,39 @@
         API.msgSetCampaignStatus(id, st).then(function(r){ if(!r.ok){ toast(r.error,true); return; } toast('Updated.'); loadHistory(); });
       };
     });
+    /* 19 Sep — "Cancel" hard-deletes now (see deleteCampaign_ below), not a status change, so it
+       gets its own attribute/handler instead of joining the data-setstatus wiring above. */
+    body.querySelectorAll('[data-delete]').forEach(function(b){
+      b.onclick=function(){ deleteCampaign_(b.getAttribute('data-delete'), b.getAttribute('data-code')); };
+    });
   }
   function actionButtons(c){
     var s=String(c.status);
     var html=' <button class="btn ghost sm" data-addleads="'+esc(c.campaignId)+'">+ Leads</button>';
     if(s==='scheduled'||s==='in_progress') html+=' <button class="btn ghost sm" data-setstatus="'+esc(c.campaignId)+'" data-tostatus="paused">Pause</button>';
     if(s==='paused'||s==='draft') html+=' <button class="btn ghost sm" data-setstatus="'+esc(c.campaignId)+'" data-tostatus="scheduled">'+(s==='draft'?'Start':'Resume')+'</button>';
-    if(['scheduled','in_progress','paused','draft'].indexOf(s)>=0) html+=' <button class="btn ghost sm danger" data-setstatus="'+esc(c.campaignId)+'" data-tostatus="cancelled">Cancel</button>';
+    if(['scheduled','in_progress','paused','draft'].indexOf(s)>=0) html+=' <button class="btn ghost sm danger" data-delete="'+esc(c.campaignId)+'" data-code="'+esc(c.code)+'">Cancel</button>';
     return html;
+  }
+  /* 19 Sep — Cancel now means what it says nowhere near loosely: it hard-deletes the campaign row
+     AND every one of its recipient rows server-side (apiMsgDeleteCampaign in 27_Messaging.gs) —
+     permanently, not a soft "cancelled" status you could Resume from any more. One confirm() before
+     it fires, same as Delete on WhatsApp Templates. After a successful delete: drop it from CAMPS
+     so the table updates immediately without waiting on a reload, and re-run paintStats() — Leads
+     in Queue / Sent Today / Pending in Queue / Today's Daily Limit are all computed fresh from the
+     server on every paintStats() call, so this is all it takes for them to stop counting the
+     deleted campaign's leads. */
+  function deleteCampaign_(campaignId, code){
+    if(!confirm('Delete campaign '+(code||'')+' for good?\n\nThis removes it AND every lead on it from the database. It cannot be undone.')) return;
+    API.msgDeleteCampaign(campaignId).then(function(r){
+      if(!r.ok){ toast(r.error,true); return; }
+      toast('Campaign deleted'+(r.removedRecipients?(' — '+r.removedRecipients+' lead'+(r.removedRecipients===1?'':'s')+' removed with it'):'')+'.');
+      CAMPS = CAMPS.filter(function(x){ return x.campaignId!==campaignId; });
+      if(F.lastCampaignId===campaignId){ F.lastCampaignId=''; F.lastKey=''; }
+      paintHistory();
+      paintStats();
+      maybeShowDeleteSample();
+    }).catch(function(){ toast('Deleting needs an internet connection.',true); });
   }
 
   function exportHistory(){

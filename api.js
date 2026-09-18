@@ -58,8 +58,12 @@
     saveItem:1,deleteItem:1,saveVendor:1,deleteVendor:1,saveConsumption:1,saveManualConsumption:1,raiseIndent:1,advanceIndent:1,saveAudit:1,approveAudit:1,
     createPayRequest:1,setPayRequest:1,
     saveSection:1,deleteSection:1,saveVideo:1,deleteVideo:1,submitQuiz:1,saveAsset:1,deleteAsset:1,logRepeat:1,
-    login:1,validate:1,logout:1,uploadFile:1,importOldCards:1,attachSelfie:1,waTest:1,waSendCard:1,waCardMedia:1,waBulkSend:1,waBenefitsSend:1,waPromoSend:1,saveWaTemplate:1,waTestTemplate:1,
+    login:1,validate:1,logout:1,uploadFile:1,importOldCards:1,attachSelfie:1,waTest:1,waSendCard:1,waCardMedia:1,waBulkSend:1,waBenefitsSend:1,saveWaTemplate:1,waTestTemplate:1,
     submitSuggestion:1,replySuggestion:1,saveFixedAsset:1,deleteFixedAsset:1,completeFollowup:1,
+    /* Messaging — Bulk Message Send. messaging.js has no offline handling (unlike createEmployee
+       etc, which self-queue), so these five all join NOQUEUE below too — same treatment as
+       saveWaTemplate just above. */
+    msgSaveCampaign:1,msgSetCampaignStatus:1,msgAddRecipients:1,msgDeleteRecipient:1,msgDeleteSampleData:1,msgDeleteCampaign:1,
     /* v309 — operations. Both queue: a technician records a sample with no signal and it syncs
        later, and a hand delivery can be recorded the same way. saveSample carries a clientId the
        device minted first, so a replay updates its own row instead of creating a second sample. */
@@ -87,8 +91,9 @@
 
      The way back to offline booking is a failed-items tray the desk can see and retry, not a change
      here. Until that exists, this is the honest setting. */
-  var NOQUEUE={pcImport:1,login:1,validate:1,logout:1,changePassword:1,resetPassword:1,checkIn:1,checkOut:1,runPayroll:1,approvePayroll:1,confirmAbsent:1,uploadFile:1,importOldCards:1,submitQuiz:1,waTest:1,waSendCard:1,waCardMedia:1,waBulkSend:1,waBenefitsSend:1,waPromoSend:1,saveWaTemplate:1,waTestTemplate:1,saveOrder:1,saveLabVisit:1,
-    opsMessagePatient:1,opsMessagePhlebotomist:1,opsMessageFeedback:1};   /* v319: a chair is exclusive too. v350/v353: a WhatsApp send has nothing useful to replay offline. v(new): waBenefitsSend joins for the same reason as waBulkSend. */
+  var NOQUEUE={pcImport:1,login:1,validate:1,logout:1,changePassword:1,resetPassword:1,checkIn:1,checkOut:1,runPayroll:1,approvePayroll:1,confirmAbsent:1,uploadFile:1,importOldCards:1,submitQuiz:1,waTest:1,waSendCard:1,waCardMedia:1,waBulkSend:1,waBenefitsSend:1,saveWaTemplate:1,waTestTemplate:1,saveOrder:1,saveLabVisit:1,
+    opsMessagePatient:1,opsMessagePhlebotomist:1,opsMessageFeedback:1,
+    msgSaveCampaign:1,msgSetCampaignStatus:1,msgAddRecipients:1,msgDeleteRecipient:1,msgDeleteSampleData:1,msgDeleteCampaign:1};   /* v319: a chair is exclusive too. v350/v353: a WhatsApp send has nothing useful to replay offline. v(new): waBenefitsSend joins for the same reason as waBulkSend. Messaging joins for the same reason as saveWaTemplate — no offline UI built for it. msgDeleteCampaign (19 Sep) is a hard, irreversible delete — the last thing it should ever do is sit in an offline outbox and fire again later. */
   /* ---------------- ATTACHMENTS ----------------------------------------------------
      A phone photo of a report is 4-8 MB. Sent as base64 it grows by a third, so ~10 MB was
      going up a branch connection against a hard 60-second abort — the request was killed
@@ -282,6 +287,23 @@
     saveFixedAsset:function(data){ return call('saveFixedAsset',{token:getToken(),data:data}); },
     deleteFixedAsset:function(assetId){ return call('deleteFixedAsset',{token:getToken(),assetId:assetId}); },
 
+    /* ---- Messaging — Bulk Message Send (27_Messaging.gs) ----
+       msgListTemplates/msgListCampaigns/msgCampaignStats/msgListRecipients are plain reads (cache-first,
+       like everything else above); the other five are online-only writes — see NOQUEUE above. */
+    msgListTemplates:function(){ return call('msgListTemplates',{token:getToken()}); },
+    msgListCampaigns:function(filter){ return call('msgListCampaigns',{token:getToken(),filter:filter||{}}); },
+    msgSaveCampaign:function(data){ return call('msgSaveCampaign',{token:getToken(),data:data}); },
+    msgSetCampaignStatus:function(campaignId,status){ return call('msgSetCampaignStatus',{token:getToken(),campaignId:campaignId,status:status}); },
+    msgCampaignStats:function(branchId,tplId){ return call('msgCampaignStats',{token:getToken(),branchId:branchId||'',tplId:tplId||''}); },
+    msgAddRecipients:function(data){ return call('msgAddRecipients',{token:getToken(),data:data}); },
+    msgListRecipients:function(campaignId,filter){ return call('msgListRecipients',{token:getToken(),campaignId:campaignId,filter:filter||{}}); },
+    msgDeleteRecipient:function(recipientId){ return call('msgDeleteRecipient',{token:getToken(),recipientId:recipientId}); },
+    msgDeleteSampleData:function(){ return call('msgDeleteSampleData',{token:getToken()}); },
+    /* 19 Sep — "Cancel" on Campaign History now hard-deletes (see messaging.js) instead of just
+       flipping status to 'cancelled'. Wipes the campaign row AND every one of its recipient rows
+       server-side — see apiMsgDeleteCampaign in 27_Messaging.gs. */
+    msgDeleteCampaign:function(campaignId){ return call('msgDeleteCampaign',{token:getToken(),campaignId:campaignId}); },
+
     /* v295: login had NO explicit timeout, so it inherited NET's 60-second default — and bindAuth
        retries it three times. Worst case was 60 + 1.5 + 60 + 3 + 60 = about THREE MINUTES of
        "Signing in…" before the user was told anything at all. The retries themselves are correct and
@@ -456,14 +478,6 @@
     waBenefitsSend:function(cardNumbers,allowResend){
       if(!navigator.onLine) return Promise.resolve({ok:false,error:'Sending needs an internet connection.'});
       return call('waBenefitsSend',{token:getToken(),cardNumbers:cardNumbers||[],opts:{allowResend:!!allowResend}}, 300000)
-        .then(function(r){ if(r.ok && API.refreshCards) API.refreshCards(); return r; }); },
-    /* ---- Home Services Promo — mirrors Membership Benefits just above; separate template
-       purpose (promo_home_services) and separate sent-once flag (promoSentAt) server-side. ---- */
-    waPromoPreview:function(cardNumbers,allowResend){
-      return call('waPromoPreview',{token:getToken(),cardNumbers:cardNumbers||[],opts:{allowResend:!!allowResend}}, 60000); },
-    waPromoSend:function(cardNumbers,allowResend){
-      if(!navigator.onLine) return Promise.resolve({ok:false,error:'Sending needs an internet connection.'});
-      return call('waPromoSend',{token:getToken(),cardNumbers:cardNumbers||[],opts:{allowResend:!!allowResend}}, 300000)
         .then(function(r){ if(r.ok && API.refreshCards) API.refreshCards(); return r; }); },
     saveWaTemplate:function(data){
       if(!navigator.onLine) return Promise.resolve({ok:false,error:'Saving templates needs an internet connection.'});
