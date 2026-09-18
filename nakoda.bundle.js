@@ -4529,11 +4529,25 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
             '<button class="btn" id="bm_start">Start Campaign</button>'+
           '</div>'+
         '</div>'+
-      '</div>' : '');
+      '</div>' : '')+
+      '<div class="card">'+
+        '<div class="toolbar" style="justify-content:space-between">'+
+          '<h3 style="margin:0">Campaign History</h3>'+
+          '<div class="tabs-mini" id="bm_tabs">'+
+            ['all','pending','sent','scheduled'].map(function(t){ return '<div class="tab-mini'+(t==='all'?' on':'')+'" data-tab="'+t+'">'+(t==='all'?'All':t.charAt(0).toUpperCase()+t.slice(1))+'</div>'; }).join('')+
+          '</div>'+
+        '</div>'+
+        '<div class="table-wrap"><table><thead><tr><th>Code</th><th>Template</th><th>Branch</th><th>Tag</th><th>Time</th><th>Leads</th><th>Status</th><th>Date</th><th></th></tr></thead>'+
+        '<tbody id="bm_histBody"></tbody></table></div>'+
+        '<div id="bm_histEmpty" class="empty hidden">No campaigns yet.</div>'+
+      '</div>';
 
     $('bm_export').onclick=exportHistory;
     var al=$('bm_addLeads'); if(al) al.onclick=function(){ openAddLeadsPicker(); };
     var alb=$('bm_addLeadsBox'); if(alb) alb.onclick=function(){ openAddLeadsForSetup(); };
+    v.querySelectorAll('#bm_tabs .tab-mini').forEach(function(t){
+      t.onclick=function(){ F.tab=t.getAttribute('data-tab'); v.querySelectorAll('#bm_tabs .tab-mini').forEach(function(x){x.classList.toggle('on',x===t);}); loadHistory(); };
+    });
 
     if(canManage()){
       $('bm_branch').onchange=function(){ F.branchId=this.value; paintStats(); paintAutoNote(); };
@@ -4678,11 +4692,10 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
   }
 
   /* ============================================================ HISTORY
-     No table on this page any more (removed at your request) — loadHistory() still runs in the
-     background so CAMPS stays populated for Export History, the "+ Add Leads" header button's
-     campaign picker, the "+ Add Leads" box button above, and the admin "Delete sample data"
-     button (maybeShowDeleteSample). paintHistory() itself is now a no-op (its target elements no
-     longer exist), left in place only so nothing else here has to change shape. */
+     Campaign History table is back (18 Sep correction — only the 5 seeded sample rows were meant
+     to go, not the table itself). loadHistory() keeps CAMPS populated for the table, Export
+     History, the "+ Add Leads" header button's campaign picker, the "+ Add Leads" box button
+     above, and the admin "Delete sample data" button (maybeShowDeleteSample). */
   function loadHistory(){
     var body=$('bm_histBody'); if(!body) return;
     API.msgListCampaigns({branchId:'', tplId:'', status:F.tab}).then(function(r){
@@ -4739,18 +4752,25 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     downloadCsv('bulk-message-history.csv', rows);
   }
 
-  /* Admin-only helper reachable from the header when sample rows are present — kept out of the
-     main button row so it can't be tapped by accident once real leads have gone in. */
+  /* Admin-only, and only shown once — reachable right next to "Campaign History" (not tucked in
+     the page header any more) whenever any of the 5 seeded demo rows (TMP_GOLD/TMP_HLTH/TMP_SLVR/
+     TMP_DIWALI/TMP_FREE) are still present, so they're easy to find and wipe in one click. Kept
+     out of the main button row so it can't be tapped by accident once real leads have gone in. */
   function maybeShowDeleteSample(){
     if(!(S.perms&&S.perms.canManageAll)) return;
     if(!CAMPS.some(function(c){ return c.isSample; })) return;
-    var head=document.querySelector('#page-bulkmsg .page-head'); if(!head || $('bm_delSample')) return;
+    var bar=document.querySelector('#page-bulkmsg .toolbar'); if(!bar || $('bm_delSample')) return;
     var b=document.createElement('button'); b.className='btn ghost sm'; b.id='bm_delSample'; b.textContent='Delete sample data';
-    b.style.marginLeft='8px';
+    b.style.borderColor='#a12525'; b.style.color='#a12525'; b.style.marginLeft='10px';
     b.onclick=function(){
-      API.msgDeleteSampleData().then(function(r){ if(!r.ok){ toast(r.error,true); return; } toast('Removed '+r.removedCampaigns+' sample campaigns.'); b.remove(); loadHistory(); });
+      b.disabled=true; b.innerHTML='<span class="loader"></span>';
+      API.msgDeleteSampleData().then(function(r){
+        if(!r.ok){ toast(r.error,true); b.disabled=false; b.textContent='Delete sample data'; return; }
+        toast('Removed '+r.removedCampaigns+' sample campaign'+(r.removedCampaigns===1?'':'s')+'.');
+        b.remove(); loadHistory();
+      });
     };
-    head.appendChild(b);
+    var h3=bar.querySelector('h3'); if(h3 && h3.nextSibling) bar.insertBefore(b, h3.nextSibling); else bar.insertBefore(b, bar.firstChild.nextSibling);
   }
 
   /* ============================================================ ADD LEADS */
