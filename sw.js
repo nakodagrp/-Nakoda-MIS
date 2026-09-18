@@ -4,7 +4,17 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v391';  /* v349: PATIENT CRM ROUND 3 — three things. (1) PENDING CARD IS NO LONGER A LIE.
+var CACHE_VERSION = 'nakoda-mis-v395';  /* v394: Bulk Message Send — Campaign Setup can now send
+   templates that need more than {{1}} branch name / {{2}} lead name (an image header and/or
+   {{3}}..{{n}} extra values, e.g. Gold/Platinum/Diamond card variants with their own benefits
+   text and card picture). A "needs a bit more" box appears under the setup fields, labeled from
+   each template's own Variable hints, and "Start Campaign" / "+ Add Leads" no longer block with
+   the old "needs more than Bulk Message Send can fill in" error once it's filled in. No backend
+   change — reuses the existing fixedParams/headerMediaUrl columns and API.upload(). Carries all
+   of v393. */  /* v392: Bulk Message Send correction — Campaign History
+   table is restored (18 Sep correction; only meant to remove the 5 seeded sample rows, not the
+   table), and the "Delete sample data" button now sits right next to the Campaign History
+   heading instead of the page header, so it's easy to find. Carries all of v391. */  /* v349: PATIENT CRM ROUND 3 — three things. (1) PENDING CARD IS NO LONGER A LIE.
    It decided who holds a membership card from one column on the patient row, and that column is only written when a card is
    issued through the CRM — so counter-issued cards, imported cards and a relative's card on the same family mobile number all
    read as NO CARD forever. It now looks the patient's number up in Membership_Cards and counts any LIVE card (active, not
