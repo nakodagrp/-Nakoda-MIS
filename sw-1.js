@@ -4,7 +4,19 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v393';  /* v392: Bulk Message Send correction — Campaign History
+var CACHE_VERSION = 'nakoda-mis-v397';  /* v396: Bulk Message Send — added the two banners you
+   asked to keep on the page permanently: a yellow note above Campaign Setup explaining that
+   multi-variable/image templates (Gold/Platinum/Diamond card variants) are supported, and a
+   green confirmation note below Campaign Setup restating that "Start Campaign" now works for
+   them once the image and values are filled in. Both only show for users who can manage
+   campaigns. Carries all of v395. */  /* v394: Bulk Message Send — Campaign Setup can now send
+   templates that need more than {{1}} branch name / {{2}} lead name (an image header and/or
+   {{3}}..{{n}} extra values, e.g. Gold/Platinum/Diamond card variants with their own benefits
+   text and card picture). A "needs a bit more" box appears under the setup fields, labeled from
+   each template's own Variable hints, and "Start Campaign" / "+ Add Leads" no longer block with
+   the old "needs more than Bulk Message Send can fill in" error once it's filled in. No backend
+   change — reuses the existing fixedParams/headerMediaUrl columns and API.upload(). Carries all
+   of v393. */  /* v392: Bulk Message Send correction — Campaign History
    table is restored (18 Sep correction; only meant to remove the 5 seeded sample rows, not the
    table), and the "Delete sample data" button now sits right next to the Campaign History
    heading instead of the page header, so it's easy to find. Carries all of v391. */  /* v349: PATIENT CRM ROUND 3 — three things. (1) PENDING CARD IS NO LONGER A LIE.
