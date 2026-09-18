@@ -568,7 +568,7 @@
       function sel(id,cur){ return '<select id="'+id+'">'+'<option value="-1">— not in this file —</option>'+headers.map(function(h,i){ return '<option value="'+i+'"'+(i===cur?' selected':'')+'>'+esc(h||('Column '+(i+1)))+'</option>'; }).join('')+'</select>'; }
       $('al_map').innerHTML='<div class="section-label" style="margin-top:14px">Match your columns</div>'+
         '<div class="card" style="padding:12px 14px"><div style="display:grid;grid-template-columns:100px 1fr;gap:9px 12px;align-items:center;font-size:12.5px">'+
-        '<b>Name</b>'+sel('al_c_name',guess.name)+'<b>Mobile *</b>'+sel('al_c_mob',guess.mobile)+'<b>Tag</b>'+sel('al_c_tag',guess.tag)+
+        '<b>Name</b>'+sel('al_c_name',guess.name)+'<b>Mobile *</b>'+sel('al_c_mob',guess.mobile)+'<b>Tag <span style="font-weight:400;color:var(--muted);font-size:10.5px">(optional)</span></b>'+sel('al_c_tag',guess.tag)+
         '</div></div><div id="al_prev" style="margin-top:10px"></div>';
       ['al_c_name','al_c_mob','al_c_tag'].forEach(function(id){ $(id).onchange=preview; });
       function build(){
