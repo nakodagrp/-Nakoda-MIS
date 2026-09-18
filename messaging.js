@@ -17,24 +17,62 @@
   var CAMPS=[];
   var F={ branchId:'', tplId:'', tag:'', tab:'all', lastCampaignId:'', lastKey:'', fixedParams:[], fpAuto:[], headerMediaUrl:'' };   /* current Campaign Setup (lastCampaignId/lastKey back the in-box "+ Add Leads" button below; fixedParams/headerMediaUrl back the "needs a bit more" box — see paintExtraFields. fpAuto[i] tracks whether fixedParams[i] was filled in BY the page (true — keeps following Branch/Template) or typed by hand (false — never touched again by autofill) */
 
-  /* ============================================================ TIMELY MESSAGE (18 Sep)
-     Second tab, same Campaign Setup + Add Leads pattern as Bulk Message Send above, minus a
-     Campaign History table (removed at your request) and plus a "Send in (days)" box in place of
-     the Daily Limit tile, which doesn't mean much for a one-off/small-list send. Backed by the
-     same Msg_Campaigns/Msg_Recipients sheets, kept apart from Bulk Message Send campaigns purely
-     by kind:'timely' (see apiMsgSaveCampaign/apiMsgListCampaigns in 27_Messaging.gs) so nothing
-     about Bulk Message Send's own history or scheduling changes. Because there's no history table
-     here to pick "which campaign?" from, "+ Add Leads" always targets the campaign you just
-     saved/started in this browser tab (FT.lastCampaignId) — reload the page and save/start again
-     if you want to add more leads to an older Timely message later. */
+  /* ============================================================ TIMELY MESSAGE (18 Sep, rebuilt
+     19 Sep per the approved mockup — Messaging-Feature-Handoff, "BUILD IT"). Now a full second
+     tab matching Bulk Message Send: its own KPI tiles, its own Campaign History table (kind:
+     'timely', same Msg_Campaigns/Msg_Recipients sheets as Bulk, kept apart purely by that kind
+     flag — see apiMsgSaveCampaign/apiMsgListCampaigns/apiMsgCampaignStats in 27_Messaging.gs).
+     The one real difference from Bulk Message Send: instead of a "Send Time" that drips 250/day
+     starting immediately, you pick a "Send After" delay — 1 Day/1 Week/2 Weeks/1 Month/3 Months/
+     6 Months/1 Year, or a custom calendar date — and the message only starts going out on that
+     exact date (msgSchedulerTick_'s existing scheduledDate gate in 27_Messaging.gs, unchanged).
+     The month/year presets use JS Date.setMonth(), which is calendar-exact (18 Sep + 3 months =
+     18 Dec, not "90 days later") and correctly lands on the real last day of a short month
+     instead of overflowing into the next one. View / + Leads / Cancel on the history table below
+     reuse the exact same openPatientDelivery/openAddLeadsModal/deleteCampaign_/actionButtons
+     functions Bulk Message Send already uses — those are campaignId-scoped, not kind-scoped, so
+     nothing there needed to change. */
   var CAMPS_T=[];
-  var FT={ branchId:'', tplId:'', tag:'', lastCampaignId:'' };
+  var FT={ branchId:'', tplId:'', tag:'', tab:'all', preset:'1d', customDate:'', lastCampaignId:'', lastKey:'' };
+  var TM_PRESETS=[
+    {key:'1d', label:'1 Day', unit:'day', n:1},
+    {key:'1w', label:'1 Week', unit:'day', n:7},
+    {key:'2w', label:'2 Weeks', unit:'day', n:14},
+    {key:'1m', label:'1 Month', unit:'month', n:1},
+    {key:'3m', label:'3 Months', unit:'month', n:3},
+    {key:'6m', label:'6 Months', unit:'month', n:6},
+    {key:'1y', label:'1 Year', unit:'month', n:12},
+    {key:'custom', label:'📅 Custom date', unit:'custom'}
+  ];
+  var TM_PRESET_MAP={}; TM_PRESETS.forEach(function(p){ TM_PRESET_MAP[p.key]=p; });
   function findCamp_(campaignId){
     return (CAMPS.filter(function(x){ return x.campaignId===campaignId; })[0]) ||
            (CAMPS_T.filter(function(x){ return x.campaignId===campaignId; })[0]);
   }
-  function tmTargetDate_(days){
-    var d=new Date(); d.setDate(d.getDate()+(Number(days)||0)); return d;
+  /* Calendar-EXACT add — deliberately Date.setMonth(), not "+ n*30 days": setMonth() already
+     handles month-length/overflow correctly on its own (e.g. 31 Jan + 1 month lands on 28/29 Feb,
+     not 3 Mar), which is exactly the guarantee the mockup's footnote promised. */
+  function tmAddExact_(unit, n){
+    var d=new Date();
+    if(unit==='day') d.setDate(d.getDate()+(Number(n)||0));
+    else if(unit==='month') d.setMonth(d.getMonth()+(Number(n)||0));
+    return d;
+  }
+  function tmDateStr_(d){
+    var y=d.getFullYear(), m=String(d.getMonth()+1), day=String(d.getDate());
+    if(m.length<2) m='0'+m; if(day.length<2) day='0'+day;
+    return y+'-'+m+'-'+day;
+  }
+  /* The date the current Campaign Setup box (chip picked, or the custom date field) is set to —
+     used both for the live autonote and for what actually gets saved. */
+  function tmCurrentTargetDate_(){
+    var p=TM_PRESET_MAP[FT.preset]||TM_PRESET_MAP['1d'];
+    if(p.unit==='custom'){
+      var v=($('tm_customDate')&&$('tm_customDate').value)||FT.customDate||'';
+      if(/^\d{4}-\d{2}-\d{2}$/.test(v)) return new Date(v+'T00:00:00');
+      return new Date();
+    }
+    return tmAddExact_(p.unit, p.n);
   }
 
   /* MIS, Operations Manager or Director/Admin can manage; everyone who can see this page (nav
@@ -315,16 +353,23 @@
     note.innerHTML='Scheduled for <b>'+esc(fmtTime12(t.value||'02:00'))+'</b> — auto-sends the next <b>250</b> leads daily until the queue is cleared.';
   }
 
+  /* 18 Sep — used to bail out to an empty box (box.innerHTML='') whenever no template was chosen
+     yet in Campaign Setup, which meant a brand-new page load — or a branch with "No active
+     templates" to even pick from — showed NOTHING here, not even the real leads already sitting
+     in the queue from campaigns you'd started earlier. Now this always calls the stats endpoint;
+     with no template picked it comes back with everything rolled up (see apiMsgCampaignStats in
+     27_Messaging.gs), so the tiles show your real totals from the moment the page opens, and
+     narrow down to just one template the moment you pick one in the form below. */
   function paintStats(){
     var box=$('bm_kpis'); if(!box) return;
-    if(!F.tplId){ box.innerHTML=''; return; }
     box.innerHTML='<div class="kpi"><div class="n">…</div><div class="l">Loading</div></div>';
     API.msgCampaignStats(F.branchId, F.tplId).then(function(r){
       if(!r.ok){ box.innerHTML=''; return; }
       var pct=r.capTotal?Math.min(100,Math.round(r.capUsed/r.capTotal*100)):0;
       var deg=Math.round(pct*3.6);
+      var tplCaption = F.tplId ? ('For <b>'+esc(r.templateName||'')+'</b> template') : (r.templateName ? ('For <b>'+esc(r.templateName)+'</b> template') : 'Across all templates');
       box.innerHTML=
-        '<div class="kpi"><div class="l">LEADS IN QUEUE</div><div class="n">'+money0(r.leadsInQueue)+'</div><div style="font-size:11.5px;color:var(--grey);margin-top:4px">For <b>'+esc(r.templateName||'')+'</b> template</div></div>'+
+        '<div class="kpi"><div class="l">LEADS IN QUEUE</div><div class="n">'+money0(r.leadsInQueue)+'</div><div style="font-size:11.5px;color:var(--grey);margin-top:4px">'+tplCaption+'</div></div>'+
         '<div class="kpi"><div class="l">SENT TODAY</div><div class="n" style="color:var(--ok)">'+money0(r.sentToday)+'</div><div style="font-size:11.5px;color:var(--grey);margin-top:4px">'+(r.lastBatchAt?('batch closed '+esc(r.lastBatchAt)):'no batch yet today')+'</div></div>'+
         '<div class="kpi"><div class="l">PENDING IN QUEUE</div><div class="n" style="color:#c98500">'+money0(r.pending)+'</div><div style="font-size:11.5px;color:var(--grey);margin-top:4px">'+(r.daysToClear?('~'+r.daysToClear+' day'+(r.daysToClear===1?'':'s')+' to clear at 250/day'):'queue clear')+'</div></div>'+
         '<div class="kpi"><div class="l">TODAY\'S DAILY LIMIT</div>'+
@@ -467,6 +512,13 @@
     if(s==='scheduled'||s==='in_progress') html+=' <button class="btn ghost sm" data-setstatus="'+esc(c.campaignId)+'" data-tostatus="paused">Pause</button>';
     if(s==='paused'||s==='draft') html+=' <button class="btn ghost sm" data-setstatus="'+esc(c.campaignId)+'" data-tostatus="scheduled">'+(s==='draft'?'Start':'Resume')+'</button>';
     if(['scheduled','in_progress','paused','draft'].indexOf(s)>=0) html+=' <button class="btn ghost sm danger" data-delete="'+esc(c.campaignId)+'" data-code="'+esc(c.code)+'">Cancel</button>';
+    /* 18 Sep — rows that were cancelled by the OLD status-only flow (before the hard-delete backend
+       went live) are stuck showing "Cancelled" forever with no way to clear them, since only the
+       statuses above got a delete button. Give already-cancelled rows their own "Delete" button so
+       that leftover/legacy Cancelled entries can be wiped too — same handler, same confirm, same
+       hard delete. Once the new backend is live, a fresh Cancel click removes the row immediately,
+       so this branch only matters for cleaning up rows created before that point. */
+    else if(s==='cancelled') html+=' <button class="btn ghost sm danger" data-delete="'+esc(c.campaignId)+'" data-code="'+esc(c.code)+'">Delete</button>';
     return html;
   }
   /* 19 Sep — Cancel now means what it says nowhere near loosely: it hard-deletes the campaign row
@@ -482,11 +534,18 @@
     API.msgDeleteCampaign(campaignId).then(function(r){
       if(!r.ok){ toast(r.error,true); return; }
       toast('Campaign deleted'+(r.removedRecipients?(' — '+r.removedRecipients+' lead'+(r.removedRecipients===1?'':'s')+' removed with it'):'')+'.');
+      /* campaignId-scoped, not kind-scoped — a campaign only ever lives in one of CAMPS/CAMPS_T,
+         so it's safe (and simplest) to just filter both and refresh both tabs' tables/tiles;
+         each paint/stats call below already no-ops if its own tab isn't the one on screen. */
       CAMPS = CAMPS.filter(function(x){ return x.campaignId!==campaignId; });
+      CAMPS_T = CAMPS_T.filter(function(x){ return x.campaignId!==campaignId; });
       if(F.lastCampaignId===campaignId){ F.lastCampaignId=''; F.lastKey=''; }
+      if(FT.lastCampaignId===campaignId){ FT.lastCampaignId=''; FT.lastKey=''; }
       paintHistory();
       paintStats();
       maybeShowDeleteSample();
+      paintHistoryT();
+      paintStatsT();
     }).catch(function(){ toast('Deleting needs an internet connection.',true); });
   }
 
@@ -669,6 +728,15 @@
 
   /* ============================================================ PATIENT DELIVERY POP-UP */
   var PD={ campaignId:'', q:'', status:'all' };
+  /* 18 Sep — "View" opened Patient Delivery showing the real, live counts (it always asks the
+     server fresh — loadDelivery() below), while the row you clicked it FROM, sitting in Campaign
+     History underneath, kept showing whatever it looked like at the last loadHistory() — e.g.
+     "0 / 4" and "Scheduled" on a campaign that a background send (msgSchedulerTick_'s 15-minute
+     trigger) had already finished sending and marked "completed" on the server. Nothing was
+     wrong with the data — Campaign History just never knew to ask again, since a scheduled send
+     happens in the background with nobody clicking anything. Refreshing the history list here,
+     the moment you check on a campaign, means the row underneath is caught up by the time you
+     close this modal — reported as "sends work but the list and Scheduled tag never update". */
   function openPatientDelivery(campaignId){
     PD.campaignId=campaignId; PD.q=''; PD.status='all';
     openModal('Patient Delivery', '<div id="pd_body">'+loaderHtml()+'</div>', '<span id="pd_count" style="font-size:11.5px;color:var(--muted);flex:1"></span><button class="btn ghost" id="pd_export">Export List</button>');
@@ -676,6 +744,14 @@
     var mf=document.querySelector('#modalRoot .modal-foot'); if(mf) mf.style.display='flex', mf.style.justifyContent='space-between', mf.style.alignItems='center';
     $('pd_export').onclick=exportRecipients;
     loadDelivery();
+    /* Refresh whichever Campaign History table(s)/KPI tiles are actually on the page right now —
+       Bulk Message Send's and Timely Message's alike. Each of these four already bails out
+       immediately if its own DOM (bm_histBody / tm_histBody / bm_kpis / tm_kpis) isn't present,
+       so calling all four here is harmless on whichever tab you actually opened "View" from. */
+    loadHistory();
+    paintStats();
+    loadHistoryT();
+    paintStatsT();
   }
   function loaderHtml(){ return '<div class="center-load"><span class="loader dark"></span> Loading…</div>'; }
   function loadDelivery(){
@@ -728,58 +804,237 @@
     });
   }
 
-  /* ============================================================ TIMELY MESSAGE PAGE */
+  /* ============================================================ TIMELY MESSAGE PAGE (rebuilt
+     19 Sep from the approved mockup — same Campaign Setup / KPI / Campaign History shape as
+     Bulk Message Send, "Send After" chips in place of Bulk's daily-drip Send Time-only setup). */
   function renderTimelyMsg(){
     var v=$('page-timelymsg'); if(!v) return;
     v.innerHTML=
       '<div class="page-head"><h1>Timely Message</h1>'+
-        '<div style="flex:1;font-size:12.5px;color:var(--grey)">Send one approved WhatsApp template to one or a few leads, on a day and time you pick.</div>'+
+        '<div style="flex:1;font-size:12.5px;color:var(--grey)">Send one approved WhatsApp template to a list of leads, automatically, after a delay you set — exact to the day, no matter how far out.</div>'+
+        '<button class="btn ghost" id="tm_export">Export History</button>'+
+        (canManage()?'<button class="btn" id="tm_addLeads">+ Add Leads</button>':'')+
       '</div>'+
+      '<div class="kpis" id="tm_kpis"></div>'+
       (canManage()?
-      '<div class="card" style="padding:20px 22px">'+
+      '<div class="card" style="padding:20px 22px;margin-bottom:22px">'+
         '<h3 style="margin:0 0 3px">Campaign Setup</h3>'+
-        '<div style="font-size:12px;color:var(--muted);margin-bottom:16px">Choose the template and branch, when it should go out, then add who gets it.</div>'+
-        '<div class="grid2" style="grid-template-columns:repeat(5,1fr);gap:14px">'+
+        '<div style="font-size:12px;color:var(--muted);margin-bottom:16px">Choose who gets it and which template — the only difference from Bulk Message Send is WHEN it goes out.</div>'+
+        '<div class="grid2" id="tm_fields" style="grid-template-columns:repeat(4,1fr);gap:14px">'+
           '<div class="field"><label>Branch</label><select id="tm_branch">'+branchOptsPick('')+'</select></div>'+
           '<div class="field"><label>Template</label><select id="tm_tpl">'+tplOpts('')+'</select></div>'+
           '<div class="field"><label>Tag</label><select id="tm_tag">'+tagOpts('',true)+'</select></div>'+
-          '<div class="field"><label>Send in (days)</label><input id="tm_days" type="number" min="0" step="1" value="0"></div>'+
+          '<div class="field"><label>Daily Limit</label><div class="limit-badge"><span class="lb-dot"></span><span id="tm_capLabel">250 / day (WhatsBizApp cap)</span></div></div>'+
+        '</div>'+
+        '<div style="margin-top:18px">'+
+          '<label style="display:block;font-size:12.5px;font-weight:600;color:var(--grey);margin-bottom:2px">Send After</label>'+
+          '<div class="chiprow" id="tm_chips">'+
+            TM_PRESETS.map(function(p){
+              return p.key==='custom' ?
+                ('<div class="dchip custom" data-preset="custom" id="tm_chip_custom" style="display:flex;align-items:center;gap:6px">📅 Custom date '+
+                 '<input type="date" id="tm_customDate" style="border:0;background:transparent;font-family:inherit;font-size:inherit;font-weight:inherit;color:inherit;width:118px"></div>') :
+                ('<div class="dchip'+(p.key==='1d'?' on':'')+'" data-preset="'+p.key+'">'+esc(p.label)+'</div>');
+            }).join('')+
+          '</div>'+
+        '</div>'+
+        '<div class="grid2" style="grid-template-columns:220px 1fr;gap:14px;margin-top:14px">'+
           '<div class="field"><label>Send Time</label><input id="tm_time" type="time" value="02:00"></div>'+
+          '<div></div>'+
         '</div>'+
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px;padding-top:16px;border-top:1px solid var(--line);flex-wrap:wrap;gap:12px">'+
           '<div style="font-size:12.5px;color:var(--grey)" id="tm_autoNote">—</div>'+
           '<div style="display:flex;gap:10px">'+
             '<button class="btn ghost" id="tm_saveDraft">Save as Draft</button>'+
-            '<button class="btn" id="tm_start">Start</button>'+
-            '<button class="btn ghost" id="tm_addLeads" disabled title="Save or start above first">+ Add Leads</button>'+
+            '<button class="btn ghost" id="tm_addLeadsBox">+ Add Leads</button>'+
+            '<button class="btn" id="tm_start">Start Campaign</button>'+
           '</div>'+
         '</div>'+
-      '</div>' : '<div class="card" style="padding:20px 22px">You do not have access to send messages.</div>');
+      '</div>' : '<div class="card" style="padding:20px 22px">You do not have access to send messages.</div>')+
+      '<div class="card">'+
+        '<div class="toolbar" style="justify-content:space-between">'+
+          '<h3 style="margin:0">Campaign History</h3>'+
+          '<div class="tabs-mini" id="tm_tabs">'+
+            ['all','pending','sent','scheduled'].map(function(t){ return '<div class="tab-mini'+(t==='all'?' on':'')+'" data-tab="'+t+'">'+(t==='all'?'All':t.charAt(0).toUpperCase()+t.slice(1))+'</div>'; }).join('')+
+          '</div>'+
+        '</div>'+
+        '<div class="table-wrap"><table><thead><tr><th>Code</th><th>Template</th><th>Branch</th><th>Tag</th><th>Will Send On</th><th>Leads</th><th>Status</th><th>Added On</th><th></th></tr></thead>'+
+        '<tbody id="tm_histBody"></tbody></table></div>'+
+        '<div id="tm_histEmpty" class="empty hidden">No campaigns yet.</div>'+
+      '</div>';
 
-    if(!canManage()) return;
+    $('tm_export').onclick=exportHistoryT;
+    var al=$('tm_addLeads'); if(al) al.onclick=function(){ openAddLeadsPickerT(); };
+    v.querySelectorAll('#tm_tabs .tab-mini').forEach(function(t){
+      t.onclick=function(){ FT.tab=t.getAttribute('data-tab'); v.querySelectorAll('#tm_tabs .tab-mini').forEach(function(x){x.classList.toggle('on',x===t);}); loadHistoryT(); };
+    });
 
-    $('tm_branch').onchange=function(){ FT.branchId=this.value; };
-    $('tm_tpl').onchange=function(){ FT.tplId=this.value; };
+    if(!canManage()){ loadHistoryT(); paintStatsT(); return; }
+
+    var alb=$('tm_addLeadsBox'); if(alb) alb.onclick=function(){ openAddLeadsForSetupT(); };
+    $('tm_branch').onchange=function(){ FT.branchId=this.value; paintStatsT(); };
+    $('tm_tpl').onchange=function(){ FT.tplId=this.value; paintStatsT(); };
     $('tm_tag').onchange=function(){ FT.tag=this.value; };
-    $('tm_days').oninput=paintTimelyNote;
     $('tm_time').onchange=paintTimelyNote;
     $('tm_saveDraft').onclick=function(){ saveTimelyCampaign('draft'); };
     $('tm_start').onclick=function(){ saveTimelyCampaign('scheduled'); };
-    $('tm_addLeads').onclick=function(){ if(FT.lastCampaignId) openAddLeadsModal(FT.lastCampaignId, function(){}); };
 
-    ensureTemplates().then(function(){
+    /* Send After chips — click any preset chip to select it (mutually exclusive, same on/off
+       pattern as .dchip everywhere else in the app); the Custom date chip selects itself the
+       moment you actually pick a date in it, without needing a separate click on the chip body. */
+    v.querySelectorAll('#tm_chips .dchip[data-preset]').forEach(function(chip){
+      chip.onclick=function(e){
+        var key=chip.getAttribute('data-preset');
+        if(key==='custom' && e.target && e.target.id==='tm_customDate') return; /* let the date input handle its own click */
+        FT.preset=key;
+        v.querySelectorAll('#tm_chips .dchip').forEach(function(c){ c.classList.toggle('on', c===chip); });
+        paintTimelyNote();
+      };
+    });
+    var cd=$('tm_customDate');
+    if(cd){
+      cd.onclick=function(e){ e.stopPropagation(); };
+      cd.onchange=function(){
+        FT.customDate=this.value; FT.preset='custom';
+        v.querySelectorAll('#tm_chips .dchip').forEach(function(c){ c.classList.toggle('on', c===$('tm_chip_custom')); });
+        paintTimelyNote();
+      };
+    }
+
+    Promise.all([ensureTemplates(), ensureCardTypes()]).then(function(){
       $('tm_tpl').innerHTML=tplOpts('');
       if(TPLS.length){ FT.tplId=TPLS[0].tplId; $('tm_tpl').value=FT.tplId; }
+      paintStatsT();
       paintTimelyNote();
     });
+    loadHistoryT();
   }
 
   function paintTimelyNote(){
     var note=$('tm_autoNote'); if(!note) return;
-    var days=Math.max(0, Math.round(Number($('tm_days') && $('tm_days').value)||0));
     var time=($('tm_time')&&$('tm_time').value)||'02:00';
-    var dt=tmTargetDate_(days);
-    note.innerHTML='Will send on <b>'+esc(fmtDateShort(dt))+'</b> at <b>'+esc(fmtTime12(time))+'</b>'+(days===0?' — i.e. today, as soon as you add leads.':'.');
+    var dt=tmCurrentTargetDate_();
+    var p=TM_PRESET_MAP[FT.preset]||TM_PRESET_MAP['1d'];
+    var today=new Date();
+    var howFar = p.unit==='custom' ? '' : (' — exactly '+p.label.toLowerCase()+' from today ('+fmtDateShort(today)+'), to the day.');
+    note.innerHTML='Will send on <b>'+esc(fmtDateShort(dt))+'</b> at <b>'+esc(fmtTime12(time))+'</b>'+esc(howFar||'.');
+  }
+
+  /* ============================================================ TIMELY HISTORY / STATS
+     Mirrors loadHistory()/paintHistory()/paintStats() above almost exactly — the only real
+     differences: kind:'timely' on every server call, CAMPS_T instead of CAMPS, tm_* element ids,
+     and a "Will Send On" column (c.scheduledDate) in place of Bulk's plain Send Time column. */
+  function loadHistoryT(){
+    var body=$('tm_histBody'); if(!body) return;
+    API.msgListCampaigns({branchId:'', tplId:'', status:FT.tab, kind:'timely'}).then(function(r){
+      if(!r.ok){ toast(r.error||'Could not load campaign history.',true); return; }
+      CAMPS_T=r.campaigns||[];
+      paintHistoryT();
+    }).catch(function(){ toast('Campaign history needs an internet connection.',true); });
+  }
+  function paintHistoryT(){
+    var body=$('tm_histBody'); if(!body) return;
+    $('tm_histEmpty').classList.toggle('hidden', CAMPS_T.length>0);
+    body.innerHTML=CAMPS_T.map(function(c){
+      var ac=rowAccent(c.campaignId);
+      var total=Number(c.total)||0, sent=Number(c.sent)||0, failed=Number(c.failed)||0;
+      var pct=total?Math.round((sent+failed)/total*100):0;
+      var leadsLine = failed && !sent ? (failed+' failed') : (money0(sent)+' / '+money0(total));
+      var willSend = c.scheduledDate ? ('<b>'+esc(fmtDateShort(c.scheduledDate))+'</b><br><span style="font-size:11px;color:var(--muted)">'+esc(fmtTime12(c.sendTime))+'</span>') : '—';
+      return '<tr style="--row-accent:'+ac.col+';background:linear-gradient(115deg,'+ac.bg+' 0%,#ffffff 62%)">'+
+        '<td><b>'+esc(c.code)+'</b></td>'+
+        '<td><span class="rowavatar" style="background:'+ac.bg+';color:'+ac.col+'">'+esc(rowInitials(c.templateName))+'</span>'+esc(c.templateName)+'</td>'+
+        '<td>'+esc(c.branchName||'—')+'</td>'+
+        '<td>'+(c.tag?'<span class="pill">'+esc(c.tag)+'</span>':'<span class="pill">All Tags</span>')+'</td>'+
+        '<td>'+willSend+'</td>'+
+        '<td>'+esc(leadsLine)+'<br><div class="progress-mini"><div style="width:'+pct+'%;'+(failed&&!sent?'background:#d03b3b':'')+'"></div></div></td>'+
+        '<td>'+statusPill(c.status)+'</td>'+
+        '<td>'+esc(fmtDateShort(c.createdAt))+'</td>'+
+        '<td style="white-space:nowrap">'+
+          '<button class="btn ghost sm" data-view="'+esc(c.campaignId)+'">View</button>'+
+          (canManage()?actionButtons(c):'')+
+        '</td></tr>';
+    }).join('');
+    body.querySelectorAll('[data-view]').forEach(function(b){ b.onclick=function(){ openPatientDelivery(b.getAttribute('data-view')); }; });
+    body.querySelectorAll('[data-addleads]').forEach(function(b){ b.onclick=function(){ openAddLeadsModal(b.getAttribute('data-addleads'), loadHistoryT); }; });
+    body.querySelectorAll('[data-setstatus]').forEach(function(b){
+      b.onclick=function(){
+        var id=b.getAttribute('data-setstatus'), st=b.getAttribute('data-tostatus');
+        API.msgSetCampaignStatus(id, st).then(function(r){ if(!r.ok){ toast(r.error,true); return; } toast('Updated.'); loadHistoryT(); });
+      };
+    });
+    body.querySelectorAll('[data-delete]').forEach(function(b){
+      b.onclick=function(){ deleteCampaign_(b.getAttribute('data-delete'), b.getAttribute('data-code')); };
+    });
+  }
+  function paintStatsT(){
+    var box=$('tm_kpis'); if(!box) return;
+    box.innerHTML='<div class="kpi"><div class="n">…</div><div class="l">Loading</div></div>';
+    API.msgCampaignStats(FT.branchId, FT.tplId, 'timely').then(function(r){
+      if(!r.ok){ box.innerHTML=''; return; }
+      var pct=r.capTotal?Math.min(100,Math.round(r.capUsed/r.capTotal*100)):0;
+      var deg=Math.round(pct*3.6);
+      var tplCaption = FT.tplId ? ('For <b>'+esc(r.templateName||'')+'</b> template') : (r.templateName ? ('For <b>'+esc(r.templateName)+'</b> template') : 'Across all templates');
+      box.innerHTML=
+        '<div class="kpi"><div class="l">LEADS IN QUEUE</div><div class="n">'+money0(r.leadsInQueue)+'</div><div style="font-size:11.5px;color:var(--grey);margin-top:4px">'+tplCaption+'</div></div>'+
+        '<div class="kpi"><div class="l">SENT TODAY</div><div class="n" style="color:var(--ok)">'+money0(r.sentToday)+'</div><div style="font-size:11.5px;color:var(--grey);margin-top:4px">'+(r.lastBatchAt?('batch closed '+esc(r.lastBatchAt)):'no batch yet today')+'</div></div>'+
+        '<div class="kpi"><div class="l">PENDING IN QUEUE</div><div class="n" style="color:#c98500">'+money0(r.pending)+'</div><div style="font-size:11.5px;color:var(--grey);margin-top:4px">waiting on their own send date</div></div>'+
+        '<div class="kpi"><div class="l">TODAY\'S DAILY LIMIT</div>'+
+          '<div class="meter-wrap" style="margin-top:6px"><div class="meter-ring" style="background:conic-gradient(var(--red) 0deg '+deg+'deg, var(--line) '+deg+'deg 360deg)"><div class="hole">'+money0(r.capUsed)+'/'+money0(r.capTotal)+'</div></div>'+
+          '<div class="meter-note"><b>'+pct+'% used</b><br>shared with Bulk Message Send</div></div></div>';
+      $('tm_capLabel') && ($('tm_capLabel').textContent=(r.capTotal||250)+' / day (WhatsBizApp cap)');
+    });
+  }
+  function exportHistoryT(){
+    if(!CAMPS_T.length){ toast('Nothing to export yet.',true); return; }
+    var rows=[['Code','Template','Branch','Tag','Will Send On','Send Time','Sent','Total','Status','Added On']];
+    CAMPS_T.forEach(function(c){ rows.push([c.code,c.templateName,c.branchName,c.tag||'All Tags',c.scheduledDate?fmtDateShort(c.scheduledDate):'',c.sendTime,c.sent,c.total,c.status,fmtDateShort(c.createdAt)]); });
+    downloadCsv('timely-message-history.csv', rows);
+  }
+  function openAddLeadsPickerT(){
+    if(!CAMPS_T.length){ toast('Start (or save a draft of) a campaign first, then add leads to it.',true); return; }
+    var opts=CAMPS_T.map(function(c){ return '<option value="'+esc(c.campaignId)+'">'+esc(c.code)+' — '+esc(c.templateName)+' · '+esc(c.branchName)+'</option>'; }).join('');
+    openModal('Add Leads', '<div class="field"><label>Which campaign?</label><select id="alp_camp">'+opts+'</select></div>',
+      '<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="alp_go">Next</button>');
+    $('alp_go').onclick=function(){ var id=$('alp_camp').value; closeModal(); openAddLeadsModal(id, loadHistoryT); };
+  }
+
+  /* Same "one tap, no Save/Start first" shortcut as Bulk Message Send's openAddLeadsForSetup —
+     silently saves (or reuses) a draft campaign for exactly what's configured above (Branch,
+     Template, Tag, Send Time, AND the currently-picked Send After date), then opens the same
+     upload pop-up. Re-uses the existing draft instead of creating a duplicate as long as nothing
+     in the setup box (including the Send After date) has changed since the last save. */
+  function rememberSetupCampaignT_(campaignId, branchId, tpl, tag){
+    var br=((S.meta&&S.meta.branches)||[]).filter(function(b){ return String(b.BranchID)===String(branchId); })[0];
+    CAMPS_T = CAMPS_T.filter(function(x){ return x.campaignId!==campaignId; });
+    CAMPS_T.push({campaignId:campaignId, templateName:tpl.name, branchName:br?br.BranchName:branchId, tag:tag});
+    FT.lastCampaignId = campaignId;
+    FT.lastKey = branchId+'|'+tpl.tplId+'|'+tag+'|'+$('tm_time').value+'|'+tmDateStr_(tmCurrentTargetDate_());
+  }
+  function openAddLeadsForSetupT(){
+    var t=TPLMAP[FT.tplId];
+    if(!t){ toast('Pick a template first.',true); return; }
+    var branchId=$('tm_branch').value;
+    if(!branchId){ toast('Pick a branch first.',true); return; }
+    if(tplNeedsMoreThanBasics_(t)){
+      toast('"'+t.name+'" needs more than Timely Message can fill in (a '+(t.headerType&&t.headerType!=='none'?t.headerType+' header and/or ':'')+'extra template values). Pick a template that only uses {{1}} branch name and {{2}} lead name.', true);
+      return;
+    }
+    var tag=$('tm_tag').value||'', sendTime=$('tm_time').value||'02:00';
+    var scheduledDate=tmDateStr_(tmCurrentTargetDate_());
+    var key=branchId+'|'+FT.tplId+'|'+tag+'|'+sendTime+'|'+scheduledDate;
+    if(FT.lastCampaignId && FT.lastKey===key){
+      openAddLeadsModal(FT.lastCampaignId, loadHistoryT);
+      return;
+    }
+    var btn=$('tm_addLeadsBox'); var was=btn.textContent; btn.disabled=true; btn.innerHTML='<span class="loader"></span> Preparing…';
+    var data={ branchId:branchId, tplId:FT.tplId, tag:tag, sendTime:sendTime, kind:'timely', scheduledDate:scheduledDate, status:'draft' };
+    API.msgSaveCampaign(data).then(function(r){
+      btn.disabled=false; btn.textContent=was;
+      if(!r.ok){ toast(r.error,true); return; }
+      rememberSetupCampaignT_(r.campaignId, branchId, t, tag);
+      loadHistoryT();
+      openAddLeadsModal(r.campaignId, loadHistoryT);
+    }).catch(function(){ btn.disabled=false; btn.textContent=was; toast('Needs an internet connection.',true); });
   }
 
   function saveTimelyCampaign(status){
@@ -794,20 +1049,18 @@
       toast('"'+t.name+'" needs more than Timely Message can fill in (a '+(t.headerType&&t.headerType!=='none'?t.headerType+' header and/or ':'')+'extra template values). Pick a template that only uses {{1}} branch name and {{2}} lead name.', true);
       return;
     }
-    var days=Math.max(0, Math.round(Number($('tm_days').value)||0));
     var tag=$('tm_tag').value||'';
+    var scheduledDate=tmDateStr_(tmCurrentTargetDate_());
     var data={ branchId:branchId, tplId:FT.tplId, tag:tag, sendTime:$('tm_time').value||'02:00',
-               kind:'timely', days:days, status:status };
+               kind:'timely', scheduledDate:scheduledDate, status:status };
     var btn=status==='scheduled'?$('tm_start'):$('tm_saveDraft'); btn.disabled=true;
     API.msgSaveCampaign(data).then(function(r){
       btn.disabled=false;
       if(!r.ok){ toast(r.error,true); return; }
-      FT.lastCampaignId=r.campaignId;
-      var br=((S.meta&&S.meta.branches)||[]).filter(function(b){ return String(b.BranchID)===String(branchId); })[0];
-      CAMPS_T=CAMPS_T.filter(function(x){ return x.campaignId!==r.campaignId; });
-      CAMPS_T.push({campaignId:r.campaignId, templateName:t.name, branchName:br?br.BranchName:branchId, tag:tag});
-      var ab=$('tm_addLeads'); if(ab){ ab.disabled=false; ab.title=''; }
-      toast((status==='scheduled'?'Scheduled — ':'Saved as draft — ')+'now click "+ Add Leads" to say who gets it.');
+      rememberSetupCampaignT_(r.campaignId, branchId, t, tag);
+      loadHistoryT();
+      paintStatsT();
+      toast((status==='scheduled'?'Scheduled — ':'Saved as draft — ')+'now add leads to say who gets it.');
     }).catch(function(){ btn.disabled=false; toast('Saving needs an internet connection.',true); });
   }
 

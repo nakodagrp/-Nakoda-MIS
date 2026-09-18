@@ -287,14 +287,17 @@
     saveFixedAsset:function(data){ return call('saveFixedAsset',{token:getToken(),data:data}); },
     deleteFixedAsset:function(assetId){ return call('deleteFixedAsset',{token:getToken(),assetId:assetId}); },
 
-    /* ---- Messaging — Bulk Message Send (27_Messaging.gs) ----
+    /* ---- Messaging — Bulk Message Send + Timely Message (27_Messaging.gs) ----
        msgListTemplates/msgListCampaigns/msgCampaignStats/msgListRecipients are plain reads (cache-first,
-       like everything else above); the other five are online-only writes — see NOQUEUE above. */
+       like everything else above); the other five are online-only writes — see NOQUEUE above.
+       msgCampaignStats takes an optional 3rd arg, kind ('bulk' default / 'timely'), added 19 Sep so
+       Timely Message's own KPI tiles don't mix with Bulk Message Send's — see apiMsgCampaignStats
+       in 27_Messaging.gs. */
     msgListTemplates:function(){ return call('msgListTemplates',{token:getToken()}); },
     msgListCampaigns:function(filter){ return call('msgListCampaigns',{token:getToken(),filter:filter||{}}); },
     msgSaveCampaign:function(data){ return call('msgSaveCampaign',{token:getToken(),data:data}); },
     msgSetCampaignStatus:function(campaignId,status){ return call('msgSetCampaignStatus',{token:getToken(),campaignId:campaignId,status:status}); },
-    msgCampaignStats:function(branchId,tplId){ return call('msgCampaignStats',{token:getToken(),branchId:branchId||'',tplId:tplId||''}); },
+    msgCampaignStats:function(branchId,tplId,kind){ return call('msgCampaignStats',{token:getToken(),branchId:branchId||'',tplId:tplId||'',kind:kind||''}); },
     msgAddRecipients:function(data){ return call('msgAddRecipients',{token:getToken(),data:data}); },
     msgListRecipients:function(campaignId,filter){ return call('msgListRecipients',{token:getToken(),campaignId:campaignId,filter:filter||{}}); },
     msgDeleteRecipient:function(recipientId){ return call('msgDeleteRecipient',{token:getToken(),recipientId:recipientId}); },
