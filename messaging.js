@@ -11,8 +11,11 @@
  */
 (function(){
   var TPLS=[], TPLMAP={}, TPL_ERR='';
+  var CARDTYPES=[], CARDTYPEMAP={};   /* 19 Sep — card types (Membership Cards ▸ Card Types), fetched
+    once so paintExtraFields() can auto-fill a template's own "Card Type" box instead of making you
+    type it — see autofillKnownValue_ below. */
   var CAMPS=[];
-  var F={ branchId:'', tplId:'', tag:'', tab:'all', lastCampaignId:'', lastKey:'', fixedParams:[], headerMediaUrl:'' };   /* current Campaign Setup (lastCampaignId/lastKey back the in-box "+ Add Leads" button below; fixedParams/headerMediaUrl back the "needs a bit more" box — see paintExtraFields) */
+  var F={ branchId:'', tplId:'', tag:'', tab:'all', lastCampaignId:'', lastKey:'', fixedParams:[], fpAuto:[], headerMediaUrl:'' };   /* current Campaign Setup (lastCampaignId/lastKey back the in-box "+ Add Leads" button below; fixedParams/headerMediaUrl back the "needs a bit more" box — see paintExtraFields. fpAuto[i] tracks whether fixedParams[i] was filled in BY the page (true — keeps following Branch/Template) or typed by hand (false — never touched again by autofill) */
 
   /* ============================================================ TIMELY MESSAGE (18 Sep)
      Second tab, same Campaign Setup + Add Leads pattern as Bulk Message Send above, minus a
@@ -163,15 +166,19 @@
     });
 
     if(canManage()){
-      $('bm_branch').onchange=function(){ F.branchId=this.value; paintStats(); paintAutoNote(); };
-      $('bm_tpl').onchange=function(){ F.tplId=this.value; F.fixedParams=[]; F.headerMediaUrl=''; paintStats(); paintExtraFields(); };
+      /* Branch change also re-runs paintExtraFields() (19 Sep) — not just stats/note — so a box
+         auto-filled from the branch's own record (e.g. "branch phone") tracks whichever branch is
+         currently picked, the same way {{1}} branch name already does automatically. Anything you
+         typed by hand is left alone either way — see fpAuto in autofillKnownValue_/paintExtraFields. */
+      $('bm_branch').onchange=function(){ F.branchId=this.value; paintStats(); paintAutoNote(); paintExtraFields(); };
+      $('bm_tpl').onchange=function(){ F.tplId=this.value; F.fixedParams=[]; F.fpAuto=[]; F.headerMediaUrl=''; paintStats(); paintExtraFields(); };
       $('bm_tag').onchange=function(){ F.tag=this.value; };
       $('bm_time').onchange=paintAutoNote;
       $('bm_saveDraft').onclick=function(){ saveCampaign('draft'); };
       $('bm_start').onclick=function(){ saveCampaign('scheduled'); };
     }
 
-    ensureTemplates().then(function(){
+    Promise.all([ensureTemplates(), ensureCardTypes()]).then(function(){
       if(canManage()){ $('bm_tpl').innerHTML=tplOpts(''); if(TPLS.length){ F.tplId=TPLS[0].tplId; $('bm_tpl').value=F.tplId; } paintExtraFields(); }
       paintStats();
     });
@@ -185,6 +192,16 @@
       return TPLS;
     }).catch(function(e){ TPL_ERR = 'Could not reach the server (' + (e && e.message ? e.message : 'network error') + ').'; return TPLS; });
   }
+  /* Same list Membership Cards' "Card Types" screen and WhatsApp Templates' "Card type" dropdown
+     already use (API.listCardTypes) — reused here purely to turn a template's own cardTypeId into
+     a readable name (Gold/Platinum/Diamond…) for autofillKnownValue_ below. Never blocks the page:
+     a failure just means Card Type won't self-fill, same as before this change. */
+  function ensureCardTypes(){
+    return API.listCardTypes().then(function(r){
+      if(r&&r.ok){ CARDTYPES=r.types||[]; CARDTYPEMAP={}; CARDTYPES.forEach(function(t){ CARDTYPEMAP[t.typeId]=t; }); }
+      return CARDTYPES;
+    }).catch(function(){ return CARDTYPES; });
+  }
 
   /* 18 Sep correction — brought back per your request: your Gold/Platinum/Diamond card
      templates (and others like them) need more than {{1}} branch name / {{2}} lead name, so
@@ -193,6 +210,33 @@
      paramCount/paramHints fields WhatsApp Templates already stores, and the same API.upload()
      file uploader Branches/Employee Docs already use. */
   function headerLabelMsg_(ht){ var m={image:'🖼 Image',document:'📄 Document',video:'🎬 Video'}; return m[ht]||'Media'; }
+  /* 19 Sep — self-fill whatever this box CAN safely know already, instead of asking you to retype
+     it every campaign:
+       • "…card type…" in the hint  → the name of the card type this template is registered to on
+         WhatsApp Templates ▸ Edit template (tpl.cardTypeId, e.g. a "nakoda_platinum_card" template
+         set to card type Platinum autofills "Platinum" the moment you pick that template — no
+         separate "click Platinum" control needed, the template itself IS the card-type choice).
+       • "…branch phone/contact/mobile…" in the hint → the selected Branch's own Mobile/Phone from
+         the Branches page, and it re-syncs whenever you change Branch above.
+     Deliberately NOT autofilled: a card NUMBER, or a card's own VALID TILL date — those are unique
+     to one patient's one card, and this box holds ONE value sent to every lead in the whole
+     campaign, so a real per-card number/date can only ever be right for one recipient. If a
+     template needs those to be correct per person, this page is the wrong tool for it — use
+     Membership Cards ▸ open the card ▸ "🚀 Send via Official API" (or the bulk Send Cards button),
+     which already reads each patient's own card record automatically. Returns '' when nothing
+     applies, in which case the box is left exactly as blank/typed as before. */
+  function autofillKnownValue_(hint, tpl, branchId){
+    var h=String(hint||'').toLowerCase();
+    if(/card\s*type/.test(h)){
+      var ct = tpl && tpl.cardTypeId ? CARDTYPEMAP[tpl.cardTypeId] : null;
+      return ct ? String(ct.name||'') : '';
+    }
+    if(/(branch)?\s*(phone|contact|mobile)/.test(h)){
+      var br = branchId ? ((S.meta&&S.meta.branches)||[]).filter(function(b){ return String(b.BranchID)===String(branchId); })[0] : null;
+      return br ? String(br.Mobile||br.Phone||'') : '';
+    }
+    return '';
+  }
   function paintExtraFields(){
     var box=$('bm_extra'); if(!box) return;
     var t=TPLMAP[F.tplId];
@@ -202,22 +246,34 @@
     if(!extraCount && !needsMedia){ box.innerHTML=''; return; }
     var hints=String(t.paramHints||'').split('\n');
     function hintFor(i){ var h=String(hints[i]||'').replace(/^\s*\d+\s*[=:-]\s*/,'').trim(); return h||('Value for {{'+(i+1)+'}}'); }
+    var branchId = F.branchId || ($('bm_branch')?$('bm_branch').value:'');
     var mediaHtml = needsMedia ?
       '<div class="field full" style="margin-bottom:12px"><label>'+headerLabelMsg_(ht)+' for this campaign *</label>'+
         '<div style="display:flex;gap:10px;align-items:center">'+
           '<input type="file" id="bm_hdrFile" accept="'+(ht==='image'?'image/*':(ht==='video'?'video/*':'*/*'))+'" style="flex:1;border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-size:12.5px">'+
-          '<span id="bm_hdrStatus" style="font-size:11.5px;color:'+(F.headerMediaUrl?'#1a7f37':'var(--muted)')+';font-weight:'+(F.headerMediaUrl?'700':'400')+';white-space:nowrap">'+(F.headerMediaUrl?'Uploaded ✓':'One file, used for every message')+'</span>'+
+          '<span id="bm_hdrStatus" style="font-size:11.5px;color:'+(F.headerMediaUrl?'#1a7f37':'var(--muted)')+';font-weight:'+(F.headerMediaUrl?'700':'400')+';white-space:nowrap">'+(F.headerMediaUrl?'Uploaded ✓':'One file, used for every message — see the note below')+'</span>'+
         '</div></div>' : '';
-    var paramsHtml='';
+    var paramsHtml='', anyAuto=false;
     for(var i=2;i<n;i++){
-      paramsHtml+='<div class="field"><label>{{'+(i+1)+'}} '+esc(hintFor(i))+' *</label>'+
-        '<input class="bm_fp" data-i="'+(i-2)+'" value="'+esc(F.fixedParams[i-2]||'')+'" placeholder="Same for every lead in this campaign"></div>';
+      var idx=i-2, hint=hintFor(i);
+      /* Keep following Branch/Template as long as you haven't typed into this box yourself
+         (fpAuto[idx]!==false) — see the fpAuto comment on F above. */
+      if(F.fpAuto[idx]!==false){
+        var auto=autofillKnownValue_(hint, t, branchId);
+        if(auto){ F.fixedParams[idx]=auto; F.fpAuto[idx]=true; }
+      }
+      var isAuto = F.fpAuto[idx]===true && F.fixedParams[idx]; if(isAuto) anyAuto=true;
+      paramsHtml+='<div class="field"><label>{{'+(i+1)+'}} '+esc(hint)+' *'+(isAuto?' <span style="color:#1a7f37;font-weight:700;font-size:10px;text-transform:none">— auto-filled ✓</span>':'')+'</label>'+
+        '<input class="bm_fp" data-i="'+idx+'" value="'+esc(F.fixedParams[idx]||'')+'" placeholder="Same for every lead in this campaign"></div>';
     }
     box.innerHTML='<div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">'+
       '<div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px">This template needs a bit more — filled in once, used for every lead in this campaign</div>'+
       mediaHtml+
       (paramsHtml?('<div class="grid2" style="grid-template-columns:repeat(3,1fr);gap:12px">'+paramsHtml+'</div>'):'')+
-      '<div style="font-size:10.5px;color:#9aa0a6;margin-top:8px">Labels come from the "Variable hints" set for this template on WhatsApp Templates. Pick a different template and these boxes change to match.</div>'+
+      '<div style="font-size:10.5px;color:#9aa0a6;margin-top:8px">Labels come from the "Variable hints" set for this template on WhatsApp Templates. Pick a different template and these boxes change to match.'+
+      (anyAuto?' Boxes marked <b style="color:#1a7f37">auto-filled</b> came from this template\'s Card Type (WhatsApp Templates) or the selected Branch\'s phone — edit them if this campaign needs something different, and your edit sticks.':'')+
+      (needsMedia?' The image/document/video above is the ONE file sent to every lead — for a genuinely per-patient card image, use Membership Cards ▸ Send via Official API instead.':'')+
+      '</div>'+
     '</div>';
     if(needsMedia){
       $('bm_hdrFile').onchange=function(){
@@ -229,7 +285,9 @@
       };
     }
     box.querySelectorAll('.bm_fp').forEach(function(inp){
-      inp.oninput=function(){ F.fixedParams[Number(this.getAttribute('data-i'))]=this.value; };
+      /* Once you type here yourself, this box stops following Branch/Template changes — your
+         value wins from now on for the rest of this campaign setup (see fpAuto on F above). */
+      inp.oninput=function(){ var idx=Number(this.getAttribute('data-i')); F.fixedParams[idx]=this.value; F.fpAuto[idx]=false; };
     });
   }
   /* True when this template needs anything beyond {{1}} branch name / {{2}} lead name — decides
