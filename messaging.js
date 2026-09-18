@@ -12,7 +12,27 @@
 (function(){
   var TPLS=[], TPLMAP={}, TPL_ERR='';
   var CAMPS=[];
-  var F={ branchId:'', tplId:'', tag:'', tab:'all' };   /* current Campaign Setup + history filter */
+  var F={ branchId:'', tplId:'', tag:'', tab:'all', lastCampaignId:'', lastKey:'' };   /* current Campaign Setup (lastCampaignId/lastKey back the in-box "+ Add Leads" button below) */
+
+  /* ============================================================ TIMELY MESSAGE (18 Sep)
+     Second tab, same Campaign Setup + Add Leads pattern as Bulk Message Send above, minus a
+     Campaign History table (removed at your request) and plus a "Send in (days)" box in place of
+     the Daily Limit tile, which doesn't mean much for a one-off/small-list send. Backed by the
+     same Msg_Campaigns/Msg_Recipients sheets, kept apart from Bulk Message Send campaigns purely
+     by kind:'timely' (see apiMsgSaveCampaign/apiMsgListCampaigns in 27_Messaging.gs) so nothing
+     about Bulk Message Send's own history or scheduling changes. Because there's no history table
+     here to pick "which campaign?" from, "+ Add Leads" always targets the campaign you just
+     saved/started in this browser tab (FT.lastCampaignId) — reload the page and save/start again
+     if you want to add more leads to an older Timely message later. */
+  var CAMPS_T=[];
+  var FT={ branchId:'', tplId:'', tag:'', lastCampaignId:'' };
+  function findCamp_(campaignId){
+    return (CAMPS.filter(function(x){ return x.campaignId===campaignId; })[0]) ||
+           (CAMPS_T.filter(function(x){ return x.campaignId===campaignId; })[0]);
+  }
+  function tmTargetDate_(days){
+    var d=new Date(); d.setDate(d.getDate()+(Number(days)||0)); return d;
+  }
 
   /* MIS, Operations Manager or Director/Admin can manage; everyone who can see this page (nav
      visibility is gated the same way in app.js) can view. Mirrors msgCanManage_ in 27_Messaging.gs
@@ -108,26 +128,17 @@
         '<div id="bm_extra"></div>'+
         '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px;padding-top:16px;border-top:1px solid var(--line);flex-wrap:wrap;gap:12px">'+
           '<div style="font-size:12.5px;color:var(--grey)" id="bm_autoNote">Scheduled for <b>02:00 AM</b> — auto-sends the next <b>250</b> leads daily until the queue is cleared.</div>'+
-          '<div style="display:flex;gap:10px"><button class="btn ghost" id="bm_saveDraft">Save as Draft</button><button class="btn" id="bm_start">Start Campaign</button></div>'+
-        '</div>'+
-      '</div>' : '')+
-      '<div class="card">'+
-        '<div class="toolbar" style="justify-content:space-between">'+
-          '<h3 style="margin:0">Campaign History</h3>'+
-          '<div class="tabs-mini" id="bm_tabs">'+
-            ['all','pending','sent','scheduled'].map(function(t){ return '<div class="tab-mini'+(t==='all'?' on':'')+'" data-tab="'+t+'">'+(t==='all'?'All':t.charAt(0).toUpperCase()+t.slice(1))+'</div>'; }).join('')+
+          '<div style="display:flex;gap:10px">'+
+            '<button class="btn ghost" id="bm_saveDraft">Save as Draft</button>'+
+            '<button class="btn ghost" id="bm_addLeadsBox">+ Add Leads</button>'+
+            '<button class="btn" id="bm_start">Start Campaign</button>'+
           '</div>'+
         '</div>'+
-        '<div class="table-wrap"><table><thead><tr><th>Code</th><th>Template</th><th>Branch</th><th>Tag</th><th>Time</th><th>Leads</th><th>Status</th><th>Date</th><th></th></tr></thead>'+
-        '<tbody id="bm_histBody"></tbody></table></div>'+
-        '<div id="bm_histEmpty" class="empty hidden">No campaigns yet.</div>'+
-      '</div>';
+      '</div>' : '');
 
     $('bm_export').onclick=exportHistory;
     var al=$('bm_addLeads'); if(al) al.onclick=function(){ openAddLeadsPicker(); };
-    v.querySelectorAll('#bm_tabs .tab-mini').forEach(function(t){
-      t.onclick=function(){ F.tab=t.getAttribute('data-tab'); v.querySelectorAll('#bm_tabs .tab-mini').forEach(function(x){x.classList.toggle('on',x===t);}); loadHistory(); };
-    });
+    var alb=$('bm_addLeadsBox'); if(alb) alb.onclick=function(){ openAddLeadsForSetup(); };
 
     if(canManage()){
       $('bm_branch').onchange=function(){ F.branchId=this.value; paintStats(); paintAutoNote(); };
@@ -210,24 +221,80 @@
     var fixedParams=[];
     var headerMediaUrl='';
 
-    var data={ branchId:branchId, tplId:F.tplId, tag:$('bm_tag').value||'', sendTime:$('bm_time').value||'02:00',
+    var tag=$('bm_tag').value||'', sendTime=$('bm_time').value||'02:00';
+    var data={ branchId:branchId, tplId:F.tplId, tag:tag, sendTime:sendTime,
                fixedParams:fixedParams, headerMediaUrl:headerMediaUrl, status:status };
     var btn=status==='scheduled'?$('bm_start'):$('bm_saveDraft'); btn.disabled=true;
     API.msgSaveCampaign(data).then(function(r){
       btn.disabled=false;
       if(!r.ok){ toast(r.error,true); return; }
       toast(status==='scheduled'?'Campaign started.':'Saved as draft.');
+      rememberSetupCampaign_(r.campaignId, branchId, t, tag);
       loadHistory();
     }).catch(function(){ btn.disabled=false; toast('Saving a campaign needs an internet connection.',true); });
   }
 
-  /* ============================================================ HISTORY */
+  /* Keeps the "+ Add Leads" button in the Campaign Setup box (and Save as Draft / Start Campaign
+     above it) pointed at the SAME campaign for as long as Branch/Template/Tag/Send Time in the
+     box haven't changed — so tapping any of the three more than once never creates a second,
+     duplicate campaign for one setup. Mirrors CAMPS_T.push in saveTimelyCampaign below, which
+     solves the exact same "just-created, not yet back from loadHistory()" problem. */
+  function rememberSetupCampaign_(campaignId, branchId, tpl, tag){
+    var br=((S.meta&&S.meta.branches)||[]).filter(function(b){ return String(b.BranchID)===String(branchId); })[0];
+    CAMPS = CAMPS.filter(function(x){ return x.campaignId!==campaignId; });
+    CAMPS.push({campaignId:campaignId, templateName:tpl.name, branchName:br?br.BranchName:branchId, tag:tag});
+    F.lastCampaignId = campaignId;
+    F.lastKey = branchId+'|'+tpl.tplId+'|'+tag+'|'+$('bm_time').value;
+  }
+
+  /* ============================================================ ADD LEADS — from the Campaign
+     Setup box itself. One tap: no "which campaign?" picker, no need to Save/Start first. It
+     silently saves (or reuses) a draft campaign for exactly what's configured above — Branch,
+     Template, Tag, Send Time — then opens the same upload pop-up openAddLeadsModal already uses
+     from Campaign History's own "+ Leads" button. The campaign stays a draft (so nothing sends
+     yet) unless "Start Campaign" is pressed — same rule as adding leads to any draft today.
+     The upload pop-up itself already chunks and retries (see openAddLeadsModal/parseCsv below),
+     so a file of 20,000+ contacts is not a special case here — it is just a bigger version of the
+     same upload every campaign already accepts. */
+  function openAddLeadsForSetup(){
+    var t=TPLMAP[F.tplId];
+    if(!t){ toast('Pick a template first.',true); return; }
+    var branchId=$('bm_branch').value;
+    if(!branchId){ toast('Pick a branch first.',true); return; }
+    if(tplNeedsMoreThanBasics_(t)){
+      toast('"'+t.name+'" needs more than Bulk Message Send can fill in (a '+(t.headerType&&t.headerType!=='none'?t.headerType+' header and/or ':'')+'extra template values). Pick a template that only uses {{1}} branch name and {{2}} lead name.', true);
+      return;
+    }
+    var tag=$('bm_tag').value||'', sendTime=$('bm_time').value||'02:00';
+    var key=branchId+'|'+F.tplId+'|'+tag+'|'+sendTime;
+    if(F.lastCampaignId && F.lastKey===key){
+      openAddLeadsModal(F.lastCampaignId, loadHistory);
+      return;
+    }
+    var btn=$('bm_addLeadsBox'); var was=btn.textContent; btn.disabled=true; btn.innerHTML='<span class="loader"></span> Preparing…';
+    var data={ branchId:branchId, tplId:F.tplId, tag:tag, sendTime:sendTime, fixedParams:[], headerMediaUrl:'', status:'draft' };
+    API.msgSaveCampaign(data).then(function(r){
+      btn.disabled=false; btn.textContent=was;
+      if(!r.ok){ toast(r.error,true); return; }
+      rememberSetupCampaign_(r.campaignId, branchId, t, tag);
+      loadHistory();
+      openAddLeadsModal(r.campaignId, loadHistory);
+    }).catch(function(){ btn.disabled=false; btn.textContent=was; toast('Needs an internet connection.',true); });
+  }
+
+  /* ============================================================ HISTORY
+     No table on this page any more (removed at your request) — loadHistory() still runs in the
+     background so CAMPS stays populated for Export History, the "+ Add Leads" header button's
+     campaign picker, the "+ Add Leads" box button above, and the admin "Delete sample data"
+     button (maybeShowDeleteSample). paintHistory() itself is now a no-op (its target elements no
+     longer exist), left in place only so nothing else here has to change shape. */
   function loadHistory(){
     var body=$('bm_histBody'); if(!body) return;
     API.msgListCampaigns({branchId:'', tplId:'', status:F.tab}).then(function(r){
       if(!r.ok){ toast(r.error||'Could not load campaign history.',true); return; }
       CAMPS=r.campaigns||[];
       paintHistory();
+      maybeShowDeleteSample();
     }).catch(function(){ toast('Campaign history needs an internet connection.',true); });
   }
   function paintHistory(){
@@ -299,14 +366,14 @@
       '<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" id="alp_go">Next</button>');
     $('alp_go').onclick=function(){ var id=$('alp_camp').value; closeModal(); openAddLeadsModal(id); };
   }
-  function openAddLeadsModal(campaignId){
-    var c=CAMPS.filter(function(x){ return x.campaignId===campaignId; })[0];
+  function openAddLeadsModal(campaignId, doneCb){
+    var c=findCamp_(campaignId);
     if(!c){ toast('Campaign not found — reload the page.',true); return; }
     var body=
       '<p style="font-size:12px;color:var(--muted);margin:0 0 14px">Adding to <b>'+esc(c.templateName)+'</b> · '+esc(c.branchName)+' · '+esc(c.tag||'All Tags')+' tag</p>'+
       '<label style="display:block;border:2px dashed var(--line);border-radius:12px;padding:24px 16px;text-align:center;background:#fafaf9;color:var(--grey);font-size:12.5px;cursor:pointer">'+
         '<div style="font-size:26px;margin-bottom:6px">⬆</div><div id="al_fname"><b>Drag &amp; drop Excel / CSV, or click to browse</b></div>'+
-        '<div style="font-size:11px;margin-top:4px">Columns: name, mobile, tag (optional) — processing takes about 2–3 minutes for big files</div>'+
+        '<div style="font-size:11px;margin-top:4px">Columns: name, mobile, tag (optional) — no size limit, a list of 20,000+ contacts is fine. Uploads in the background in small batches with automatic retry, so keep this tab open; a big file can take several minutes.</div>'+
         '<input type="file" id="al_file" accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden></label>'+
       '<div id="al_map"></div><div id="al_msg"></div>'+
       '<div style="display:flex;align-items:center;gap:10px;margin:14px 0;color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase">'+
@@ -390,7 +457,13 @@
     $('al_go').onclick=function(){
       var rows=(parsed?parsed.rows.slice():[]).concat(manualRows);
       if(!rows.length) return;
-      var CHUNK=150, chunks=[]; for(var i=0;i<rows.length;i+=CHUNK) chunks.push(rows.slice(i,i+CHUNK));
+      /* CHUNK stays comfortably under the server's MSG_REC_MAX_BATCH (200 rows/call, 27_Messaging.gs)
+         — 190 cuts the number of round trips for a very large file (20,000+ contacts is ~106 calls
+         instead of ~134 at the old 150) while leaving headroom. Sequential, not parallel, on
+         purpose: Apps Script writes to the same Msg_Recipients sheet from one call at a time, and
+         each failed chunk already retries on its own (see run()/btn.onclick below) without losing
+         the chunks that already succeeded. */
+      var CHUNK=190, chunks=[]; for(var i=0;i<rows.length;i+=CHUNK) chunks.push(rows.slice(i,i+CHUNK));
       var btn=$('al_go'), prog=$('al_prog'), file=$('al_file'); btn.disabled=true; file.disabled=true;
       var totals={added:0,duplicate:0,invalid:0}, sent=0;
       function paint(label){
@@ -415,7 +488,7 @@
           else {
             closeModal();
             toast(totals.added+' lead'+(totals.added===1?'':'s')+' added'+(totals.duplicate?(' · '+totals.duplicate+' already on this campaign'):'')+(totals.invalid?(' · '+totals.invalid+' invalid'):''));
-            loadHistory();
+            (doneCb||loadHistory)();
           }
         }, function(){ btn.disabled=false; file.disabled=false; toast('Connection dropped — '+sent+' of '+rows.length+' saved so far.',true); });
       }
@@ -495,8 +568,92 @@
     });
   }
 
+  /* ============================================================ TIMELY MESSAGE PAGE */
+  function renderTimelyMsg(){
+    var v=$('page-timelymsg'); if(!v) return;
+    v.innerHTML=
+      '<div class="page-head"><h1>Timely Message</h1>'+
+        '<div style="flex:1;font-size:12.5px;color:var(--grey)">Send one approved WhatsApp template to one or a few leads, on a day and time you pick.</div>'+
+      '</div>'+
+      (canManage()?
+      '<div class="card" style="padding:20px 22px">'+
+        '<h3 style="margin:0 0 3px">Campaign Setup</h3>'+
+        '<div style="font-size:12px;color:var(--muted);margin-bottom:16px">Choose the template and branch, when it should go out, then add who gets it.</div>'+
+        '<div class="grid2" style="grid-template-columns:repeat(5,1fr);gap:14px">'+
+          '<div class="field"><label>Branch</label><select id="tm_branch">'+branchOptsPick('')+'</select></div>'+
+          '<div class="field"><label>Template</label><select id="tm_tpl">'+tplOpts('')+'</select></div>'+
+          '<div class="field"><label>Tag</label><select id="tm_tag">'+tagOpts('',true)+'</select></div>'+
+          '<div class="field"><label>Send in (days)</label><input id="tm_days" type="number" min="0" step="1" value="0"></div>'+
+          '<div class="field"><label>Send Time</label><input id="tm_time" type="time" value="02:00"></div>'+
+        '</div>'+
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px;padding-top:16px;border-top:1px solid var(--line);flex-wrap:wrap;gap:12px">'+
+          '<div style="font-size:12.5px;color:var(--grey)" id="tm_autoNote">—</div>'+
+          '<div style="display:flex;gap:10px">'+
+            '<button class="btn ghost" id="tm_saveDraft">Save as Draft</button>'+
+            '<button class="btn" id="tm_start">Start</button>'+
+            '<button class="btn ghost" id="tm_addLeads" disabled title="Save or start above first">+ Add Leads</button>'+
+          '</div>'+
+        '</div>'+
+      '</div>' : '<div class="card" style="padding:20px 22px">You do not have access to send messages.</div>');
+
+    if(!canManage()) return;
+
+    $('tm_branch').onchange=function(){ FT.branchId=this.value; };
+    $('tm_tpl').onchange=function(){ FT.tplId=this.value; };
+    $('tm_tag').onchange=function(){ FT.tag=this.value; };
+    $('tm_days').oninput=paintTimelyNote;
+    $('tm_time').onchange=paintTimelyNote;
+    $('tm_saveDraft').onclick=function(){ saveTimelyCampaign('draft'); };
+    $('tm_start').onclick=function(){ saveTimelyCampaign('scheduled'); };
+    $('tm_addLeads').onclick=function(){ if(FT.lastCampaignId) openAddLeadsModal(FT.lastCampaignId, function(){}); };
+
+    ensureTemplates().then(function(){
+      $('tm_tpl').innerHTML=tplOpts('');
+      if(TPLS.length){ FT.tplId=TPLS[0].tplId; $('tm_tpl').value=FT.tplId; }
+      paintTimelyNote();
+    });
+  }
+
+  function paintTimelyNote(){
+    var note=$('tm_autoNote'); if(!note) return;
+    var days=Math.max(0, Math.round(Number($('tm_days') && $('tm_days').value)||0));
+    var time=($('tm_time')&&$('tm_time').value)||'02:00';
+    var dt=tmTargetDate_(days);
+    note.innerHTML='Will send on <b>'+esc(fmtDateShort(dt))+'</b> at <b>'+esc(fmtTime12(time))+'</b>'+(days===0?' — i.e. today, as soon as you add leads.':'.');
+  }
+
+  function saveTimelyCampaign(status){
+    var t=TPLMAP[FT.tplId];
+    if(!t){ toast('Pick a template first.',true); return; }
+    var branchId=$('tm_branch').value;
+    if(!branchId){ toast('Pick a branch.',true); return; }
+    /* Same restriction as Bulk Message Send above (see tplNeedsMoreThanBasics_) — Timely Message
+       can only fill {{1}} branch name and {{2}} lead name too, same reason: no media-header
+       upload or {{3}}..{{n}} fields exist on this page. */
+    if(tplNeedsMoreThanBasics_(t)){
+      toast('"'+t.name+'" needs more than Timely Message can fill in (a '+(t.headerType&&t.headerType!=='none'?t.headerType+' header and/or ':'')+'extra template values). Pick a template that only uses {{1}} branch name and {{2}} lead name.', true);
+      return;
+    }
+    var days=Math.max(0, Math.round(Number($('tm_days').value)||0));
+    var tag=$('tm_tag').value||'';
+    var data={ branchId:branchId, tplId:FT.tplId, tag:tag, sendTime:$('tm_time').value||'02:00',
+               kind:'timely', days:days, status:status };
+    var btn=status==='scheduled'?$('tm_start'):$('tm_saveDraft'); btn.disabled=true;
+    API.msgSaveCampaign(data).then(function(r){
+      btn.disabled=false;
+      if(!r.ok){ toast(r.error,true); return; }
+      FT.lastCampaignId=r.campaignId;
+      var br=((S.meta&&S.meta.branches)||[]).filter(function(b){ return String(b.BranchID)===String(branchId); })[0];
+      CAMPS_T=CAMPS_T.filter(function(x){ return x.campaignId!==r.campaignId; });
+      CAMPS_T.push({campaignId:r.campaignId, templateName:t.name, branchName:br?br.BranchName:branchId, tag:tag});
+      var ab=$('tm_addLeads'); if(ab){ ab.disabled=false; ab.title=''; }
+      toast((status==='scheduled'?'Scheduled — ':'Saved as draft — ')+'now click "+ Add Leads" to say who gets it.');
+    }).catch(function(){ btn.disabled=false; toast('Saving needs an internet connection.',true); });
+  }
+
   window.renderBulkMsg=renderBulkMsg;
-  /* exposed so app.js's Messaging nav-visibility block (and a future Timely Message module)
-     can reuse the same manage-permission rule without duplicating it */
+  window.renderTimelyMsg=renderTimelyMsg;
+  /* exposed so app.js's Messaging nav-visibility block can reuse the same manage-permission rule
+     without duplicating it — now covers both Messaging tabs */
   window.msgCanManageClient=canManage;
 })();

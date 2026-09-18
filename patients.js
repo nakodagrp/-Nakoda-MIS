@@ -645,7 +645,14 @@
   }
 
   /* ============================================================ SCREEN 2 — add / edit patient */
-  function openPatientForm(existing){
+  /* onSaved (optional): what to do instead of the plain list refresh once the save succeeds.
+     Used by the Patient file's own "✎ Edit" button below (pd_edit) so that saving a next-call-date
+     or tag change reopens the Patient file straight back to the same patient — its History list
+     is read fresh from the server on that reopen, so the new entry (see pcApiSave/pcNote_ in
+     Code_PatientCRM.gs) is visible immediately, not just after the caller happens to reopen the
+     file some other time. Every other caller (the row-level ✎ button, "+ Add patient") passes
+     nothing and keeps the original behaviour: close, refresh the list, done. */
+  function openPatientForm(existing, onSaved){
     ensureMeta().then(function(){
       var p=existing||{};
       var isNew=!p.patientId;
@@ -914,7 +921,7 @@
             closeModal();
             if(r.duplicate) toast(r.message||'That number is already on file.');
             else toast(r.offline?'Saved on device — will sync':(isNew?'Patient added':'Saved'));
-            load();
+            (onSaved||load)();
           } else {
             toast((r&&r.error)||'Could not save',true);
             btn.disabled=false; btn.textContent=isNew?'Save patient':'Save changes';
@@ -952,13 +959,18 @@
     });
     (r.notes||[]).forEach(function(x){
       if(x.kind==='call') return;                       /* already shown on the call itself */
+      /* v(new): 'nextcall' — every next-call/follow-up-date change (typed, exact-date, or set
+         automatically by a tag change) is now logged server-side (see pcApiSave's before.nextCallAt
+         check in Code_PatientCRM.gs) so it shows up here, in this History list, the moment it
+         happens — not just as the "Next call" banner above, which only ever shows the CURRENT
+         date and is silently overwritten by the next edit with no record left behind. */
       var t={ note:'Note', tag:'Tag changed', assign:'Reassigned',
-              card:'Membership card', sample:'Sample' }[x.kind] || 'Note';
-      events.push({ at:x.createdAt, kind:(x.kind==='card'?'card':'note'), by:x.empId, title:t, body:x.message||'' });
+              card:'Membership card', sample:'Sample', nextcall:'Next call date' }[x.kind] || 'Note';
+      events.push({ at:x.createdAt, kind:(x.kind==='card'?'card':(x.kind==='nextcall'?'nextcall':'note')), by:x.empId, title:t, body:x.message||'' });
     });
     events.sort(function(a,b){ return new Date(b.at||0) - new Date(a.at||0); });
 
-    var dot={ call:'#1a7f37', sample:'#BA7517', card:'#C9A227', note:'#185FA5' };
+    var dot={ call:'#1a7f37', sample:'#BA7517', card:'#C9A227', note:'#185FA5', nextcall:'#854F0B' };
 
     var head='<div style="display:flex;gap:11px;align-items:center">'+
         '<div style="width:42px;height:42px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;background:'+c[0]+';color:'+c[1]+'">'+esc(initials(p.name))+'</div>'+
@@ -975,9 +987,31 @@
 
     var banner = overdue
       ? '<div class="msg error" style="margin-top:12px">⚠ Follow-up was due '+esc(niceDate(p.nextCallAt))+'</div>'
-      : (p.nextCallAt ? '<div class="msg ok" style="margin-top:12px">Next call '+esc(niceDate(p.nextCallAt))+'</div>' : '');
+      : '';
 
-    var actions='<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:12px">'+
+    /* v(new2) — the Tag picker and the "type a gap" next-call box that used to live only inside
+       Edit (openPatientForm's #pf_tags / datePad('pf_next',...) above) are now built straight into
+       the Patient file itself, using the exact same tag-pill markup and the exact same datePad()/
+       wireDatePad()/nextFromTag() component Edit uses — not a lookalike. Before this, the Patient
+       file only showed the CURRENT tag as a flat badge and the current next-call date as one line
+       of text; changing either meant leaving this popup, opening Edit, and coming back. Now both
+       are editable right here, with the same live "↻ 3 months — the default for New" readout, and
+       a Save button (below) that appears only once something changed and calls the same
+       API.pcSave the full Edit form uses — so a tag/date-only change never needs the bigger form,
+       and closing back to this same reloaded Patient file (reopen()) shows the fresh History entry
+       immediately (see pcApiSave in Code_PatientCRM.gs). */
+    var tagsList=(META.tags||['Old data','New','Chronic','Healthy']);
+    var tagTiming=
+      '<div class="field full" style="margin-top:14px"><label>Tag</label><div id="pd_tags" style="display:flex;gap:6px;flex-wrap:wrap">'+
+        tagsList.map(function(t){
+          var on=(t===p.tag), m=TAGMETA[t]||TAGMETA['Old data'];
+          return '<div class="pf-tag" data-t="'+esc(t)+'" style="cursor:pointer;padding:5px 12px;border-radius:16px;font-size:12px;border:1px solid '+(on?m.pill:'#ecedf0')+';background:'+(on?m.pill:'#fff')+';color:'+(on?'#fff':'#666')+';font-weight:'+(on?'600':'400')+'">'+esc(t)+'</div>';
+        }).join('')+
+      '</div></div>'+
+      '<div class="field full" style="margin-top:10px"><label>Next call date</label>'+datePad('pd_next', p.nextCallAt, p.tag)+'</div>'+
+      '<div style="display:flex;justify-content:flex-end;margin-top:8px"><button class="btn sm" id="pd_saveTag" style="display:none">Save</button></div>';
+
+    var actions='<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:4px">'+
       (noCard?'<button class="btn ghost" id="pd_card" style="color:#8C6B1F;border-color:#DFC98D">◆ Issue card</button>':'')+
       (r.canCollect?'<button class="btn ghost" id="pd_samp">\u{1F9EA} Book sample</button>':'')+
       '<button class="btn ghost" id="pd_edit">✎ Edit</button>'+
@@ -1002,17 +1036,55 @@
       '<button class="btn sm" id="pd_noteAdd">Add</button></div>';
 
     openModal('Patient file',
-      head+banner+actions+
+      head+banner+tagTiming+actions+
       '<div class="section-label" style="margin-top:16px">History — '+events.length+' entr'+(events.length===1?'y':'ies')+'</div>'+
       timeline+addNote,
       '<button class="btn ghost" onclick="closeModal()">Close</button>');
 
     function reopen(){ load(); openPatient(p.patientId, after); }
 
+    /* ---- inline Tag + Next call date editor (see tagTiming above) ---- */
+    var chosenTag=p.tag;
+    function showSave(){ var b=$id('pd_saveTag'); if(b) b.style.display='inline-flex'; }
+    document.querySelectorAll('#pd_tags .pf-tag').forEach(function(el){
+      el.onclick=function(){
+        chosenTag=el.getAttribute('data-t');
+        document.querySelectorAll('#pd_tags .pf-tag').forEach(function(x){
+          var t=x.getAttribute('data-t'), on=(t===chosenTag), m=TAGMETA[t]||TAGMETA['Old data'];
+          x.style.borderColor=on?m.pill:'#ecedf0';
+          x.style.background=on?m.pill:'#fff';
+          x.style.color=on?'#fff':'#666';
+          x.style.fontWeight=on?'600':'400';
+        });
+        /* same rule pcApiSave applies server-side when a tag changes with no explicit date typed:
+           re-base the next-call date to the new tag's own default (nextFromTag), right in the box,
+           so what you see here is what gets saved rather than a stale date sitting under a new tag. */
+        var pad=$id('pd_next_pad'); if(pad) pad.setAttribute('data-tag', chosenTag);
+        var nx=nextFromTag(chosenTag, todayStr());
+        if(nx){ var inp=$id('pd_next'); if(inp) inp.value=nx; }
+        dpSync('pd_next');
+        showSave();
+      };
+    });
+    wireDatePad('pd_next', showSave);
+
+    var saveTagBtn=$id('pd_saveTag');
+    if(saveTagBtn) saveTagBtn.onclick=function(){
+      saveTagBtn.disabled=true; saveTagBtn.innerHTML='<span class="loader"></span>';
+      API.pcSave({ patientId:p.patientId, name:p.name, tag:chosenTag, nextCallAt:val('pd_next')||'' }).then(function(x){
+        if(x&&(x.ok||x.offline)) reopen();
+        else { toast((x&&x.error)||'Could not save',true); saveTagBtn.disabled=false; saveTagBtn.textContent='Save'; }
+      }, function(){ toast('Could not reach the server.',true); saveTagBtn.disabled=false; saveTagBtn.textContent='Save'; });
+    };
+
     var b;
     if((b=$id('pd_card'))) b.onclick=function(){ handOffCard(p.patientId, null, reopen); };
     if((b=$id('pd_samp'))) b.onclick=function(){ handOffSample(p, null, reopen); };
-    if((b=$id('pd_edit'))) b.onclick=function(){ closeModal(); openPatientForm(p); };
+    /* v(new): pass reopen as onSaved — saving from here (tag, next call date, anything) comes
+       straight back to this same Patient file, freshly re-fetched, so the new "Tag changed" /
+       "Next call date" History entry (see pcApiSave in Code_PatientCRM.gs) is on screen right
+       away instead of only after the next time someone happens to open this patient. */
+    if((b=$id('pd_edit'))) b.onclick=function(){ closeModal(); openPatientForm(p, reopen); };
 
     $id('pd_noteAdd').onclick=function(){
       var inp=$id('pd_note'), msg=(inp.value||'').trim();
