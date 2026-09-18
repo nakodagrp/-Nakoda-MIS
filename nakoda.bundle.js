@@ -4407,7 +4407,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
 (function(){
   var TPLS=[], TPLMAP={}, TPL_ERR='';
   var CAMPS=[];
-  var F={ branchId:'', tplId:'', tag:'', tab:'all', lastCampaignId:'', lastKey:'' };   /* current Campaign Setup (lastCampaignId/lastKey back the in-box "+ Add Leads" button below) */
+  var F={ branchId:'', tplId:'', tag:'', tab:'all', lastCampaignId:'', lastKey:'', fixedParams:[], headerMediaUrl:'' };   /* current Campaign Setup (lastCampaignId/lastKey back the in-box "+ Add Leads" button below; fixedParams/headerMediaUrl back the "needs a bit more" box — see paintExtraFields) */
 
   /* ============================================================ TIMELY MESSAGE (18 Sep)
      Second tab, same Campaign Setup + Add Leads pattern as Bulk Message Send above, minus a
@@ -4475,7 +4475,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
   function tplOpts(cur){
     if(!TPLS.length) return '<option value="">'+esc(TPL_ERR ? ('Error: '+TPL_ERR) : 'No active templates — add one on WhatsApp Templates')+'</option>';
     return TPLS.map(function(t){
-      var flag=tplNeedsMoreThanBasics_(t)?' — needs more than branch/name':'';
+      var flag=tplNeedsMoreThanBasics_(t)?' — needs a bit more (see below)':'';
       return '<option value="'+esc(t.tplId)+'"'+(String(t.tplId)===String(cur)?' selected':'')+'>'+esc(t.name)+esc(flag)+'</option>';
     }).join('');
   }
@@ -4503,6 +4503,10 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
   function renderBulkMsg(){
     var v=$('page-bulkmsg'); if(!v) return;
     v.innerHTML=
+      (canManage()?
+      '<div style="background:#fff8e6;border:1px solid #e8cf7a;border-radius:10px;padding:10px 14px;font-size:12.5px;color:#6b5410;margin-bottom:18px;font-weight:600">'+
+        '+ NEW — templates needing more than branch/lead name (like your Gold / Platinum / Diamond card variants, each with their own benefits text and card image) are no longer blocked. Fill their extra values once per campaign right here.'+
+      '</div>' : '')+
       '<div class="page-head"><h1>Bulk Message Send</h1>'+
         '<div style="flex:1;font-size:12.5px;color:var(--grey)">Send one approved WhatsApp template to a list of leads, for one branch and tag, on a daily schedule.</div>'+
         '<button class="btn ghost" id="bm_export">Export History</button>'+
@@ -4530,6 +4534,10 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
           '</div>'+
         '</div>'+
       '</div>' : '')+
+      (canManage()?
+      '<div style="background:#e6f4ea;border:1px solid #b9dfc3;border-radius:10px;padding:12px 16px;font-size:12.5px;color:#1a7f37;font-weight:600;margin-bottom:22px">'+
+        '✓ "Start Campaign" now works for membership_card / any Gold, Platinum, Diamond variant — no more "needs more than Bulk Message Send can fill in" error, as long as the image and the values above are filled in.'+
+      '</div>' : '')+
       '<div class="card">'+
         '<div class="toolbar" style="justify-content:space-between">'+
           '<h3 style="margin:0">Campaign History</h3>'+
@@ -4551,7 +4559,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
 
     if(canManage()){
       $('bm_branch').onchange=function(){ F.branchId=this.value; paintStats(); paintAutoNote(); };
-      $('bm_tpl').onchange=function(){ F.tplId=this.value; paintStats(); paintExtraFields(); };
+      $('bm_tpl').onchange=function(){ F.tplId=this.value; F.fixedParams=[]; F.headerMediaUrl=''; paintStats(); paintExtraFields(); };
       $('bm_tag').onchange=function(){ F.tag=this.value; };
       $('bm_time').onchange=paintAutoNote;
       $('bm_saveDraft').onclick=function(){ saveCampaign('draft'); };
@@ -4573,22 +4581,70 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     }).catch(function(e){ TPL_ERR = 'Could not reach the server (' + (e && e.message ? e.message : 'network error') + ').'; return TPLS; });
   }
 
-  /* Removed at your request (17 Sep) — Campaign Setup no longer shows the media-header upload
-     or the raw {{3}}..{{n}} value fields. saveCampaign() below now blocks Save/Start outright,
-     with a clear message, for any template that actually needs them — rather than silently
-     sending a broken message. Only templates needing exactly {{1}} branch / {{2}} lead name can
-     be used here now; anything else needs those extra values, which this page has no way to
-     collect any more. */
+  /* 18 Sep correction — brought back per your request: your Gold/Platinum/Diamond card
+     templates (and others like them) need more than {{1}} branch name / {{2}} lead name, so
+     this box collects exactly what's missing, filled in ONCE per campaign (same value/image for
+     every lead) rather than blocking Start Campaign outright. Reuses the same headerType/
+     paramCount/paramHints fields WhatsApp Templates already stores, and the same API.upload()
+     file uploader Branches/Employee Docs already use. */
+  function headerLabelMsg_(ht){ var m={image:'🖼 Image',document:'📄 Document',video:'🎬 Video'}; return m[ht]||'Media'; }
   function paintExtraFields(){
-    var box=$('bm_extra'); if(box) box.innerHTML='';
+    var box=$('bm_extra'); if(!box) return;
+    var t=TPLMAP[F.tplId];
+    if(!t){ box.innerHTML=''; return; }
+    var n=Math.max(0,Number(t.paramCount)||0), extraCount=Math.max(0,n-2);
+    var ht=String(t.headerType||'none'), needsMedia=['image','document','video'].indexOf(ht)>=0;
+    if(!extraCount && !needsMedia){ box.innerHTML=''; return; }
+    var hints=String(t.paramHints||'').split('\n');
+    function hintFor(i){ var h=String(hints[i]||'').replace(/^\s*\d+\s*[=:-]\s*/,'').trim(); return h||('Value for {{'+(i+1)+'}}'); }
+    var mediaHtml = needsMedia ?
+      '<div class="field full" style="margin-bottom:12px"><label>'+headerLabelMsg_(ht)+' for this campaign *</label>'+
+        '<div style="display:flex;gap:10px;align-items:center">'+
+          '<input type="file" id="bm_hdrFile" accept="'+(ht==='image'?'image/*':(ht==='video'?'video/*':'*/*'))+'" style="flex:1;border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-size:12.5px">'+
+          '<span id="bm_hdrStatus" style="font-size:11.5px;color:'+(F.headerMediaUrl?'#1a7f37':'var(--muted)')+';font-weight:'+(F.headerMediaUrl?'700':'400')+';white-space:nowrap">'+(F.headerMediaUrl?'Uploaded ✓':'One file, used for every message')+'</span>'+
+        '</div></div>' : '';
+    var paramsHtml='';
+    for(var i=2;i<n;i++){
+      paramsHtml+='<div class="field"><label>{{'+(i+1)+'}} '+esc(hintFor(i))+' *</label>'+
+        '<input class="bm_fp" data-i="'+(i-2)+'" value="'+esc(F.fixedParams[i-2]||'')+'" placeholder="Same for every lead in this campaign"></div>';
+    }
+    box.innerHTML='<div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">'+
+      '<div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px">This template needs a bit more — filled in once, used for every lead in this campaign</div>'+
+      mediaHtml+
+      (paramsHtml?('<div class="grid2" style="grid-template-columns:repeat(3,1fr);gap:12px">'+paramsHtml+'</div>'):'')+
+      '<div style="font-size:10.5px;color:#9aa0a6;margin-top:8px">Labels come from the "Variable hints" set for this template on WhatsApp Templates. Pick a different template and these boxes change to match.</div>'+
+    '</div>';
+    if(needsMedia){
+      $('bm_hdrFile').onchange=function(){
+        var f=this.files&&this.files[0]; if(!f) return;
+        var st=$('bm_hdrStatus'); st.style.color='var(--muted)'; st.style.fontWeight='400'; st.textContent='Uploading…';
+        API.upload(f,'MsgCampaigns',function(m){ st.textContent=m; }).then(function(r){
+          F.headerMediaUrl=r.url; st.style.color='#1a7f37'; st.style.fontWeight='700'; st.innerHTML='Uploaded ✓ <a href="'+esc(r.url)+'" target="_blank">view</a>';
+        }, function(e){ F.headerMediaUrl=''; st.textContent=(e&&e.message)||'Upload failed — try again.'; });
+      };
+    }
+    box.querySelectorAll('.bm_fp').forEach(function(inp){
+      inp.oninput=function(){ F.fixedParams[Number(this.getAttribute('data-i'))]=this.value; };
+    });
   }
-  /* True when this template needs anything beyond {{1}} branch name / {{2}} lead name — the only
-     two values Bulk Message Send can supply since the extra-fields UI was removed. */
+  /* True when this template needs anything beyond {{1}} branch name / {{2}} lead name — decides
+     whether paintExtraFields() shows its box, and whether saveCampaign()/openAddLeadsForSetup()
+     need to validate those extra values before allowing Save/Start/Add Leads. */
   function tplNeedsMoreThanBasics_(t){
     if(!t) return false;
     var extraCount=Math.max(0,(Number(t.paramCount)||0)-2);
     var needsMedia=['image','document','video'].indexOf(String(t.headerType))>=0;
     return !!(extraCount || needsMedia);
+  }
+  /* Checks the CURRENT Campaign Setup box's extra fields are actually filled in for template t —
+     returns an error string, or '' when everything needed is present. */
+  function extraFieldsMissing_(t){
+    if(!t) return '';
+    var ht=String(t.headerType||'none');
+    if(['image','document','video'].indexOf(ht)>=0 && !F.headerMediaUrl) return 'Upload the '+headerLabelMsg_(ht).replace(/^[^ ]+ /,'')+' for this campaign first.';
+    var n=Math.max(0,Number(t.paramCount)||0);
+    for(var i=2;i<n;i++){ if(!String(F.fixedParams[i-2]||'').trim()) return 'Fill in all the template\'s variables before continuing.'; }
+    return '';
   }
 
   function paintAutoNote(){
@@ -4620,15 +4676,15 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     if(!t){ toast('Pick a template first.',true); return; }
     var branchId=$('bm_branch').value;
     if(!branchId){ toast('Pick a branch — "All Branches" is for browsing history, not for starting a campaign.',true); return; }
-    /* Bulk Message Send can only fill {{1}} branch name and {{2}} lead name — the media-header
-       upload and {{3}}..{{n}} value fields were removed. Anything this template needs beyond
-       those two is blocked here, loudly, instead of sending a broken message. */
-    if(tplNeedsMoreThanBasics_(t)){
-      toast('"'+t.name+'" needs more than Bulk Message Send can fill in (a '+(t.headerType&&t.headerType!=='none'?t.headerType+' header and/or ':'')+'extra template values). Pick a template that only uses {{1}} branch name and {{2}} lead name, or ask for this template to be supported here.', true);
-      return;
-    }
-    var fixedParams=[];
-    var headerMediaUrl='';
+    /* Templates needing more than {{1}} branch name / {{2}} lead name (an image header, extra
+       {{3}}..{{n}} values — e.g. a Gold/Platinum/Diamond card variant) are supported via the
+       "needs a bit more" box painted by paintExtraFields(); just make sure it's actually filled
+       in before sending, instead of silently sending a broken message. */
+    var missing=extraFieldsMissing_(t);
+    if(missing){ toast(missing,true); return; }
+    var extraCount=Math.max(0,(Number(t.paramCount)||0)-2);
+    var fixedParams=F.fixedParams.slice(0,extraCount);
+    var headerMediaUrl=F.headerMediaUrl||'';
 
     var tag=$('bm_tag').value||'', sendTime=$('bm_time').value||'02:00';
     var data={ branchId:branchId, tplId:F.tplId, tag:tag, sendTime:sendTime,
@@ -4670,10 +4726,11 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     if(!t){ toast('Pick a template first.',true); return; }
     var branchId=$('bm_branch').value;
     if(!branchId){ toast('Pick a branch first.',true); return; }
-    if(tplNeedsMoreThanBasics_(t)){
-      toast('"'+t.name+'" needs more than Bulk Message Send can fill in (a '+(t.headerType&&t.headerType!=='none'?t.headerType+' header and/or ':'')+'extra template values). Pick a template that only uses {{1}} branch name and {{2}} lead name.', true);
-      return;
-    }
+    var missing=extraFieldsMissing_(t);
+    if(missing){ toast(missing,true); return; }
+    var extraCount=Math.max(0,(Number(t.paramCount)||0)-2);
+    var fixedParams=F.fixedParams.slice(0,extraCount);
+    var headerMediaUrl=F.headerMediaUrl||'';
     var tag=$('bm_tag').value||'', sendTime=$('bm_time').value||'02:00';
     var key=branchId+'|'+F.tplId+'|'+tag+'|'+sendTime;
     if(F.lastCampaignId && F.lastKey===key){
@@ -4681,7 +4738,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
       return;
     }
     var btn=$('bm_addLeadsBox'); var was=btn.textContent; btn.disabled=true; btn.innerHTML='<span class="loader"></span> Preparing…';
-    var data={ branchId:branchId, tplId:F.tplId, tag:tag, sendTime:sendTime, fixedParams:[], headerMediaUrl:'', status:'draft' };
+    var data={ branchId:branchId, tplId:F.tplId, tag:tag, sendTime:sendTime, fixedParams:fixedParams, headerMediaUrl:headerMediaUrl, status:'draft' };
     API.msgSaveCampaign(data).then(function(r){
       btn.disabled=false; btn.textContent=was;
       if(!r.ok){ toast(r.error,true); return; }
