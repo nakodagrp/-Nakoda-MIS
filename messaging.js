@@ -162,7 +162,7 @@
       (canManage()?
       '<div class="card" style="padding:20px 22px;margin-bottom:22px">'+
         '<h3 style="margin:0 0 3px">Campaign Setup</h3>'+
-        '<div style="font-size:12px;color:var(--muted);margin-bottom:16px">Choose who gets the message, which template, and when it should go out.</div>'+
+        '<div style="font-size:12px;color:var(--muted);margin-bottom:16px">Choose who gets the message, which template, and when it should go out. Membership Card templates (one per card design) aren\'t listed here — send those from Membership Cards ▸ Send Cards, since each is tied to a specific card number. Membership Benefits templates ARE listed and safe to use here — each recipient gets their own card picture and card type automatically, looked up by their phone number.</div>'+
         '<div class="grid2" id="bm_fields" style="grid-template-columns:repeat(5,1fr);gap:14px">'+
           '<div class="field"><label>Branch</label><select id="bm_branch">'+branchOptsPick('')+'</select></div>'+
           '<div class="field"><label>Template</label><select id="bm_tpl">'+tplOpts('')+'</select></div>'+
@@ -279,17 +279,43 @@
     var box=$('bm_extra'); if(!box) return;
     var t=TPLMAP[F.tplId];
     if(!t){ box.innerHTML=''; return; }
+    /* 19 Sep, round 2 — membership_benefits templates need NOTHING filled in here at all: every
+       {{n}} AND the header image are resolved per recipient, from their own membership card, at
+       send time (msgBuildPayload_/msgSchedulerTick_ in 27_Messaging.gs — same lookup Membership
+       Cards ▸ Benefits already trusts). Showing the usual "one file for everyone"/"same value for
+       every lead" boxes for one of these would be actively wrong, so this box just explains what
+       happens instead and stops there. */
+    if(String(t.purpose||'')==='membership_benefits'){
+      box.innerHTML='<div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">'+
+        '<div style="background:#eaf6ec;border:1px solid #b7e0bd;border-radius:9px;padding:9px 12px;font-size:11.5px;color:#1a7f37;font-weight:600">'+
+          '✓ Membership Benefits template — nothing to fill in here. Each recipient gets their OWN card picture and their OWN card type automatically, looked up from their membership card by phone number. A lead with no live card on file is skipped and reported as failed, never sent a wrong or blank card.'+
+        '</div>'+
+      '</div>';
+      return;
+    }
     var n=Math.max(0,Number(t.paramCount)||0), extraCount=Math.max(0,n-2);
     var ht=String(t.headerType||'none'), needsMedia=['image','document','video'].indexOf(ht)>=0;
     if(!extraCount && !needsMedia){ box.innerHTML=''; return; }
     var hints=String(t.paramHints||'').split('\n');
     function hintFor(i){ var h=String(hints[i]||'').replace(/^\s*\d+\s*[=:-]\s*/,'').trim(); return h||('Value for {{'+(i+1)+'}}'); }
     var branchId = F.branchId || ($('bm_branch')?$('bm_branch').value:'');
+    /* 19 Sep — this used to be a small 10.5px footer line at the bottom of the whole box (easy to
+       miss), which is exactly how one patient's own card picture ended up uploaded here and sent
+       to a whole list of OTHER patients instead — see MSG_EXCLUDED_TPL_PURPOSES_ in
+       27_Messaging.gs for the fix that keeps genuine card templates out of this page entirely.
+       This banner is the remaining safety net for any OTHER template that still carries an image/
+       document/video header (e.g. a generic promotional flyer) — now impossible to miss right
+       above the upload box itself, not buried in a caption underneath it. */
+    var mediaWarn = needsMedia ?
+      '<div style="background:#fff3d6;border:1px solid #e8c667;border-radius:9px;padding:9px 12px;font-size:11.5px;color:#7a5b00;font-weight:600;margin-bottom:10px">'+
+        '⚠ This file sends to EVERY lead in this campaign — the exact same one, for everyone. It is NOT looked up per patient. If you need each patient to receive their OWN picture (a membership card, for example), this is the wrong page — use Membership Cards ▸ Send Cards / Benefits instead.'+
+      '</div>' : '';
     var mediaHtml = needsMedia ?
+      mediaWarn+
       '<div class="field full" style="margin-bottom:12px"><label>'+headerLabelMsg_(ht)+' for this campaign *</label>'+
         '<div style="display:flex;gap:10px;align-items:center">'+
           '<input type="file" id="bm_hdrFile" accept="'+(ht==='image'?'image/*':(ht==='video'?'video/*':'*/*'))+'" style="flex:1;border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-size:12.5px">'+
-          '<span id="bm_hdrStatus" style="font-size:11.5px;color:'+(F.headerMediaUrl?'#1a7f37':'var(--muted)')+';font-weight:'+(F.headerMediaUrl?'700':'400')+';white-space:nowrap">'+(F.headerMediaUrl?'Uploaded ✓':'One file, used for every message — see the note below')+'</span>'+
+          '<span id="bm_hdrStatus" style="font-size:11.5px;color:'+(F.headerMediaUrl?'#1a7f37':'var(--muted)')+';font-weight:'+(F.headerMediaUrl?'700':'400')+';white-space:nowrap">'+(F.headerMediaUrl?'Uploaded ✓':'One file, used for every message — see the warning above')+'</span>'+
         '</div></div>' : '';
     var paramsHtml='', anyAuto=false;
     for(var i=2;i<n;i++){
@@ -333,6 +359,11 @@
      need to validate those extra values before allowing Save/Start/Add Leads. */
   function tplNeedsMoreThanBasics_(t){
     if(!t) return false;
+    /* membership_benefits: every value AND the header image come from the recipient's own card
+       at send time — nothing for a human to fill in once for the whole campaign, so this is
+       "basic enough" for both Bulk Message Send and Timely Message despite having an image
+       header and >2 params. See paintExtraFields() above and msgBuildPayload_ in 27_Messaging.gs. */
+    if(String(t.purpose||'')==='membership_benefits') return false;
     var extraCount=Math.max(0,(Number(t.paramCount)||0)-2);
     var needsMedia=['image','document','video'].indexOf(String(t.headerType))>=0;
     return !!(extraCount || needsMedia);
@@ -341,6 +372,7 @@
      returns an error string, or '' when everything needed is present. */
   function extraFieldsMissing_(t){
     if(!t) return '';
+    if(String(t.purpose||'')==='membership_benefits') return '';   /* nothing to validate here — resolved per recipient server-side */
     var ht=String(t.headerType||'none');
     if(['image','document','video'].indexOf(ht)>=0 && !F.headerMediaUrl) return 'Upload the '+headerLabelMsg_(ht).replace(/^[^ ]+ /,'')+' for this campaign first.';
     var n=Math.max(0,Number(t.paramCount)||0);
@@ -819,7 +851,7 @@
       (canManage()?
       '<div class="card" style="padding:20px 22px;margin-bottom:22px">'+
         '<h3 style="margin:0 0 3px">Campaign Setup</h3>'+
-        '<div style="font-size:12px;color:var(--muted);margin-bottom:16px">Choose who gets it and which template — the only difference from Bulk Message Send is WHEN it goes out.</div>'+
+        '<div style="font-size:12px;color:var(--muted);margin-bottom:16px">Choose who gets it and which template — the only difference from Bulk Message Send is WHEN it goes out. Membership Card templates (one per card design) aren\'t listed here — send those from Membership Cards ▸ Send Cards, since each is tied to a specific card number. Membership Benefits templates ARE listed and safe to use here — each recipient gets their own card picture and card type automatically, looked up by their phone number.</div>'+
         '<div class="grid2" id="tm_fields" style="grid-template-columns:repeat(4,1fr);gap:14px">'+
           '<div class="field"><label>Branch</label><select id="tm_branch">'+branchOptsPick('')+'</select></div>'+
           '<div class="field"><label>Template</label><select id="tm_tpl">'+tplOpts('')+'</select></div>'+

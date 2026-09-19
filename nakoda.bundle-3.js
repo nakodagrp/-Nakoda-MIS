@@ -1650,7 +1650,10 @@ function initInstall(){
    someone their app is stale, which matters a lot here: staff who assumed the mismatch banner was just
    always-on noise had no reliable signal to go tap "Check update" after a real deploy. Bump this to
    match sw.js's CACHE_VERSION on every deploy that changes sw.js — the two must always agree. */
-var APP_BUILD='v401';   /* v399: SYNCED TO sw.js's CACHE_VERSION — this had drifted to v349 while
+var APP_BUILD='v402';   /* v402: SYNCED TO sw.js's CACHE_VERSION — see that file's v402 note (Bulk
+   Message Send / Timely Message can now use "membership_benefits" templates safely, per-recipient
+   card lookup). app.js itself only changed by this one version-number line. */
+/* v399 (superseded by v402 above, kept for history): SYNCED TO sw.js's CACHE_VERSION — this had drifted to v349 while
    CACHE_VERSION moved on to v398 over many deploys since (exactly the drift the v338/v345 notes
    below already warned about), which meant the "⋯ More ▸ Check update" self-check has been
    showing "⚠ mismatch" for a long time regardless of whether a deploy actually landed — not a
@@ -2849,7 +2852,6 @@ function openModal(title, bodyHtml, footHtml){
   document.body.classList.add('modal-open');
 }
 function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remove('modal-open'); }
-
 
 /* ==== branches.js ========================================================= */
 /* Nakoda MIS — Branches management (loads after app.js; reuses its globals) */
@@ -4582,7 +4584,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
       (canManage()?
       '<div class="card" style="padding:20px 22px;margin-bottom:22px">'+
         '<h3 style="margin:0 0 3px">Campaign Setup</h3>'+
-        '<div style="font-size:12px;color:var(--muted);margin-bottom:16px">Choose who gets the message, which template, and when it should go out. Membership-card templates aren\'t listed here — send those from Membership Cards ▸ Send Cards / Benefits, which sends each patient their own card automatically.</div>'+
+        '<div style="font-size:12px;color:var(--muted);margin-bottom:16px">Choose who gets the message, which template, and when it should go out. Membership Card templates (one per card design) aren\'t listed here — send those from Membership Cards ▸ Send Cards, since each is tied to a specific card number. Membership Benefits templates ARE listed and safe to use here — each recipient gets their own card picture and card type automatically, looked up by their phone number.</div>'+
         '<div class="grid2" id="bm_fields" style="grid-template-columns:repeat(5,1fr);gap:14px">'+
           '<div class="field"><label>Branch</label><select id="bm_branch">'+branchOptsPick('')+'</select></div>'+
           '<div class="field"><label>Template</label><select id="bm_tpl">'+tplOpts('')+'</select></div>'+
@@ -4699,6 +4701,20 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     var box=$('bm_extra'); if(!box) return;
     var t=TPLMAP[F.tplId];
     if(!t){ box.innerHTML=''; return; }
+    /* 19 Sep, round 2 — membership_benefits templates need NOTHING filled in here at all: every
+       {{n}} AND the header image are resolved per recipient, from their own membership card, at
+       send time (msgBuildPayload_/msgSchedulerTick_ in 27_Messaging.gs — same lookup Membership
+       Cards ▸ Benefits already trusts). Showing the usual "one file for everyone"/"same value for
+       every lead" boxes for one of these would be actively wrong, so this box just explains what
+       happens instead and stops there. */
+    if(String(t.purpose||'')==='membership_benefits'){
+      box.innerHTML='<div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">'+
+        '<div style="background:#eaf6ec;border:1px solid #b7e0bd;border-radius:9px;padding:9px 12px;font-size:11.5px;color:#1a7f37;font-weight:600">'+
+          '✓ Membership Benefits template — nothing to fill in here. Each recipient gets their OWN card picture and their OWN card type automatically, looked up from their membership card by phone number. A lead with no live card on file is skipped and reported as failed, never sent a wrong or blank card.'+
+        '</div>'+
+      '</div>';
+      return;
+    }
     var n=Math.max(0,Number(t.paramCount)||0), extraCount=Math.max(0,n-2);
     var ht=String(t.headerType||'none'), needsMedia=['image','document','video'].indexOf(ht)>=0;
     if(!extraCount && !needsMedia){ box.innerHTML=''; return; }
@@ -4765,6 +4781,11 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
      need to validate those extra values before allowing Save/Start/Add Leads. */
   function tplNeedsMoreThanBasics_(t){
     if(!t) return false;
+    /* membership_benefits: every value AND the header image come from the recipient's own card
+       at send time — nothing for a human to fill in once for the whole campaign, so this is
+       "basic enough" for both Bulk Message Send and Timely Message despite having an image
+       header and >2 params. See paintExtraFields() above and msgBuildPayload_ in 27_Messaging.gs. */
+    if(String(t.purpose||'')==='membership_benefits') return false;
     var extraCount=Math.max(0,(Number(t.paramCount)||0)-2);
     var needsMedia=['image','document','video'].indexOf(String(t.headerType))>=0;
     return !!(extraCount || needsMedia);
@@ -4773,6 +4794,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
      returns an error string, or '' when everything needed is present. */
   function extraFieldsMissing_(t){
     if(!t) return '';
+    if(String(t.purpose||'')==='membership_benefits') return '';   /* nothing to validate here — resolved per recipient server-side */
     var ht=String(t.headerType||'none');
     if(['image','document','video'].indexOf(ht)>=0 && !F.headerMediaUrl) return 'Upload the '+headerLabelMsg_(ht).replace(/^[^ ]+ /,'')+' for this campaign first.';
     var n=Math.max(0,Number(t.paramCount)||0);
@@ -5251,7 +5273,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
       (canManage()?
       '<div class="card" style="padding:20px 22px;margin-bottom:22px">'+
         '<h3 style="margin:0 0 3px">Campaign Setup</h3>'+
-        '<div style="font-size:12px;color:var(--muted);margin-bottom:16px">Choose who gets it and which template — the only difference from Bulk Message Send is WHEN it goes out. Membership-card templates aren\'t listed here — send those from Membership Cards ▸ Send Cards / Benefits, which sends each patient their own card automatically.</div>'+
+        '<div style="font-size:12px;color:var(--muted);margin-bottom:16px">Choose who gets it and which template — the only difference from Bulk Message Send is WHEN it goes out. Membership Card templates (one per card design) aren\'t listed here — send those from Membership Cards ▸ Send Cards, since each is tied to a specific card number. Membership Benefits templates ARE listed and safe to use here — each recipient gets their own card picture and card type automatically, looked up by their phone number.</div>'+
         '<div class="grid2" id="tm_fields" style="grid-template-columns:repeat(4,1fr);gap:14px">'+
           '<div class="field"><label>Branch</label><select id="tm_branch">'+branchOptsPick('')+'</select></div>'+
           '<div class="field"><label>Template</label><select id="tm_tpl">'+tplOpts('')+'</select></div>'+
@@ -5502,7 +5524,6 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
      without duplicating it — now covers both Messaging tabs */
   window.msgCanManageClient=canManage;
 })();
-
 
 /* ==== cardadmin.js ======================================================== */
 /* Nakoda MIS — Card pricing + Card Status (loads after membership.js; reuses globals) */

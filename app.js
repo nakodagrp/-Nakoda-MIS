@@ -4,6 +4,26 @@ var S={ user:null, perms:null, meta:null, employees:[] };
 function $(id){ return document.getElementById(id); }
 function el(h){ var d=document.createElement('div'); d.innerHTML=h.trim(); return d.firstChild; }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+/* v-rowaccent: deterministic soft-pastel accent for a list/table row, keyed off any string
+   (card type, branch name, ...). Same input always gets the same colour, so a given type/branch
+   reads consistently wherever it shows up. Used for row wash, left border and initials avatar. */
+var ROW_ACCENTS=[
+  {bg:'#f2effb',col:'#7c6fd6'}, // lavender
+  {bg:'#fff3e6',col:'#c9820f'}, // peach
+  {bg:'#eaf5fb',col:'#2f8fc0'}, // sky
+  {bg:'#e9f9f3',col:'#0f9d78'}, // mint
+  {bg:'#fdeef4',col:'#c2255c'}  // rose
+];
+function rowAccent(seed){
+  var s=String(seed||''), h=0;
+  for(var i=0;i<s.length;i++){ h=(h*31+s.charCodeAt(i))|0; }
+  return ROW_ACCENTS[Math.abs(h)%ROW_ACCENTS.length];
+}
+function rowInitials(name){
+  var parts=String(name||'').trim().split(/\s+/).filter(Boolean);
+  if(!parts.length) return '?';
+  return (parts[0][0]+(parts[1]?parts[1][0]:'')).toUpperCase();
+}
 function toast(m,err){ var t=$('toast'); t.textContent=m; t.className='show'+(err?' err':''); setTimeout(function(){t.className='';},2800); }
 var _splashStart=Date.now(), _splashDone=false;
 function show(id){
@@ -141,7 +161,19 @@ function initInstall(){
    someone their app is stale, which matters a lot here: staff who assumed the mismatch banner was just
    always-on noise had no reliable signal to go tap "Check update" after a real deploy. Bump this to
    match sw.js's CACHE_VERSION on every deploy that changes sw.js — the two must always agree. */
-var APP_BUILD='v349';   /* v349: Patient CRM round 3. Pending card now decides who holds a membership card by looking their
+var APP_BUILD='v402';   /* v402: SYNCED TO sw.js's CACHE_VERSION — see that file's v402 note (Bulk
+   Message Send / Timely Message can now use "membership_benefits" templates safely, per-recipient
+   card lookup). app.js itself only changed by this one version-number line. */
+/* v399 (superseded by v402 above, kept for history): SYNCED TO sw.js's CACHE_VERSION — this had drifted to v349 while
+   CACHE_VERSION moved on to v398 over many deploys since (exactly the drift the v338/v345 notes
+   below already warned about), which meant the "⋯ More ▸ Check update" self-check has been
+   showing "⚠ mismatch" for a long time regardless of whether a deploy actually landed — not a
+   useful signal any more. Carries: TIMELY MESSAGE rebuilt for real (19 Sep) — see sw.js's v399
+   note for the full description; app.js itself only changed by this one version-number line. If
+   "⋯ More ▸ Check update" still shows an app version OTHER than v399 after uploading, the upload
+   to GitHub Pages did not include this index.html/nakoda.bundle.js, or the browser/PWA is still
+   serving an old cached copy — either way, that is the very check for "did my deploy land".
+   (previously v349: Patient CRM round 3. Pending card now decides who holds a membership card by looking their
    MOBILE NUMBER up in the card sheet instead of trusting a column on the patient row, so counter-issued cards and a relative's
    card on the same family number finally count. The next-call-date field became a box you type the GAP into — 3m, 2w, 7,
    25/11 — with the real date spelled out beside it and a warning when that day is already overloaded; no date picker opens
@@ -176,6 +208,15 @@ function paintBuildStamp(){
           :' <span style="color:#b23b3b">⚠ mismatch — tap Check update</span>');
 }
 window.paintBuildStamp=paintBuildStamp;
+/* 19 Sep — #buildStamp now also lives in the desktop topbar (index.html), always visible, not
+   just inside the mobile-only "⋯ More" drawer — paint it once right away (it was previously only
+   painted when the drawer opened, which desktop users can never trigger) and wire the matching
+   "Check update" button next to it straight to the same forceUpdate() the drawer's button uses. */
+paintBuildStamp();
+try{
+  var _topUpd=document.getElementById('topCheckUpdateBtn');
+  if(_topUpd) _topUpd.addEventListener('click', forceUpdate);
+}catch(e){}
 
 function bindStatus(){
   var chipEl=document.getElementById('syncChip');
@@ -344,6 +385,13 @@ function applyPerms(){
   document.querySelectorAll('[data-page="employees"]').forEach(function(n){ n.classList.toggle('hidden',!canList); });
   document.querySelectorAll('[data-page="branches"]').forEach(function(n){ n.classList.toggle('hidden',!S.perms.canManageAll); });
   document.querySelectorAll('[data-page="watemplates"]').forEach(function(n){ n.classList.toggle('hidden',!S.perms.canManageAll); });
+  /* v(new) — Messaging nav: MIS/Operations Manager/Director/Admin manage campaigns; a
+     view-only manager (canViewAll) or a branch-scoped manager can see the page too — the
+     server (msgCanView_/msgCanManage_ in 27_Messaging.gs) enforces this independently, this
+     only decides which buttons are drawn (see HANDOVER.txt: "a hidden button is not a control"). */
+  var canMsg=S.perms&&(S.perms.canManageAll||S.perms.canViewAll||S.perms.level==='BRANCH_MGR'||S.perms.level==='BRANCH_VIEW'||(S.user&&S.user.Role==='Operations Manager'));
+  document.querySelectorAll('[data-page="bulkmsg"]').forEach(function(n){ n.classList.toggle('hidden',!canMsg); });
+  document.querySelectorAll('[data-page="timelymsg"]').forEach(function(n){ n.classList.toggle('hidden',!canMsg); });
   document.querySelectorAll('[data-page="cards"]').forEach(function(n){ n.classList.remove('hidden'); });
   document.querySelectorAll('[data-page="cardstatus"]').forEach(function(n){ n.classList.remove('hidden'); });
   $('addEmpBtn').classList.toggle('hidden', !S.perms.canCreate);
@@ -415,7 +463,7 @@ var currentPage='dashboard';
 function go(page){
   currentPage=page;
   document.querySelectorAll('.nav-item').forEach(function(n){ n.classList.toggle('active', n.getAttribute('data-page')===page); });
-  ['dashboard','tasks','calendar','attendance','leave','field','policy','training','assets','fixedassets','inventory','payreq','payroll','accounts','recurring','taskmon','employees','profile','branches','watemplates','cards','cardstatus','suggest','mdinbox','ops','patients','crmperf'].forEach(function(p){ var el=$('page-'+p); if(el) el.classList.toggle('hidden',p!==page); });
+  ['dashboard','tasks','calendar','attendance','leave','field','policy','training','assets','fixedassets','inventory','payreq','payroll','accounts','recurring','taskmon','employees','profile','branches','watemplates','bulkmsg','timelymsg','cards','cardstatus','suggest','mdinbox','ops','patients','crmperf'].forEach(function(p){ var el=$('page-'+p); if(el) el.classList.toggle('hidden',p!==page); });
   if(page==='dashboard') loadDashboard();
   if(page==='tasks' && window.renderMyTasks) window.renderMyTasks();
   if(page==='calendar' && window.renderCalendar) window.renderCalendar();
@@ -442,6 +490,9 @@ function go(page){
   if(page==='profile') loadProfile();
   if(page==='branches' && window.renderBranches) window.renderBranches();
   if(page==='watemplates' && window.renderWaTemplates) window.renderWaTemplates();
+  /* v(new) — Messaging: Bulk Message Send + Timely Message (18 Sep). */
+  if(page==='bulkmsg' && window.renderBulkMsg) window.renderBulkMsg();
+  if(page==='timelymsg' && window.renderTimelyMsg) window.renderTimelyMsg();
   if(page==='cards' && window.renderMembershipCards) window.renderMembershipCards();
   if(page==='cardstatus' && window.renderCardStatus) window.renderCardStatus();
   highlightBottomNav();
