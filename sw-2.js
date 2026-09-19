@@ -4,7 +4,7 @@
  *  Bump CACHE_VERSION whenever you publish changes — users then
  *  see the "update available" banner.
  * ============================================================ */
-var CACHE_VERSION = 'nakoda-mis-v395';  /* v349: PATIENT CRM ROUND 3 — three things. (1) PENDING CARD IS NO LONGER A LIE.
+var CACHE_VERSION = 'nakoda-mis-v399';  /* v399: TIMELY MESSAGE rebuilt for real (19 Sep) -- KPI tiles, calendar-exact "Send After" chips (1 Day...1 Year or a custom date, computed with JS Date.setMonth() so 3 months is always exactly 3 months, not ~90 days), and its own Campaign History table with View/+Leads/Cancel -- same shape as Bulk Message Send, sharing its daily cap. Also: opening "View" on any campaign now refreshes BOTH tabs' history+KPIs, not just the one you opened it from; Cancel/Delete on either tab now updates both tabs' lists immediately. Backend: msgCampaignStats now takes a kind filter so Bulk and Timely KPI tiles never mix their totals (see 27_Messaging.gs + 03_Router-1.gs -- needs a paste+redeploy). */  /* v349: PATIENT CRM ROUND 3 — three things. (1) PENDING CARD IS NO LONGER A LIE.
    It decided who holds a membership card from one column on the patient row, and that column is only written when a card is
    issued through the CRM — so counter-issued cards, imported cards and a relative's card on the same family mobile number all
    read as NO CARD forever. It now looks the patient's number up in Membership_Cards and counts any LIVE card (active, not
