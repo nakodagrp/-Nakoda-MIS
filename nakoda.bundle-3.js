@@ -1650,7 +1650,7 @@ function initInstall(){
    someone their app is stale, which matters a lot here: staff who assumed the mismatch banner was just
    always-on noise had no reliable signal to go tap "Check update" after a real deploy. Bump this to
    match sw.js's CACHE_VERSION on every deploy that changes sw.js — the two must always agree. */
-var APP_BUILD='v400';   /* v399: SYNCED TO sw.js's CACHE_VERSION — this had drifted to v349 while
+var APP_BUILD='v401';   /* v399: SYNCED TO sw.js's CACHE_VERSION — this had drifted to v349 while
    CACHE_VERSION moved on to v398 over many deploys since (exactly the drift the v338/v345 notes
    below already warned about), which meant the "⋯ More ▸ Check update" self-check has been
    showing "⚠ mismatch" for a long time regardless of whether a deploy actually landed — not a
@@ -1694,6 +1694,15 @@ function paintBuildStamp(){
           :' <span style="color:#b23b3b">⚠ mismatch — tap Check update</span>');
 }
 window.paintBuildStamp=paintBuildStamp;
+/* 19 Sep — #buildStamp now also lives in the desktop topbar (index.html), always visible, not
+   just inside the mobile-only "⋯ More" drawer — paint it once right away (it was previously only
+   painted when the drawer opened, which desktop users can never trigger) and wire the matching
+   "Check update" button next to it straight to the same forceUpdate() the drawer's button uses. */
+paintBuildStamp();
+try{
+  var _topUpd=document.getElementById('topCheckUpdateBtn');
+  if(_topUpd) _topUpd.addEventListener('click', forceUpdate);
+}catch(e){}
 
 function bindStatus(){
   var chipEl=document.getElementById('syncChip');
