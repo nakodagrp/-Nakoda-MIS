@@ -1650,7 +1650,7 @@ function initInstall(){
    someone their app is stale, which matters a lot here: staff who assumed the mismatch banner was just
    always-on noise had no reliable signal to go tap "Check update" after a real deploy. Bump this to
    match sw.js's CACHE_VERSION on every deploy that changes sw.js — the two must always agree. */
-var APP_BUILD='v403';   /* v403: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send round 3: every active template is listed; card templates (Gold / Platinum / Platinum+ / Diamond / membership_card / Benefits) are filled per recipient from that person's OWN card; see sw.js's v403 note. app.js itself only changed by this one version-number line. */
+var APP_BUILD='v404';   /* v404: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: a Delete button on Completed/Failed campaigns (was Cancel only while active); see sw.js's v404 note. app.js itself only changed by this version-number line. */  /* v403: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send round 3: every active template is listed; card templates (Gold / Platinum / Platinum+ / Diamond / membership_card / Benefits) are filled per recipient from that person's OWN card; see sw.js's v403 note. app.js itself only changed by this one version-number line. */
 /* v402 (superseded by v403): SYNCED TO sw.js's CACHE_VERSION — see that file's v402 note (Bulk
    Message Send / Timely Message can now use "membership_benefits" templates safely, per-recipient
    card lookup). app.js itself only changed by this one version-number line. */
@@ -4996,7 +4996,10 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
        that leftover/legacy Cancelled entries can be wiped too — same handler, same confirm, same
        hard delete. Once the new backend is live, a fresh Cancel click removes the row immediately,
        so this branch only matters for cleaning up rows created before that point. */
-    else if(s==='cancelled') html+=' <button class="btn ghost sm danger" data-delete="'+esc(c.campaignId)+'" data-code="'+esc(c.code)+'">Delete</button>';
+    /* 19 Sep, round 4 — a 'completed' (or 'failed') row had NO button at all, so a campaign that
+       showed "Completed" while thousands of leads were still pending (see apiMsgAddRecipients in
+       27_Messaging.gs) could not be removed. It gets the same Delete button now. */
+    else if(s==='cancelled'||s==='completed'||s==='failed') html+=' <button class="btn ghost sm danger" data-delete="'+esc(c.campaignId)+'" data-code="'+esc(c.code)+'">Delete</button>';
     return html;
   }
   /* 19 Sep — Cancel now means what it says nowhere near loosely: it hard-deletes the campaign row
@@ -5008,7 +5011,15 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
      server on every paintStats() call, so this is all it takes for them to stop counting the
      deleted campaign's leads. */
   function deleteCampaign_(campaignId, code){
-    if(!confirm('Delete campaign '+(code||'')+' for good?\n\nThis removes it AND every lead on it from the database. It cannot be undone.')) return;
+    /* 19 Sep, round 4 — say what is about to be lost. Sent / not-yet-sent come from the row already
+       on screen (CAMPS = Bulk Message Send, CAMPS_T = Timely Message). */
+    var row=null; (CAMPS||[]).concat(CAMPS_T||[]).some(function(x){ if(x.campaignId===campaignId){ row=x; return true; } return false; });
+    var counts='';
+    if(row){
+      var rs=Number(row.sent)||0, rf=Number(row.failed)||0, rt=Number(row.total)||0, left=Math.max(0, rt-rs-rf);
+      counts='Already sent: '+rs+(rf?('   ·   Failed: '+rf):'')+'\nNot sent yet: '+left+(left?'  (these will NEVER be sent)':'')+'\n\n';
+    }
+    if(!confirm('Delete campaign '+(code||'')+' for good?\n\n'+counts+'This removes it AND every lead on it from the database. It cannot be undone.')) return;
     API.msgDeleteCampaign(campaignId).then(function(r){
       if(!r.ok){ toast(r.error,true); return; }
       toast('Campaign deleted'+(r.removedRecipients?(' — '+r.removedRecipients+' lead'+(r.removedRecipients===1?'':'s')+' removed with it'):'')+'.');
