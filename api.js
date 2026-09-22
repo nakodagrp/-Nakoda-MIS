@@ -63,7 +63,7 @@
     /* Messaging — Bulk Message Send. messaging.js has no offline handling (unlike createEmployee
        etc, which self-queue), so these five all join NOQUEUE below too — same treatment as
        saveWaTemplate just above. */
-    msgSaveCampaign:1,msgSetCampaignStatus:1,msgAddRecipients:1,msgDeleteRecipient:1,msgDeleteSampleData:1,msgDeleteCampaign:1,
+    msgSaveCampaign:1,msgSetCampaignStatus:1,msgAddRecipients:1,msgDeleteRecipient:1,msgDeleteSampleData:1,msgDeleteCampaign:1,msgCardsPlan:1,msgCardsCreate:1,msgRetryFailed:1,
     /* v309 — operations. Both queue: a technician records a sample with no signal and it syncs
        later, and a hand delivery can be recorded the same way. saveSample carries a clientId the
        device minted first, so a replay updates its own row instead of creating a second sample. */
@@ -93,7 +93,7 @@
      here. Until that exists, this is the honest setting. */
   var NOQUEUE={pcImport:1,login:1,validate:1,logout:1,changePassword:1,resetPassword:1,checkIn:1,checkOut:1,runPayroll:1,approvePayroll:1,confirmAbsent:1,uploadFile:1,importOldCards:1,submitQuiz:1,waTest:1,waSendCard:1,waCardMedia:1,waBulkSend:1,waBenefitsSend:1,saveWaTemplate:1,waTestTemplate:1,saveOrder:1,saveLabVisit:1,
     opsMessagePatient:1,opsMessagePhlebotomist:1,opsMessageFeedback:1,
-    msgSaveCampaign:1,msgSetCampaignStatus:1,msgAddRecipients:1,msgDeleteRecipient:1,msgDeleteSampleData:1,msgDeleteCampaign:1};   /* v319: a chair is exclusive too. v350/v353: a WhatsApp send has nothing useful to replay offline. v(new): waBenefitsSend joins for the same reason as waBulkSend. Messaging joins for the same reason as saveWaTemplate — no offline UI built for it. msgDeleteCampaign (19 Sep) is a hard, irreversible delete — the last thing it should ever do is sit in an offline outbox and fire again later. */
+    msgSaveCampaign:1,msgSetCampaignStatus:1,msgAddRecipients:1,msgDeleteRecipient:1,msgDeleteSampleData:1,msgDeleteCampaign:1,msgCardsPlan:1,msgCardsCreate:1,msgRetryFailed:1};   /* v319: a chair is exclusive too. v350/v353: a WhatsApp send has nothing useful to replay offline. v(new): waBenefitsSend joins for the same reason as waBulkSend. Messaging joins for the same reason as saveWaTemplate — no offline UI built for it. msgDeleteCampaign (19 Sep) is a hard, irreversible delete — the last thing it should ever do is sit in an offline outbox and fire again later. msgRetryFailed (22 Sep) takes the scheduler's script lock and flips real rows to 'pending' — replaying it later from an offline outbox could resend the same batch twice. */
   /* ---------------- ATTACHMENTS ----------------------------------------------------
      A phone photo of a report is 4-8 MB. Sent as base64 it grows by a third, so ~10 MB was
      going up a branch connection against a hard 60-second abort — the request was killed
@@ -306,6 +306,17 @@
        flipping status to 'cancelled'. Wipes the campaign row AND every one of its recipient rows
        server-side — see apiMsgDeleteCampaign in 27_Messaging.gs. */
     msgDeleteCampaign:function(campaignId){ return call('msgDeleteCampaign',{token:getToken(),campaignId:campaignId}); },
+    /* 21 Sep — Bulk Message Send with nakoda_gold_card / nakoda_platinum_card_7: make the missing membership
+       cards from the Excel (28_CardImport.gs). Plan = dry run, Create = writes. Both are online-only (WRITES +
+       NOQUEUE above): a card must never be created twice by an outbox replay. msgCardDelivery is a plain read —
+       the small "Template sent" pill on the Membership Cards rows. */
+    msgCardsPlan:function(data){ return call('msgCardsPlan',{token:getToken(),data:data}, 60000); },
+    msgCardsCreate:function(data){ return call('msgCardsCreate',{token:getToken(),data:data}, 120000); },
+    msgCardDelivery:function(){ return call('msgCardDelivery',{token:getToken()}, 60000); },
+    /* 22 Sep — "Retry failed" on Patient Delivery: flips a campaign's already-failed leads back to
+       'pending' in place (no delete + re-add, which apiMsgAddRecipients would refuse as duplicates
+       anyway) so the next scheduler tick actually resends them. See apiMsgRetryFailed. */
+    msgRetryFailed:function(campaignId){ return call('msgRetryFailed',{token:getToken(),campaignId:campaignId}, 60000); },
 
     /* v295: login had NO explicit timeout, so it inherited NET's 60-second default — and bindAuth
        retries it three times. Worst case was 60 + 1.5 + 60 + 3 + 60 = about THREE MINUTES of

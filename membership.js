@@ -380,8 +380,17 @@
           document.getElementById('cardTypesBtn').style.display=(r.perms&&r.perms.canManageTypes)?'':'none';
           document.getElementById('cardPriceBtn').style.display='';
           ALLCARDS=r.cards||[]; paint();
+          loadDelivery();
         } else if(!ALLCARDS.length){ box.className=''; box.innerHTML='<div class="empty">'+esc(r.error)+'</div>'; }
       });
+    }
+    /* 21 Sep — did this person get their Gold / Platinum 7 template from Bulk Message Send? One small
+       read (28_CardImport.gs); anything that goes wrong (no permission, offline) just leaves the pill out. */
+    function loadDelivery(){
+      if(!API.msgCardDelivery) return;
+      API.msgCardDelivery().then(function(r){
+        if(r && r.ok && r.byPhone){ DELIV=r.byPhone; if(document.getElementById('cardList')) paint(); }
+      }).catch(function(){});
     }
     function paint(){
       var box=document.getElementById('cardList'); box.className='';
@@ -395,10 +404,11 @@
         return true;
       });
       if(!list.length){ box.innerHTML='<div class="empty">No cards'+((q||st||bf)?' match your filter.':' yet. Tap “+ Issue card”.')+'</div>'; return; }
-      box.innerHTML='<div class="table-wrap"><table><thead><tr><th>Card No</th><th>Name</th><th>Mobile</th><th>Type</th><th>Branch</th><th>Valid thru</th><th>Status</th><th></th></tr></thead><tbody>'+
-        list.map(function(c){ var t=TYPEMAP[c.typeId];
-          return '<tr class="crow" data-cn="'+esc(c.cardNumber)+'" style="cursor:pointer">'+
-            '<td><b>'+esc(c.cardNumber)+'</b></td><td>'+esc(c.holderName)+'</td><td>'+esc(c.mobile||'—')+'</td><td>'+esc(t?t.name:c.typeId)+'</td><td>'+esc(bName(c.branchId))+'</td><td>'+esc(fmtExpiry(c.expiryDate))+'</td><td>'+cstatus(c.status)+'</td><td><div style="display:flex;gap:6px;justify-content:flex-end">'+benefitsBtn(c)+'<button class="btn ghost sm">View</button></div></td></tr>';
+      box.innerHTML='<div class="table-wrap"><table class="rowsep"><thead><tr><th>Card No</th><th>Name</th><th>Mobile</th><th>Type</th><th>Branch</th><th>Valid thru</th><th>Status</th><th></th></tr></thead><tbody>'+
+        list.map(function(c){ var t=TYPEMAP[c.typeId], typeName=t?t.name:c.typeId;
+          var ac=rowAccent(c.cardNumber+'|'+c.holderName), avatar='<span class="rowavatar" style="background:'+ac.bg+';color:'+ac.col+'">'+esc(rowInitials(c.holderName))+'</span>';
+          return '<tr class="crow" data-cn="'+esc(c.cardNumber)+'" style="cursor:pointer;--row-accent:'+ac.col+';background:linear-gradient(115deg,'+ac.bg+' 0%,#ffffff 60%)">'+
+            '<td><b>'+esc(c.cardNumber)+'</b></td><td>'+avatar+esc(c.holderName)+'</td><td>'+esc(c.mobile||'—')+'</td><td>'+esc(typeName)+'</td><td>'+esc(bName(c.branchId))+'</td><td>'+esc(fmtExpiry(c.expiryDate))+'</td><td>'+cstatus(c.status)+'</td><td><div style="display:flex;gap:6px;justify-content:flex-end;align-items:center">'+deliveryPill(c)+benefitsBtn(c)+'<button class="btn ghost sm">View</button></div></td></tr>';
         }).join('')+'</tbody></table></div>';
       box.querySelectorAll('.crow').forEach(function(el){ el.onclick=function(){ openCardDetail(el.getAttribute('data-cn')); }; });
       box.querySelectorAll('.wabnRowBtn').forEach(function(el){
@@ -412,6 +422,26 @@
      cannot receive it (cancelled / no usable mobile) or if this signed-in user cannot issue cards
      at all (same gate v316's tick-box column already uses). Already-sent cards show a plain,
      unclickable "Sent" pill instead of the button, driven by benefitsSentAt (Code.gs v(new)). */
+  /* 21 Sep — small delivery pill, before the Benefits button, for a card whose holder was on a Gold /
+     Platinum 7 campaign in Bulk Message Send:  ✓ Template sent 6:12 PM · ⏳ Queued · 6:00 PM · ✗ Failed — reason */
+  var DELIV={};
+  function hm12_(hm){ var m=/^(\d{1,2}):(\d{2})/.exec(String(hm||'')); if(!m) return ''; var h=+m[1]; return ((h%12)||12)+':'+m[2]+' '+(h>=12?'PM':'AM'); }
+  function deliveryPill(c){
+    if(String(c.status||'active')!=='active') return '';
+    var ph=String(c.mobile||'').replace(/\D/g,'').slice(-10); var d=ph.length===10?DELIV[ph]:null; if(!d) return '';
+    var css='white-space:nowrap;cursor:default;font-size:11px;', txt, bg, col, tip='';
+    if(d.s==='sent'){
+      var at=d.at?new Date(d.at):null, today=at&&!isNaN(at)&&at.toDateString()===new Date().toDateString();
+      txt='&#10003; Template sent'+(at&&!isNaN(at)?(' '+(today?hm12_(at.getHours()+':'+String(at.getMinutes()).padStart(2,'0')):fmtDate(at))):'');
+      bg='#e8f6ec'; col='#1a7f37'; tip='Sent by Bulk Message Send'+(d.c?' ('+d.c+')':'');
+    } else if(d.s==='failed'){
+      var why=String(d.e||'').trim(); txt='&#10007; Failed'+(why?(' — '+esc(why.length>22?why.slice(0,21)+'…':why)):'');
+      bg='#fdecea'; col='#a12525'; tip='Bulk Message Send could not send this card template'+(why?': '+why:'');
+    } else {
+      txt='&#9203; Queued'+(d.st?(' · '+hm12_(d.st)):''); bg='#fff7e6'; col='#8a6d00'; tip='Waiting in Bulk Message Send'+(d.c?' ('+d.c+')':'')+' — goes out from its send time, up to the branch daily limit';
+    }
+    return '<span class="badge" title="'+esc(tip)+'" style="'+css+'background:'+bg+';color:'+col+'">'+txt+'</span>';
+  }
   function benefitsBtn(c){
     if(!_canIssue) return '';
     if(String(c.status||'active')==='cancelled') return '';
@@ -673,7 +703,8 @@
                         buildCardImage:buildCardImage, sendJpeg:cardSendJpeg,
                         benefitsFor:function(typeId){ return cardBenefitLines(TYPEMAP[typeId], DEFAULT_BENEFITS); },
                         labPhoneFor:function(branchId){ return branchPhone(branchId); },
-                        typeFor:function(id){ return TYPEMAP[id]; } };
+                        typeFor:function(id){ return TYPEMAP[id]; },
+                        ensureTypes:loadTypes };   /* 21 Sep — Add Leads (messaging.js) makes sure TYPEMAP is filled before it draws */
   window.renderMembershipCards=renderMembershipCards;
   window.openCardDetail=openCardDetail;
   window.openIssueCardModal=openIssueCardModal;
