@@ -76,6 +76,47 @@
     <img class="logo" src="icons/login-logo.png" alt="Nakoda">
     <div class="spacer"></div>
     <div class="syncchip" id="syncChip" title="Sync status"><span class="s"></span><span id="syncText">Online</span></div>
+    <!-- 19 Sep — this used to live ONLY inside the mobile "⋯ More" drawer (#mobileMoreDrawer),
+         which is display:none above 760px (styles.css) — so on the desktop app there was
+         literally no way to see it or use it, which is exactly why "did my deploy land" kept
+         being unanswerable on desktop. Same #buildStamp id (paintBuildStamp in app.js already
+         targets it generically) plus a matching "Check update" button, always visible here. -->
+    <div id="buildStampBar" title="Which build is this app actually running" style="font-size:11px;color:#9aa0a6;display:flex;align-items:center;gap:8px;margin-right:10px;white-space:nowrap">
+      <span id="buildStamp">—</span>
+      <button class="iconbtn" id="topCheckUpdateBtn" title="Wipe the cache and reload the latest version" style="font-size:11px;padding:3px 8px">&#8635; Check update</button>
+    </div>
+    <!-- 19 Sep, round 2 — the button above did NOTHING for a stuck-stale device, and here's why:
+         the click handler that wired it to forceUpdate() lived inside app.js, i.e. inside
+         nakoda.bundle.js — the exact file a stuck old service worker keeps serving from its own
+         cache instead of fetching fresh. So the one button whose whole job is "escape a stale
+         build" was itself trapped inside the stale build, silently inert, with no error, nothing
+         to click, nothing to see. Moved here instead: a plain inline script, not deferred, not
+         part of the bundle, that runs the moment this HTML is parsed — before app.js has even
+         started loading — and does the cache-wipe + SW-unregister + reload itself, so it works
+         no matter how old the currently-cached JS is. If app.js's own copy of this same wiring
+         (below, unchanged, harmless) attaches a second listener once/if it does load, that's
+         fine — calling this twice is a no-op the second time. -->
+    <script>
+    (function(){
+      function nakodaForceUpdateNow(){
+        function done(){ try{ location.reload(); }catch(e){} }
+        try{
+          var p1 = ('caches' in window)
+            ? caches.keys().then(function(keys){ return Promise.all(keys.map(function(k){ return caches.delete(k); })); })
+            : Promise.resolve();
+          var p2 = ('serviceWorker' in navigator)
+            ? navigator.serviceWorker.getRegistrations().then(function(regs){ return Promise.all(regs.map(function(r){ return r.unregister(); })); })
+            : Promise.resolve();
+          Promise.all([p1,p2]).then(done).catch(done);
+        }catch(e){ done(); }
+      }
+      function wire(){
+        var b = document.getElementById('topCheckUpdateBtn');
+        if(b && !b.__nakodaWired){ b.__nakodaWired = true; b.addEventListener('click', nakodaForceUpdateNow); }
+      }
+      if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', wire); } else { wire(); }
+    })();
+    </script>
     <button id="topInstallBtn" class="top-install-btn hidden" title="Install Nakoda MIS as an app">&#11015; Install app</button>
     <div class="userchip">
       <div class="avatar" id="meAvatar">N</div>
@@ -118,6 +159,7 @@
       <div class="nav-item hidden" data-page="cardstatus"><span class="ic">&#9989;</span> Card Status</div>
       <div class="nav-group">Messaging</div>
       <div class="nav-item hidden" data-page="bulkmsg"><span class="ic">&#128172;</span> Bulk Message Send</div>
+      <div class="nav-item hidden" data-page="timelymsg"><span class="ic">&#9200;</span> Timely Message</div>
       <div class="nav-group">Setup</div>
       <div class="nav-item hidden" data-page="branches"><span class="ic">&#127970;</span> Branches</div>
       <div class="nav-item hidden" data-page="watemplates"><span class="ic">&#128172;</span> WhatsApp Templates</div>
@@ -192,6 +234,7 @@
       <div id="page-cardstatus" class="hidden"></div>
       <div id="page-watemplates" class="hidden"></div>
       <div id="page-bulkmsg" class="hidden"></div>
+      <div id="page-timelymsg" class="hidden"></div>
 
       <div id="page-branches" class="hidden">
         <div class="page-head"><h1>Branches</h1><div class="spacer"></div><button class="btn" id="addBranchBtn">+ Add Branch</button></div>
