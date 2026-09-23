@@ -1672,7 +1672,7 @@ function initInstall(){
    someone their app is stale, which matters a lot here: staff who assumed the mismatch banner was just
    always-on noise had no reliable signal to go tap "Check update" after a real deploy. Bump this to
    match sw.js's CACHE_VERSION on every deploy that changes sw.js — the two must always agree. */
-var APP_BUILD='v414';   /* v414: Bulk Message Send — Card design per template (upload a blank card, drag fields, every lead's card is drawn from it); see sw.js's v414 note. */  /* v413:   /* v413: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: drag-and-drop card picture box (remembered per template), "Fix pictures & retry failed" with a what-was-fixed banner and per-row notes, and the top bar now also shows the BACKEND build (Router 'version' → backendBuild); see sw.js's v413 note. */  /* v410:   /* v410: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send makes its own card pictures + sample card picture fallback; see sw.js's v410 note. app.js itself only changed by this version-number line. */  /* v409: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: Add Leads now REPLACES a mismatched card instead of skipping that person forever, and the "preparing card pictures" step no longer re-fetches the whole company's card list — see sw.js's v409 note. app.js itself only changed by this version-number line. */  /* v408: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send / Timely Message: Patient Delivery gets a "Retry failed (N)" button that resets a campaign's already-failed leads back to Pending in place (no delete + re-upload, which would just be reported as duplicates) so the next automatic send actually retries them — see sw.js's v408 note. app.js itself only changed by this version-number line. */  /* v406: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: Gold / Platinum 7 campaigns now create the missing membership cards from the Excel; see sw.js's v406 note. app.js itself only changed by this version-number line. */  /* v405: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: "Next batch" note + Change time button on Campaign History, explanation box in Patient Delivery, Total Leads tile fix; see sw.js's v405 note. app.js itself only changed by this version-number line. */  /* v404: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: a Delete button on Completed/Failed campaigns (was Cancel only while active); see sw.js's v404 note. app.js itself only changed by this version-number line. */  /* v403: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send round 3: every active template is listed; card templates (Gold / Platinum / Platinum+ / Diamond / membership_card / Benefits) are filled per recipient from that person's OWN card; see sw.js's v403 note. app.js itself only changed by this one version-number line. */
+var APP_BUILD='v415';   /* v415: Bulk Message Send — card templates get a "One image for everyone" mode (default): upload one image, fill {{3}}.. once, like the original screen; see sw.js's v415 note. */  /* v414:   /* v414: Bulk Message Send — Card design per template (upload a blank card, drag fields, every lead's card is drawn from it); see sw.js's v414 note. */  /* v413:   /* v413: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: drag-and-drop card picture box (remembered per template), "Fix pictures & retry failed" with a what-was-fixed banner and per-row notes, and the top bar now also shows the BACKEND build (Router 'version' → backendBuild); see sw.js's v413 note. */  /* v410:   /* v410: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send makes its own card pictures + sample card picture fallback; see sw.js's v410 note. app.js itself only changed by this version-number line. */  /* v409: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: Add Leads now REPLACES a mismatched card instead of skipping that person forever, and the "preparing card pictures" step no longer re-fetches the whole company's card list — see sw.js's v409 note. app.js itself only changed by this version-number line. */  /* v408: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send / Timely Message: Patient Delivery gets a "Retry failed (N)" button that resets a campaign's already-failed leads back to Pending in place (no delete + re-upload, which would just be reported as duplicates) so the next automatic send actually retries them — see sw.js's v408 note. app.js itself only changed by this version-number line. */  /* v406: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: Gold / Platinum 7 campaigns now create the missing membership cards from the Excel; see sw.js's v406 note. app.js itself only changed by this version-number line. */  /* v405: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: "Next batch" note + Change time button on Campaign History, explanation box in Patient Delivery, Total Leads tile fix; see sw.js's v405 note. app.js itself only changed by this version-number line. */  /* v404: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: a Delete button on Completed/Failed campaigns (was Cancel only while active); see sw.js's v404 note. app.js itself only changed by this version-number line. */  /* v403: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send round 3: every active template is listed; card templates (Gold / Platinum / Platinum+ / Diamond / membership_card / Benefits) are filled per recipient from that person's OWN card; see sw.js's v403 note. app.js itself only changed by this one version-number line. */
 /* v402 (superseded by v403): SYNCED TO sw.js's CACHE_VERSION — see that file's v402 note (Bulk
    Message Send / Timely Message can now use "membership_benefits" templates safely, per-recipient
    card lookup). app.js itself only changed by this one version-number line. */
@@ -4509,7 +4509,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     once so paintExtraFields() can auto-fill a template's own "Card Type" box instead of making you
     type it — see autofillKnownValue_ below. */
   var CAMPS=[];
-  var F={ branchId:'', tplId:'', tag:'', tab:'all', lastCampaignId:'', lastKey:'', fixedParams:[], fpAuto:[], headerMediaUrl:'', fallbackMediaUrl:'' };   /* current Campaign Setup (lastCampaignId/lastKey back the in-box "+ Add Leads" button below; fixedParams/headerMediaUrl back the "needs a bit more" box — see paintExtraFields. fpAuto[i] tracks whether fixedParams[i] was filled in BY the page (true — keeps following Branch/Template) or typed by hand (false — never touched again by autofill) */
+  var F={ branchId:'', tplId:'', tag:'', tab:'all', lastCampaignId:'', lastKey:'', fixedParams:[], fpAuto:[], headerMediaUrl:'', fallbackMediaUrl:'', cardMode:'one', hdrMeta:null };   /* v415: cardMode 'one' = one image + values for every lead (default), 'own' = each member's own card */   /* current Campaign Setup (lastCampaignId/lastKey back the in-box "+ Add Leads" button below; fixedParams/headerMediaUrl back the "needs a bit more" box — see paintExtraFields. fpAuto[i] tracks whether fixedParams[i] was filled in BY the page (true — keeps following Branch/Template) or typed by hand (false — never touched again by autofill) */
 
   /* ============================================================ TIMELY MESSAGE (18 Sep, rebuilt
      19 Sep per the approved mockup — Messaging-Feature-Handoff, "BUILD IT"). Now a full second
@@ -4623,6 +4623,26 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
      looks up each lead's OWN card by phone number and fills {{n}} and the header picture from it. */
   var PERPATIENT_PURPOSES={membership_card:1, membership_benefits:1};
   function isPerPatientTpl_(t){ return !!(t && PERPATIENT_PURPOSES[String(t.purpose||'')]); }
+  /* v415 — a card template with a picture header can run in two ways (Campaign Setup switch):
+     'one' = ONE image + {{3}}..{{n}} filled once, same for every lead ({{1}} branch, {{2}} lead name) — default
+     'own' = each member's own card picture + values from their card (v403..v414 behaviour). */
+  function branchNameOf_(id){ var b=((S.meta&&S.meta.branches)||[]).filter(function(x){ return String(x.BranchID)===String(id); })[0]; return b?String(b.BranchName||id):String(id||'—'); }
+  function tplHasPic_(t){ return !!(t && ['image','document','video'].indexOf(String(t.headerType||'none'))>=0); }
+  function oneImg_(t){ return isPerPatientTpl_(t) && tplHasPic_(t) && F.cardMode!=='own'; }
+  function campOneImg_(c){ return !!(c && String(c.cardMode||'')==='one'); }
+  function modeSeg_(t){
+    if(!(isPerPatientTpl_(t) && tplHasPic_(t))) return '';
+    var one=F.cardMode!=='own';
+    function b(k,label,on){ return '<button type="button" class="bm_mode" data-m="'+k+'" style="border:0;border-radius:9px;padding:8px 14px;font-size:12.5px;font-weight:700;cursor:pointer;'+(on?'background:#fff;color:var(--red);box-shadow:0 1px 3px rgba(0,0,0,.15)':'background:transparent;color:#666')+'">'+label+'</button>'; }
+    return '<div style="display:inline-flex;background:#f1f2f4;border-radius:12px;padding:4px;margin-bottom:14px;gap:2px;flex-wrap:wrap">'+
+      b('one','&#128444; One image for everyone',one)+b('own','&#129706; Each member\'s own card picture',!one)+'</div>';
+  }
+  function wireModeSeg_(){
+    document.querySelectorAll('.bm_mode').forEach(function(x){ x.onclick=function(){
+      var m=this.getAttribute('data-m'); if(m===F.cardMode) return;
+      F.cardMode=m; F.lastKey=''; paintExtraFields();
+    }; });
+  }
   function tplOpts(cur){
     if(!TPLS.length && !TPL_LOADED) return '<option value="">Loading templates…</option>';
     if(!TPLS.length) return '<option value="">'+esc(TPL_ERR ? ('Error: '+TPL_ERR) : 'No active templates found — open WhatsApp Templates, check they are "active", then reload this page')+'</option>';
@@ -4709,7 +4729,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
          currently picked, the same way {{1}} branch name already does automatically. Anything you
          typed by hand is left alone either way — see fpAuto in autofillKnownValue_/paintExtraFields. */
       $('bm_branch').onchange=function(){ F.branchId=this.value; paintStats(); paintAutoNote(); paintExtraFields(); };
-      $('bm_tpl').onchange=function(){ F.tplId=this.value; F.fixedParams=[]; F.fpAuto=[]; F.headerMediaUrl=''; F.fallbackMediaUrl=''; F.fbMeta=null; F.fbTpl=''; paintStats(); paintExtraFields(); };
+      $('bm_tpl').onchange=function(){ F.tplId=this.value; F.fixedParams=[]; F.fpAuto=[]; F.headerMediaUrl=''; F.hdrMeta=null; F.fallbackMediaUrl=''; F.fbMeta=null; F.fbTpl=''; paintStats(); paintExtraFields(); };
       $('bm_tag').onchange=function(){ F.tag=this.value; };
       $('bm_time').onchange=paintAutoNote;
       $('bm_saveDraft').onclick=function(){ saveCampaign('draft'); };
@@ -4797,7 +4817,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
        "same value for every lead" boxes for one of these would be actively wrong — that is exactly
        what once sent TANDEL HETHVEE a message reading "Namaste SOUTHBOPAL / your TANDEL HETHVEE card"
        with SHIVENDRA CHAUDHARI's picture. So this box just shows what goes where, and stops there. */
-    if(isPerPatientTpl_(t)){
+    if(isPerPatientTpl_(t) && !oneImg_(t)){
       var isBen=String(t.purpose||'')==='membership_benefits';
       var ct=t.cardTypeId?(CARDTYPEMAP[t.cardTypeId]?CARDTYPEMAP[t.cardTypeId].name:t.cardTypeId):'';
       var n0=Math.max(0,Number(t.paramCount)||0);
@@ -4814,7 +4834,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
          upload the blank card design, drag the member's fields onto it, save — every lead's card is then
          made from it. */
       var picHtml = hasPic ? '<div id="bm_design" style="margin-top:18px"></div>' : '';
-      box.innerHTML='<div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">'+
+      box.innerHTML='<div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">'+modeSeg_(t)+
         '<div style="background:#eaf6ec;border:1px solid #b7e0bd;border-radius:9px;padding:10px 13px;font-size:11.5px;color:#1a7f37;font-weight:600;line-height:1.55">'+
           '✓ Membership card template — nothing to fill in here. Each lead gets THEIR OWN values and THEIR OWN card picture, looked up from their membership card by phone number:<br>'+
           '<span style="font-weight:700">'+esc(mapTxt)+(hasPic?' · header: their own card picture':'')+'</span><br>'+
@@ -4824,6 +4844,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
         picHtml+
       '</div>';
       if(hasPic) paintDesign_(t);
+      wireModeSeg_();
       return;
     }
     var n=Math.max(0,Number(t.paramCount)||0), extraCount=Math.max(0,n-2);
@@ -4843,13 +4864,45 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
       '<div style="background:#fff3d6;border:1px solid #e8c667;border-radius:9px;padding:9px 12px;font-size:11.5px;color:#7a5b00;font-weight:600;margin-bottom:10px">'+
         '⚠ This file sends to EVERY lead in this campaign — the exact same one, for everyone. It is NOT looked up per patient. If you need each patient to receive their OWN picture (a membership card, for example), this is the wrong page — use Membership Cards ▸ Send Cards / Benefits instead.'+
       '</div>' : '';
-    var mediaHtml = needsMedia ?
+    var ONE=oneImg_(t);
+    if(ONE) mediaWarn='';   /* v415 — one-image card campaign: the same picture for everyone is exactly what was chosen */
+    var hm=F.hdrMeta||{};
+    var mediaHtml = !needsMedia ? '' : (ht==='image' ?
+      /* v415 — image header: drag-and-drop box + preview (was a bare file input) */
+      mediaWarn+
+      '<div style="font-size:12.5px;font-weight:700;color:var(--ink);margin-bottom:6px">&#128444; Image for this campaign *</div>'+
+      '<label id="bm_hdrDrop" style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;border:2px dashed #cfd3d8;border-radius:12px;background:#fafaf9;padding:14px;cursor:pointer;margin:0 0 14px">'+
+        (F.headerMediaUrl ?
+          '<span style="width:210px;max-width:100%;aspect-ratio:16/10;border-radius:10px;overflow:hidden;background:#f1f2f4;display:flex;align-items:center;justify-content:center;flex:none"><img src="'+esc(F.headerMediaUrl)+'" alt="" style="max-width:100%;max-height:100%;object-fit:contain"></span>'+
+          '<span style="flex:1;min-width:180px;font-size:12.5px;line-height:1.8;display:block">'+
+            '<b style="font-size:13.5px;word-break:break-all">'+esc(hm.name||'Campaign image')+'</b><br>'+
+            ((hm.w||hm.kb)?'<span style="color:var(--muted)">'+(hm.w?(hm.w+' × '+hm.h):'')+(hm.w&&hm.kb?' · ':'')+(hm.kb?hm.kb+' KB':'')+'</span><br>':'')+
+            '<span style="color:#1a7f37;font-weight:700">✓ Uploaded to WhatsBizAPI</span><br>'+
+            '<span style="color:var(--muted);font-size:11.5px">Drag &amp; drop or click to change · JPG/PNG · max 5 MB</span><br>'+
+            '<span id="bm_hdrStatus" style="font-weight:700;color:#a12525"></span>'+
+          '</span>'
+        :
+          '<span style="flex:1;text-align:center;display:block;padding:10px 0">'+
+            '<span style="font-size:26px;color:#6b7280">&#11014;</span><br>'+
+            '<b style="font-size:13.5px">Drag &amp; drop the image here</b><br>'+
+            '<span style="font-size:12.5px;color:var(--muted)">or <span style="color:var(--red);font-weight:700">click to choose file</span></span><br>'+
+            '<span style="font-size:11px;color:#9aa0a6">JPG or PNG · max 5 MB · the same image goes to every lead in this campaign</span><br>'+
+            '<span id="bm_hdrStatus" style="font-size:12px;font-weight:700;color:#a12525"></span>'+
+          '</span>')+
+        '<input type="file" id="bm_hdrFile" accept="image/jpeg,image/png" hidden>'+
+      '</label>'
+    :
       mediaWarn+
       '<div class="field full" style="margin-bottom:12px"><label>'+headerLabelMsg_(ht)+' for this campaign *</label>'+
         '<div style="display:flex;gap:10px;align-items:center">'+
-          '<input type="file" id="bm_hdrFile" accept="'+(ht==='image'?'image/*':(ht==='video'?'video/*':'*/*'))+'" style="flex:1;border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-size:12.5px">'+
+          '<input type="file" id="bm_hdrFile" accept="'+(ht==='video'?'video/*':'*/*')+'" style="flex:1;border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-size:12.5px">'+
           '<span id="bm_hdrStatus" style="font-size:11.5px;color:'+(F.headerMediaUrl?'#1a7f37':'var(--muted)')+';font-weight:'+(F.headerMediaUrl?'700':'400')+';white-space:nowrap">'+(F.headerMediaUrl?'Uploaded ✓':'One file, used for every message — see the warning above')+'</span>'+
-        '</div></div>' : '';
+        '</div></div>');
+    var autoHtml = ONE ?
+      '<div class="grid2" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:12px">'+
+        '<div class="field"><label>{{1}} Branch name</label><input value="'+esc(branchNameOf_(branchId))+' — auto ✓" disabled style="background:#f4f8f5;color:#1a7f37;border-color:#cfe6d6"></div>'+
+        '<div class="field"><label>{{2}} Member name</label><input value="From each lead\'s Excel row — auto ✓" disabled style="background:#f4f8f5;color:#1a7f37;border-color:#cfe6d6"></div>'+
+      '</div>' : '';
     var paramsHtml='', anyAuto=false;
     for(var i=2;i<n;i++){
       var idx=i-2, hint=hintFor(i);
@@ -4865,29 +4918,42 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     }
     box.innerHTML='<div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">'+
       '<div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:10px">This template needs a bit more — filled in once, used for every lead in this campaign</div>'+
-      mediaHtml+
-      (paramsHtml?('<div class="grid2" style="grid-template-columns:repeat(3,1fr);gap:12px">'+paramsHtml+'</div>'):'')+
+      modeSeg_(t)+mediaHtml+autoHtml+
+      (paramsHtml?('<div class="grid2" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">'+paramsHtml+'</div>'):'')+
       '<div style="font-size:10.5px;color:#9aa0a6;margin-top:8px">Labels come from the "Variable hints" set for this template on WhatsApp Templates. Pick a different template and these boxes change to match.'+
       (anyAuto?' Boxes marked <b style="color:#1a7f37">auto-filled</b> came from this template\'s Card Type (WhatsApp Templates) or the selected Branch\'s phone — edit them if this campaign needs something different, and your edit sticks.':'')+
-      (needsMedia?' The image/document/video above is the ONE file sent to every lead — for a genuinely per-patient card image, use Membership Cards ▸ Send via Official API instead.':'')+
+      (ONE?' The same image and values go to every lead in this campaign; only {{2}} (the lead\'s name) changes.':'')+
+      (needsMedia&&!ONE?' The image/document/video above is the ONE file sent to every lead — for a genuinely per-patient card image, use Membership Cards ▸ Send via Official API instead.':'')+
       '</div>'+
     '</div>';
+    wireModeSeg_();
     if(needsMedia){
-      $('bm_hdrFile').onchange=function(){
-        var f=this.files&&this.files[0]; if(!f) return;
-        var st=$('bm_hdrStatus'); st.style.color='var(--muted)'; st.style.fontWeight='400'; st.textContent='Uploading…';
+      var takeHdr=function(f){
+        if(!f) return;
+        var st=$('bm_hdrStatus'); st.style.color='var(--muted)'; st.style.fontWeight='700'; st.textContent='Uploading…';
         /* v410 — an IMAGE header goes to WhatsBizAPI's host (uploadWaPicture_), not Google Drive: WhatsApp
            can't open a Drive link as a template image and rejects the send with "[100] Invalid parameter". */
         var upP = (ht==='image') ? uploadWaPicture_(f, function(m){ st.textContent=m; }) : API.upload(f,'MsgCampaigns',function(m){ st.textContent=m; });
         upP.then(function(r){
-          F.headerMediaUrl=r.url; st.style.color='#1a7f37'; st.style.fontWeight='700'; st.innerHTML='Uploaded ✓ <a href="'+esc(r.url)+'" target="_blank">view</a>';
-        }, function(e){ F.headerMediaUrl=''; st.textContent=(e&&e.message)||'Upload failed — try again.'; });
+          F.headerMediaUrl=r.url; F.lastKey='';
+          if(ht==='image' && r.dataUrl){
+            return picDims_(r.dataUrl).then(function(d){ F.hdrMeta={name:f.name, w:d.w||0, h:d.h||0, kb:Math.max(1,Math.round(r.dataUrl.length*0.75/1024))}; paintExtraFields(); toast('Image uploaded.'); });
+          }
+          st.style.color='#1a7f37'; st.innerHTML='Uploaded ✓ <a href="'+esc(r.url)+'" target="_blank">view</a>';
+        }).catch(function(e){ F.headerMediaUrl=''; st.style.color='#a12525'; st.textContent=(e&&e.message)||'Upload failed — try again.'; });
       };
+      $('bm_hdrFile').onchange=function(){ takeHdr(this.files&&this.files[0]); this.value=''; };
+      var hd=$('bm_hdrDrop');
+      if(hd){
+        ['dragenter','dragover'].forEach(function(ev){ hd.addEventListener(ev,function(e){ e.preventDefault(); hd.style.borderColor='#d71920'; }); });
+        ['dragleave','drop'].forEach(function(ev){ hd.addEventListener(ev,function(e){ e.preventDefault(); hd.style.borderColor='#cfd3d8'; }); });
+        hd.addEventListener('drop',function(e){ takeHdr(e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0]); });
+      }
     }
     box.querySelectorAll('.bm_fp').forEach(function(inp){
       /* Once you type here yourself, this box stops following Branch/Template changes — your
          value wins from now on for the rest of this campaign setup (see fpAuto on F above). */
-      inp.oninput=function(){ var idx=Number(this.getAttribute('data-i')); F.fixedParams[idx]=this.value; F.fpAuto[idx]=false; };
+      inp.oninput=function(){ var idx=Number(this.getAttribute('data-i')); F.fixedParams[idx]=this.value; F.fpAuto[idx]=false; F.lastKey=''; };
     });
   }
   /* v410 — read a picture file as base64, shrinking anything big so it stays well under WhatsApp's
@@ -5290,7 +5356,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
      returns an error string, or '' when everything needed is present. */
   function extraFieldsMissing_(t){
     if(!t) return '';
-    if(isPerPatientTpl_(t)) return (D.tplId===F.tplId && D.dirty) ? 'Save the card design first (Card design for this template ▸ Save design).' : '';   /* v414: an unsaved card design would make pictures from the OLD one */
+    if(isPerPatientTpl_(t) && !oneImg_(t)) return (D.tplId===F.tplId && D.dirty) ? 'Save the card design first (Card design for this template ▸ Save design).' : '';   /* v414: an unsaved card design would make pictures from the OLD one */
     var ht=String(t.headerType||'none');
     if(['image','document','video'].indexOf(ht)>=0 && !F.headerMediaUrl) return 'Upload the '+headerLabelMsg_(ht).replace(/^[^ ]+ /,'')+' for this campaign first.';
     var n=Math.max(0,Number(t.paramCount)||0);
@@ -5347,7 +5413,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     var tag=$('bm_tag').value||'', sendTime=$('bm_time').value||'02:00';
     var data={ branchId:branchId, tplId:F.tplId, tag:tag, sendTime:sendTime,
                fixedParams:fixedParams, headerMediaUrl:headerMediaUrl, status:status };
-    if(isPerPatientTpl_(t)) data.fallbackMediaUrl=F.fallbackMediaUrl||'';
+    if(isPerPatientTpl_(t)){ data.fallbackMediaUrl=F.fallbackMediaUrl||''; data.cardMode=oneImg_(t)?'one':'own'; }
     var btn=status==='scheduled'?$('bm_start'):$('bm_saveDraft'); btn.disabled=true;
     API.msgSaveCampaign(data).then(function(r){
       btn.disabled=false;
@@ -5366,7 +5432,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
   function rememberSetupCampaign_(campaignId, branchId, tpl, tag){
     var br=((S.meta&&S.meta.branches)||[]).filter(function(b){ return String(b.BranchID)===String(branchId); })[0];
     CAMPS = CAMPS.filter(function(x){ return x.campaignId!==campaignId; });
-    CAMPS.push({campaignId:campaignId, templateName:tpl.name, branchName:br?br.BranchName:branchId, tag:tag});
+    CAMPS.push({campaignId:campaignId, tplId:tpl.tplId, templateName:tpl.name, branchName:br?br.BranchName:branchId, tag:tag, cardMode:oneImg_(tpl)?'one':''});
     F.lastCampaignId = campaignId;
     F.lastKey = branchId+'|'+tpl.tplId+'|'+tag+'|'+$('bm_time').value;
     F.lastFb = F.fallbackMediaUrl||'';
@@ -5399,7 +5465,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     }
     var btn=$('bm_addLeadsBox'); var was=btn.textContent; btn.disabled=true; btn.innerHTML='<span class="loader"></span> Preparing…';
     var data={ branchId:branchId, tplId:F.tplId, tag:tag, sendTime:sendTime, fixedParams:fixedParams, headerMediaUrl:headerMediaUrl, status:'draft' };
-    if(isPerPatientTpl_(t)) data.fallbackMediaUrl=F.fallbackMediaUrl||'';
+    if(isPerPatientTpl_(t)){ data.fallbackMediaUrl=F.fallbackMediaUrl||''; data.cardMode=oneImg_(t)?'one':'own'; }
     API.msgSaveCampaign(data).then(function(r){
       btn.disabled=false; btn.textContent=was;
       if(!r.ok){ toast(r.error,true); return; }
@@ -5631,7 +5697,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
   function openAddLeadsModal(campaignId, doneCb){
     var c=findCamp_(campaignId);
     if(!c){ toast('Campaign not found — reload the page.',true); return; }
-    var cardMode=isCardTplCamp_(c);
+    var cardMode=isCardTplCamp_(c) && !campOneImg_(c);   /* v415: a one-image campaign never makes cards */
     var ctT=campTpl_(c), ctRow=ctT&&ctT.cardTypeId?CARDTYPEMAP[ctT.cardTypeId]:null;
     var cardKind=ctRow&&ctRow.name?String(ctRow.name):(ctT&&ctT.cardTypeId?String(ctT.cardTypeId):(/gold/i.test(c.templateName)?'Gold':'Platinum'));
     var body=
@@ -5786,7 +5852,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
           else {
             var doneMsg=totals.added+' lead'+(totals.added===1?'':'s')+' added'+(totals.duplicate?(' · '+totals.duplicate+' already on this campaign'):'')+(totals.invalid?(' · '+totals.invalid+' invalid'):'');
             var ct0=campTpl_(c);
-            if(ct0 && !isPerPatientTpl_(ct0)){ closeModal(); toast(doneMsg); (doneCb||loadHistory)(); return; }
+            if(ct0 && (!isPerPatientTpl_(ct0) || campOneImg_(c))){ closeModal(); toast(doneMsg); (doneCb||loadHistory)(); return; }
             /* v410 — card template: make any missing card picture NOW, on this device, so the scheduler never
                reaches a lead whose picture isn't ready ("…hasn't been generated yet"). */
             btn.innerHTML='<span class="loader"></span> Card pictures…';
