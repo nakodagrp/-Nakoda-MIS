@@ -753,7 +753,7 @@
     };
     function updateGoLabel(){
       if(cardMode){
-        var nn=plan?plan.counts['new']:0, hh=plan?plan.counts.have:0, mm=nn+hh, gb=$('al_go');
+        var nn=plan?(plan.counts['new']+(plan.counts.replace||0)):0, hh=plan?plan.counts.have:0, mm=nn+hh, gb=$('al_go');
         gb.disabled=!plan||!mm;
         gb.textContent=!plan?'Add Leads':(nn?('Create '+nn+' card'+(nn===1?'':'s')+' & add '+mm+' lead'+(mm===1?'':'s')):(mm?('Add '+mm+' lead'+(mm===1?'':'s')):'Nothing to add'));
         return;
@@ -890,7 +890,7 @@
       var tok=++planTok; plan=null; updateGoLabel();
       var prev=$('al_prev');
       if(!rows.length){ prev.innerHTML='<div class="msg error" style="font-size:12.5px">No usable rows — every row is missing a valid 10-digit mobile.</div>'; return; }
-      var chunks=chunk_(rows,190), agg={'new':0,have:0,other:0,invalid:0}, skipped=[], typeName='', i=0;
+      var chunks=chunk_(rows,190), agg={'new':0,have:0,replace:0,invalid:0}, skipped=[], replaced=[], typeName='', i=0;
       function fail(m){
         if(tok!==planTok || !$('al_prev')) return;
         prev.innerHTML='<div class="msg error" style="font-size:12.5px">'+esc(m)+' <a href="#" id="al_replan" style="font-weight:700">Try again</a></div>';
@@ -901,32 +901,39 @@
         API.msgCardsPlan({campaignId:c.campaignId, rows:chunks[i]}).then(function(r){
           if(tok!==planTok || !$('al_prev')) return;
           if(!(r&&r.ok)){ fail((r&&r.error)||'Could not check the list.'); return; }
-          ['new','have','other','invalid'].forEach(function(k){ agg[k]+=(r.counts&&r.counts[k])||0; });
+          ['new','have','replace','invalid'].forEach(function(k){ agg[k]+=(r.counts&&r.counts[k])||0; });
           (r.skipped||[]).forEach(function(x){ if(skipped.length<40) skipped.push(x); });
+          (r.replaced||[]).forEach(function(x){ if(replaced.length<40) replaced.push(x); });
           typeName=r.typeName||typeName;
           i++;
           if(i<chunks.length) next();
-          else { plan={counts:agg, skipped:skipped, typeName:typeName, rows:rows, bad:bad, dup:dup}; paintPlan_(); updateGoLabel(); }
+          else { plan={counts:agg, skipped:skipped, replaced:replaced, typeName:typeName, rows:rows, bad:bad, dup:dup}; paintPlan_(); updateGoLabel(); }
         }, function(){ fail('Checking needs an internet connection.'); });
       }
       next();
     }
     function paintPlan_(){
-      var p=plan, cn=p.counts, skip=cn.other+cn.invalid+p.bad;
+      var p=plan, cn=p.counts, skip=cn.invalid+p.bad, repl=cn.replace||0;
       var notes=[];
       if(cn['new']) notes.push('New cards are <b>'+esc(p.typeName)+'</b> cards, valid from today, numbered on from this branch\'s last card. No payment is recorded.');
       if(cn.have) notes.push('<b>'+cn.have+'</b> already '+(cn.have===1?'holds':'hold')+' an active '+esc(p.typeName)+' card — the message goes with '+(cn.have===1?'their':'their')+' existing card.');
+      if(repl) notes.push('<b>'+repl+'</b> '+(repl===1?'holds':'hold')+' an active card of a DIFFERENT type — '+(repl===1?'it':'they')+'\'ll be closed and a fresh <b>'+esc(p.typeName)+'</b> card issued in its place.');
       if(p.dup) notes.push(p.dup+' repeated mobile number'+(p.dup===1?'':'s')+' in the file ignored (one card per mobile).');
-      var det='';
+      var det='', det2='';
       if(skip){
         det='<details style="margin-top:8px;font-size:12px"><summary style="cursor:pointer;font-weight:700;color:#8a6d00">Why '+skip+' '+(skip===1?'is':'are')+' skipped</summary><div style="margin-top:6px;line-height:1.6;color:var(--grey)">'+
           (p.bad?('<div>'+p.bad+' row'+(p.bad===1?'':'s')+' with a missing / invalid mobile</div>'):'')+
           p.skipped.map(function(x){ return '<div>'+esc(x.name||'(no name)')+' · '+esc(x.mobile)+' — '+esc(x.reason||'')+'</div>'; }).join('')+
-          ((cn.other+cn.invalid)>p.skipped.length?('<div>…and '+((cn.other+cn.invalid)-p.skipped.length)+' more</div>'):'')+'</div></details>';
+          (cn.invalid>p.skipped.length?('<div>…and '+(cn.invalid-p.skipped.length)+' more</div>'):'')+'</div></details>';
+      }
+      if(repl){
+        det2='<details style="margin-top:8px;font-size:12px"><summary style="cursor:pointer;font-weight:700;color:#a15c00">Who\'s being replaced</summary><div style="margin-top:6px;line-height:1.6;color:var(--grey)">'+
+          (p.replaced||[]).map(function(x){ return '<div>'+esc(x.name||'(no name)')+' · '+esc(x.mobile)+' — '+esc(x.reason||'')+'</div>'; }).join('')+
+          (repl>(p.replaced||[]).length?('<div>…and '+(repl-(p.replaced||[]).length)+' more</div>'):'')+'</div></details>';
       }
       $('al_prev').innerHTML=
-        '<div style="display:flex;gap:10px;flex-wrap:wrap">'+pstat(cn['new'],'New cards to create','#0a7d0a')+pstat(cn.have,'Already have this card','#185fa5')+pstat(skip,'Skipped','#8a6d00')+'</div>'+
-        '<div style="font-size:12px;color:var(--grey);line-height:1.6;margin-top:10px">'+notes.map(function(n){ return '<div>'+n+'</div>'; }).join('')+'</div>'+det;
+        '<div style="display:flex;gap:10px;flex-wrap:wrap">'+pstat(cn['new'],'New cards to create','#0a7d0a')+pstat(cn.have,'Already have this card','#185fa5')+pstat(repl,'Replacing older card','#a15c00')+pstat(skip,'Skipped','#8a6d00')+'</div>'+
+        '<div style="font-size:12px;color:var(--grey);line-height:1.6;margin-top:10px">'+notes.map(function(n){ return '<div>'+n+'</div>'; }).join('')+'</div>'+det2+det;
     }
 
     /* 2 · the real thing. create cards → draw + upload every picture → add the leads (only those whose
@@ -934,7 +941,7 @@
     function goCards_(){
       if(!plan || !cardMode) return;
       var rows=plan.rows, btn=$('al_go'), file=$('al_file'), prog=$('al_prog');
-      var out=[], failedPic={}, made=0, kept=0, totals={added:0,duplicate:0,invalid:0};
+      var out=[], failedPic={}, made=0, kept=0, replacedCount=0, totals={added:0,duplicate:0,invalid:0};
       btn.disabled=true; file.disabled=true;
       ['al_c_name','al_c_mob','al_c_tag'].forEach(function(id){ if($(id)) $(id).disabled=true; });
       /* tuck the setup away so the progress bar is what you see, not something below the fold */
@@ -964,29 +971,36 @@
           if(gone()) return;
           if(!(r&&r.ok)){ stop(create,(r&&r.error)||'Could not create the cards.'); return; }
           (r.rows||[]).forEach(function(x){ out.push(x); });
-          made+=(r.counts&&r.counts['new'])||0; kept+=(r.counts&&r.counts.have)||0;
+          made+=(r.counts&&r.counts['new'])||0; kept+=(r.counts&&r.counts.have)||0; replacedCount+=(r.counts&&r.counts.replace)||0;
           ci++; if(ci<cch.length) create(); else pics();
         }, function(){ stop(create,'Connection dropped — press Retry (cards already made are kept).'); });
       }
 
-      /* step 2 · pictures (drawn here, uploaded the same way Send Cards does) */
+      /* step 2 · pictures (drawn here, uploaded the same way Send Cards does).
+         23 Sep — this used to call API.listCards({}) here to look up the ~handful of cards it needed,
+         which re-downloads the WHOLE company's card list (every branch, every card) just to find the
+         ones create() already told us about a moment ago. On a branch with a lot of cards that fetch
+         alone could stall this step at "0 of N" for a long time. msgcCardsPlan/Create now hand back
+         the few fields the drawing needs (see msgcCardLite_ in 28_CardImport.gs) directly on each row,
+         so no second whole-company fetch is needed at all. */
       function pics(){
         if(gone()) return; busy();
-        var need={}; out.forEach(function(x){ if(x.status==='new'||x.status==='have') (x.needPic||[]).forEach(function(n){ need[n]=1; }); });
+        var need={}, by={};
+        out.forEach(function(x){
+          if(x.status==='new'||x.status==='have'||x.status==='replace') (x.needPic||[]).forEach(function(n){ need[n]=1; });
+          (x.cards||[]).forEach(function(cd){ by[String(cd.cardNumber)]=cd; });
+        });
         var list=Object.keys(need);
         if(!list.length){ leads(); return; }
         var draw=window.__nakodaCard;
         if(!draw){ stop(pics,'The card drawing tool is not loaded — open the Membership Cards page once, then press Retry.'); return; }
         paint(10,'Step 2 of 3 — preparing card pictures… 0 of '+list.length);
-        Promise.resolve(draw.ensureTypes?draw.ensureTypes():null).then(function(){ return API.listCards({}); }).then(function(r){
-          if(gone()) return;
-          if(!(r&&r.ok) || r.offline){ stop(pics,(r&&r.error)||'Could not load the new cards — needs an internet connection.'); return; }
-          var by={}; (r.cards||[]).forEach(function(cd){ by[String(cd.cardNumber)]=cd; });
+        Promise.resolve(draw.ensureTypes?draw.ensureTypes():null).then(function(){
           var done=0, q=list.slice();
           function one(n){
             return new Promise(function(res){
               function fin(){ done++; paint(10+done/list.length*65,'Step 2 of 3 — preparing card pictures… '+done+' of '+list.length); res(); }
-              var full=by[n]; if(!full){ failedPic[n]='card not found in the list'; return fin(); }
+              var full=by[n]; if(!full){ failedPic[n]='card not found'; return fin(); }
               var cv, b64;
               try{
                 cv=draw.buildCardImage
@@ -1008,7 +1022,7 @@
       function hasPicFail(x){ return (x.needPic||[]).some(function(n){ return failedPic[n]; }); }
       function leads(){
         if(gone()) return; busy();
-        var okRows=out.filter(function(x){ return (x.status==='new'||x.status==='have') && !hasPicFail(x); })
+        var okRows=out.filter(function(x){ return (x.status==='new'||x.status==='have'||x.status==='replace') && !hasPicFail(x); })
                       .map(function(x){ return {name:x.name, mobile:x.mobile, tag:x.tag}; });
         if(!okRows.length){ finish(); return; }
         var lch=chunk_(okRows,190), li=0;
@@ -1027,17 +1041,19 @@
 
       function finish(){
         if(gone()) return;
-        var skipped=out.filter(function(x){ return x.status==='other'||x.status==='invalid'; });
-        var picFails=out.filter(function(x){ return (x.status==='new'||x.status==='have') && hasPicFail(x); });
+        var skipped=out.filter(function(x){ return x.status==='invalid'; });
+        var picFails=out.filter(function(x){ return (x.status==='new'||x.status==='have'||x.status==='replace') && hasPicFail(x); });
+        var totalCreated=made+replacedCount;
         closeModal();
         if(API.refreshCards) API.refreshCards();
         (doneCb||loadHistory)();
-        toast(made+' card'+(made===1?'':'s')+' created · '+totals.added+' lead'+(totals.added===1?'':'s')+' added');
+        toast(totalCreated+' card'+(totalCreated===1?'':'s')+' created · '+totals.added+' lead'+(totals.added===1?'':'s')+' added');
         var skipCount=skipped.length+plan.bad;
         var html=
-          '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">'+pstat(made,'New cards created','#0a7d0a')+pstat(totals.added,'Leads added','#185fa5')+pstat(skipCount+picFails.length,'Not added','#8a6d00')+'</div>'+
+          '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">'+pstat(totalCreated,'New cards created','#0a7d0a')+pstat(totals.added,'Leads added','#185fa5')+pstat(skipCount+picFails.length,'Not added','#8a6d00')+'</div>'+
           '<div style="font-size:12.5px;line-height:1.65;color:var(--grey)">'+
-            (made?'<div>🎫 The new cards are on the <b>Membership Cards</b> page now.</div>':'')+
+            (totalCreated?'<div>🎫 The new cards are on the <b>Membership Cards</b> page now.</div>':'')+
+            (replacedCount?'<div>'+replacedCount+' older card'+(replacedCount===1?' was':'s were')+' closed and replaced with a new '+esc(plan.typeName)+' card — the old card stays on file, marked cancelled.</div>':'')+
             (kept?'<div>'+kept+' already had a '+esc(plan.typeName)+' card — their message goes with that card.</div>':'')+
             (totals.duplicate?'<div>'+totals.duplicate+' were already on this campaign.</div>':'')+
             '<div>The template goes out from <b>'+esc(fmtTime12(c.sendTime))+'</b>, up to the branch\'s daily limit — watch it under <b>View</b> (Patient Delivery).</div>'+
