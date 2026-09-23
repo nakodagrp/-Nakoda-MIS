@@ -1672,7 +1672,7 @@ function initInstall(){
    someone their app is stale, which matters a lot here: staff who assumed the mismatch banner was just
    always-on noise had no reliable signal to go tap "Check update" after a real deploy. Bump this to
    match sw.js's CACHE_VERSION on every deploy that changes sw.js — the two must always agree. */
-var APP_BUILD='v415';   /* v415: Bulk Message Send — card templates get a "One image for everyone" mode (default): upload one image, fill {{3}}.. once, like the original screen; see sw.js's v415 note. */  /* v414:   /* v414: Bulk Message Send — Card design per template (upload a blank card, drag fields, every lead's card is drawn from it); see sw.js's v414 note. */  /* v413:   /* v413: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: drag-and-drop card picture box (remembered per template), "Fix pictures & retry failed" with a what-was-fixed banner and per-row notes, and the top bar now also shows the BACKEND build (Router 'version' → backendBuild); see sw.js's v413 note. */  /* v410:   /* v410: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send makes its own card pictures + sample card picture fallback; see sw.js's v410 note. app.js itself only changed by this version-number line. */  /* v409: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: Add Leads now REPLACES a mismatched card instead of skipping that person forever, and the "preparing card pictures" step no longer re-fetches the whole company's card list — see sw.js's v409 note. app.js itself only changed by this version-number line. */  /* v408: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send / Timely Message: Patient Delivery gets a "Retry failed (N)" button that resets a campaign's already-failed leads back to Pending in place (no delete + re-upload, which would just be reported as duplicates) so the next automatic send actually retries them — see sw.js's v408 note. app.js itself only changed by this version-number line. */  /* v406: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: Gold / Platinum 7 campaigns now create the missing membership cards from the Excel; see sw.js's v406 note. app.js itself only changed by this version-number line. */  /* v405: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: "Next batch" note + Change time button on Campaign History, explanation box in Patient Delivery, Total Leads tile fix; see sw.js's v405 note. app.js itself only changed by this version-number line. */  /* v404: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: a Delete button on Completed/Failed campaigns (was Cancel only while active); see sw.js's v404 note. app.js itself only changed by this version-number line. */  /* v403: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send round 3: every active template is listed; card templates (Gold / Platinum / Platinum+ / Diamond / membership_card / Benefits) are filled per recipient from that person's OWN card; see sw.js's v403 note. app.js itself only changed by this one version-number line. */
+var APP_BUILD='v416';   /* v416: Bulk Message Send — card templates with an image use the previous (18 Sep) method exactly: one image + {{3}}.. filled once; see sw.js's v416 note. */  /* v415:   /* v415: Bulk Message Send — card templates get a "One image for everyone" mode (default): upload one image, fill {{3}}.. once, like the original screen; see sw.js's v415 note. */  /* v414:   /* v414: Bulk Message Send — Card design per template (upload a blank card, drag fields, every lead's card is drawn from it); see sw.js's v414 note. */  /* v413:   /* v413: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: drag-and-drop card picture box (remembered per template), "Fix pictures & retry failed" with a what-was-fixed banner and per-row notes, and the top bar now also shows the BACKEND build (Router 'version' → backendBuild); see sw.js's v413 note. */  /* v410:   /* v410: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send makes its own card pictures + sample card picture fallback; see sw.js's v410 note. app.js itself only changed by this version-number line. */  /* v409: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: Add Leads now REPLACES a mismatched card instead of skipping that person forever, and the "preparing card pictures" step no longer re-fetches the whole company's card list — see sw.js's v409 note. app.js itself only changed by this version-number line. */  /* v408: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send / Timely Message: Patient Delivery gets a "Retry failed (N)" button that resets a campaign's already-failed leads back to Pending in place (no delete + re-upload, which would just be reported as duplicates) so the next automatic send actually retries them — see sw.js's v408 note. app.js itself only changed by this version-number line. */  /* v406: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: Gold / Platinum 7 campaigns now create the missing membership cards from the Excel; see sw.js's v406 note. app.js itself only changed by this version-number line. */  /* v405: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: "Next batch" note + Change time button on Campaign History, explanation box in Patient Delivery, Total Leads tile fix; see sw.js's v405 note. app.js itself only changed by this version-number line. */  /* v404: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: a Delete button on Completed/Failed campaigns (was Cancel only while active); see sw.js's v404 note. app.js itself only changed by this version-number line. */  /* v403: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send round 3: every active template is listed; card templates (Gold / Platinum / Platinum+ / Diamond / membership_card / Benefits) are filled per recipient from that person's OWN card; see sw.js's v403 note. app.js itself only changed by this one version-number line. */
 /* v402 (superseded by v403): SYNCED TO sw.js's CACHE_VERSION — see that file's v402 note (Bulk
    Message Send / Timely Message can now use "membership_benefits" templates safely, per-recipient
    card lookup). app.js itself only changed by this one version-number line. */
@@ -4628,9 +4628,10 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
      'own' = each member's own card picture + values from their card (v403..v414 behaviour). */
   function branchNameOf_(id){ var b=((S.meta&&S.meta.branches)||[]).filter(function(x){ return String(x.BranchID)===String(id); })[0]; return b?String(b.BranchName||id):String(id||'—'); }
   function tplHasPic_(t){ return !!(t && ['image','document','video'].indexOf(String(t.headerType||'none'))>=0); }
-  function oneImg_(t){ return isPerPatientTpl_(t) && tplHasPic_(t) && F.cardMode!=='own'; }
+  function oneImg_(t){ return isPerPatientTpl_(t) && tplHasPic_(t); }   /* v416: always — the previous (18 Sep) method */
   function campOneImg_(c){ return !!(c && String(c.cardMode||'')==='one'); }
   function modeSeg_(t){
+    return '';   /* v416 — no switch: card templates with an image always use the previous one-image method */
     if(!(isPerPatientTpl_(t) && tplHasPic_(t))) return '';
     var one=F.cardMode!=='own';
     function b(k,label,on){ return '<button type="button" class="bm_mode" data-m="'+k+'" style="border:0;border-radius:9px;padding:8px 14px;font-size:12.5px;font-weight:700;cursor:pointer;'+(on?'background:#fff;color:var(--red);box-shadow:0 1px 3px rgba(0,0,0,.15)':'background:transparent;color:#666')+'">'+label+'</button>'; }
@@ -4686,7 +4687,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
       (canManage()?
       '<div class="card" style="padding:20px 22px;margin-bottom:22px">'+
         '<h3 style="margin:0 0 3px">Campaign Setup</h3>'+
-        '<div style="font-size:12px;color:var(--muted);margin-bottom:16px">Choose who gets the message, which template, and when it should go out. Every active template is listed. Membership-card templates (Gold / Platinum / Platinum+ / Diamond and Benefits) fill themselves in for each lead from that lead\'s OWN membership card — their name, card type, card number, validity and their own card picture — looked up by phone number.</div>'+
+        '<div style="font-size:12px;color:var(--muted);margin-bottom:16px">Choose who gets the message, which template, and when it should go out.</div>'+
         '<div class="grid2" id="bm_fields" style="grid-template-columns:repeat(5,1fr);gap:14px">'+
           '<div class="field"><label>Branch</label><select id="bm_branch">'+branchOptsPick('')+'</select></div>'+
           '<div class="field"><label>Template</label><select id="bm_tpl">'+tplOpts('')+'</select></div>'+
@@ -4867,7 +4868,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
     var ONE=oneImg_(t);
     if(ONE) mediaWarn='';   /* v415 — one-image card campaign: the same picture for everyone is exactly what was chosen */
     var hm=F.hdrMeta||{};
-    var mediaHtml = !needsMedia ? '' : (ht==='image' ?
+    var mediaHtml = !needsMedia ? '' : (false ?
       /* v415 — image header: drag-and-drop box + preview (was a bare file input) */
       mediaWarn+
       '<div style="font-size:12.5px;font-weight:700;color:var(--ink);margin-bottom:6px">&#128444; Image for this campaign *</div>'+
@@ -4895,10 +4896,10 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
       mediaWarn+
       '<div class="field full" style="margin-bottom:12px"><label>'+headerLabelMsg_(ht)+' for this campaign *</label>'+
         '<div style="display:flex;gap:10px;align-items:center">'+
-          '<input type="file" id="bm_hdrFile" accept="'+(ht==='video'?'video/*':'*/*')+'" style="flex:1;border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-size:12.5px">'+
-          '<span id="bm_hdrStatus" style="font-size:11.5px;color:'+(F.headerMediaUrl?'#1a7f37':'var(--muted)')+';font-weight:'+(F.headerMediaUrl?'700':'400')+';white-space:nowrap">'+(F.headerMediaUrl?'Uploaded ✓':'One file, used for every message — see the warning above')+'</span>'+
+          '<input type="file" id="bm_hdrFile" accept="'+(ht==='image'?'image/jpeg,image/png':(ht==='video'?'video/*':'*/*'))+'" style="flex:1;border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-size:12.5px">'+
+          '<span id="bm_hdrStatus" style="font-size:11.5px;color:'+(F.headerMediaUrl?'#1a7f37':'var(--muted)')+';font-weight:'+(F.headerMediaUrl?'700':'400')+';white-space:nowrap">'+(F.headerMediaUrl?'Uploaded ✓':(ONE?'One file, used for every message':'One file, used for every message — see the warning above'))+'</span>'+
         '</div></div>');
-    var autoHtml = ONE ?
+    var autoHtml = false ?
       '<div class="grid2" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:12px">'+
         '<div class="field"><label>{{1}} Branch name</label><input value="'+esc(branchNameOf_(branchId))+' — auto ✓" disabled style="background:#f4f8f5;color:#1a7f37;border-color:#cfe6d6"></div>'+
         '<div class="field"><label>{{2}} Member name</label><input value="From each lead\'s Excel row — auto ✓" disabled style="background:#f4f8f5;color:#1a7f37;border-color:#cfe6d6"></div>'+
@@ -4922,7 +4923,7 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
       (paramsHtml?('<div class="grid2" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">'+paramsHtml+'</div>'):'')+
       '<div style="font-size:10.5px;color:#9aa0a6;margin-top:8px">Labels come from the "Variable hints" set for this template on WhatsApp Templates. Pick a different template and these boxes change to match.'+
       (anyAuto?' Boxes marked <b style="color:#1a7f37">auto-filled</b> came from this template\'s Card Type (WhatsApp Templates) or the selected Branch\'s phone — edit them if this campaign needs something different, and your edit sticks.':'')+
-      (ONE?' The same image and values go to every lead in this campaign; only {{2}} (the lead\'s name) changes.':'')+
+
       (needsMedia&&!ONE?' The image/document/video above is the ONE file sent to every lead — for a genuinely per-patient card image, use Membership Cards ▸ Send via Official API instead.':'')+
       '</div>'+
     '</div>';
@@ -4936,9 +4937,6 @@ function closeModal(){ $('modalRoot').innerHTML=''; document.body.classList.remo
         var upP = (ht==='image') ? uploadWaPicture_(f, function(m){ st.textContent=m; }) : API.upload(f,'MsgCampaigns',function(m){ st.textContent=m; });
         upP.then(function(r){
           F.headerMediaUrl=r.url; F.lastKey='';
-          if(ht==='image' && r.dataUrl){
-            return picDims_(r.dataUrl).then(function(d){ F.hdrMeta={name:f.name, w:d.w||0, h:d.h||0, kb:Math.max(1,Math.round(r.dataUrl.length*0.75/1024))}; paintExtraFields(); toast('Image uploaded.'); });
-          }
           st.style.color='#1a7f37'; st.innerHTML='Uploaded ✓ <a href="'+esc(r.url)+'" target="_blank">view</a>';
         }).catch(function(e){ F.headerMediaUrl=''; st.style.color='#a12525'; st.textContent=(e&&e.message)||'Upload failed — try again.'; });
       };
