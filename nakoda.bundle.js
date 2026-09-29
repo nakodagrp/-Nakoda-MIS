@@ -1180,7 +1180,7 @@ function payloadOf(rec, token){
          no photo", which is the difference between a recorded punch and a refused one. */
       selfiePending: (!rec.selfie && rec.selfiePending) ? 1 : 0,
       lat: rec.lat, lng: rec.lng,
-      noGeo: !!rec.noGeo, wfh: !!rec.wfh, altShift: !!rec.altShift,
+      noGeo: !!rec.noGeo, geoWhy: rec.geoWhy || '', wfh: !!rec.wfh, altShift: !!rec.altShift,   /* v425: why there was no location */
       remark: rec.remark || '',
       clientDate: rec.date, clientTime: rec.time,
       offline: 1
@@ -1673,7 +1673,7 @@ function initInstall(){
    someone their app is stale, which matters a lot here: staff who assumed the mismatch banner was just
    always-on noise had no reliable signal to go tap "Check update" after a real deploy. Bump this to
    match sw.js's CACHE_VERSION on every deploy that changes sw.js — the two must always agree. */
-var APP_BUILD='v424';   /* v424: Attendance — an early check-out (under 4h) stays Half day: setting Full day on such a day now asks for a reason; approvals can no longer wipe a punch-out; a past day with no punch-out says "No punch-out received". Backend v424 (31_AttFix.gs + 03_Router.gs). */  /* v423:   /* v423: Bulk Message Send / Timely Message for CRM staff (own branch only, enforced server-side) + an "Are you sure?" popup on Cancel/Delete campaign. */  /* v422:   /* v422: Membership Cards — branch staff see only their own branch's cards; Operations Manager / MIS / Director see all with a branch filter (30_CardScope.gs). Also carries backend v420–v421. */  /* v419:   /* v419: Bulk Message Send — card templates send each lead THEIR OWN card again (drawn from the real card design, 8 at a time, Drive direct link when WhatsBizAPI refuses); see sw.js's v419 note. */  /* v416:   /* v416: Bulk Message Send — card templates with an image use the previous (18 Sep) method exactly: one image + {{3}}.. filled once; see sw.js's v416 note. */  /* v415:   /* v415: Bulk Message Send — card templates get a "One image for everyone" mode (default): upload one image, fill {{3}}.. once, like the original screen; see sw.js's v415 note. */  /* v414:   /* v414: Bulk Message Send — Card design per template (upload a blank card, drag fields, every lead's card is drawn from it); see sw.js's v414 note. */  /* v413:   /* v413: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: drag-and-drop card picture box (remembered per template), "Fix pictures & retry failed" with a what-was-fixed banner and per-row notes, and the top bar now also shows the BACKEND build (Router 'version' → backendBuild); see sw.js's v413 note. */  /* v410:   /* v410: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send makes its own card pictures + sample card picture fallback; see sw.js's v410 note. app.js itself only changed by this version-number line. */  /* v409: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: Add Leads now REPLACES a mismatched card instead of skipping that person forever, and the "preparing card pictures" step no longer re-fetches the whole company's card list — see sw.js's v409 note. app.js itself only changed by this version-number line. */  /* v408: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send / Timely Message: Patient Delivery gets a "Retry failed (N)" button that resets a campaign's already-failed leads back to Pending in place (no delete + re-upload, which would just be reported as duplicates) so the next automatic send actually retries them — see sw.js's v408 note. app.js itself only changed by this version-number line. */  /* v406: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: Gold / Platinum 7 campaigns now create the missing membership cards from the Excel; see sw.js's v406 note. app.js itself only changed by this version-number line. */  /* v405: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: "Next batch" note + Change time button on Campaign History, explanation box in Patient Delivery, Total Leads tile fix; see sw.js's v405 note. app.js itself only changed by this version-number line. */  /* v404: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: a Delete button on Completed/Failed campaigns (was Cancel only while active); see sw.js's v404 note. app.js itself only changed by this version-number line. */  /* v403: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send round 3: every active template is listed; card templates (Gold / Platinum / Platinum+ / Diamond / membership_card / Benefits) are filled per recipient from that person's OWN card; see sw.js's v403 note. app.js itself only changed by this one version-number line. */
+var APP_BUILD='v426';   /* v426: release of the v425 attendance fixes (early-out half day, lost punch-out, forgot punch-out = half day, no-location reason). */  /* v425:   /* v425: Attendance — forgot to punch out = Half day even when a manager approved the check-in (31_AttFix.gs attHourlyFix_); the punch card warns when location is blocked / on a computer, and the note now says WHY there was no location. */  /* v424:   /* v424: Attendance — an early check-out (under 4h) stays Half day: setting Full day on such a day now asks for a reason; approvals can no longer wipe a punch-out; a past day with no punch-out says "No punch-out received". Backend v424 (31_AttFix.gs + 03_Router.gs). */  /* v423:   /* v423: Bulk Message Send / Timely Message for CRM staff (own branch only, enforced server-side) + an "Are you sure?" popup on Cancel/Delete campaign. */  /* v422:   /* v422: Membership Cards — branch staff see only their own branch's cards; Operations Manager / MIS / Director see all with a branch filter (30_CardScope.gs). Also carries backend v420–v421. */  /* v419:   /* v419: Bulk Message Send — card templates send each lead THEIR OWN card again (drawn from the real card design, 8 at a time, Drive direct link when WhatsBizAPI refuses); see sw.js's v419 note. */  /* v416:   /* v416: Bulk Message Send — card templates with an image use the previous (18 Sep) method exactly: one image + {{3}}.. filled once; see sw.js's v416 note. */  /* v415:   /* v415: Bulk Message Send — card templates get a "One image for everyone" mode (default): upload one image, fill {{3}}.. once, like the original screen; see sw.js's v415 note. */  /* v414:   /* v414: Bulk Message Send — Card design per template (upload a blank card, drag fields, every lead's card is drawn from it); see sw.js's v414 note. */  /* v413:   /* v413: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: drag-and-drop card picture box (remembered per template), "Fix pictures & retry failed" with a what-was-fixed banner and per-row notes, and the top bar now also shows the BACKEND build (Router 'version' → backendBuild); see sw.js's v413 note. */  /* v410:   /* v410: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send makes its own card pictures + sample card picture fallback; see sw.js's v410 note. app.js itself only changed by this version-number line. */  /* v409: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: Add Leads now REPLACES a mismatched card instead of skipping that person forever, and the "preparing card pictures" step no longer re-fetches the whole company's card list — see sw.js's v409 note. app.js itself only changed by this version-number line. */  /* v408: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send / Timely Message: Patient Delivery gets a "Retry failed (N)" button that resets a campaign's already-failed leads back to Pending in place (no delete + re-upload, which would just be reported as duplicates) so the next automatic send actually retries them — see sw.js's v408 note. app.js itself only changed by this version-number line. */  /* v406: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: Gold / Platinum 7 campaigns now create the missing membership cards from the Excel; see sw.js's v406 note. app.js itself only changed by this version-number line. */  /* v405: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: "Next batch" note + Change time button on Campaign History, explanation box in Patient Delivery, Total Leads tile fix; see sw.js's v405 note. app.js itself only changed by this version-number line. */  /* v404: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: a Delete button on Completed/Failed campaigns (was Cancel only while active); see sw.js's v404 note. app.js itself only changed by this version-number line. */  /* v403: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send round 3: every active template is listed; card templates (Gold / Platinum / Platinum+ / Diamond / membership_card / Benefits) are filled per recipient from that person's OWN card; see sw.js's v403 note. app.js itself only changed by this one version-number line. */
 /* v402 (superseded by v403): SYNCED TO sw.js's CACHE_VERSION — see that file's v402 note (Bulk
    Message Send / Timely Message can now use "membership_benefits" templates safely, per-recipient
    card lookup). app.js itself only changed by this one version-number line. */
@@ -8100,6 +8100,9 @@ function renderMembershipCards(){
   function todayS(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
   function attMode(){ return String((S.user&&S.user.AttendanceMode)||''); }
   function needSelfie(){ return true; }  // selfie required for all modes
+  /* v425: a laptop / desktop browser has no GPS chip, so its punches arrive without a location. */
+  function isDesktop(){ var ua=navigator.userAgent||''; return !/Android|iPhone|iPad|iPod|Mobile/i.test(ua) && !(navigator.maxTouchPoints>1 && /Macintosh/.test(ua)); }
+  function geoWhyOf(err){ if(isDesktop()) return 'desktop'; if(!navigator.geolocation) return 'unsupported'; if(!err||err.code===1) return 'denied'; if(err.code===3) return 'timeout'; return 'unavailable'; }
   function isFenced(){ var m=attMode().toLowerCase(); return m.indexOf('geo')>=0 || m.indexOf('office')>=0; }   // v242: ANY "geo" mode (Geo only, Geo + Selfie, Geo) is fenced to the branch (150 m) — must match Code.gs
   function hm2min(t){ var p=String(t||'').split(':'); return p.length>=2?(+p[0])*60+(+p[1]):null; }
   /* v284 — WHY YOUR SHIFT LINE SAID "04:38–13:38".
@@ -8650,6 +8653,20 @@ function renderMembershipCards(){
     toast('PDF downloaded');
   }
 
+  /* v425 — WHY "⚠ No location" KEEPS APPEARING.
+     The server writes that note whenever a punch arrives with no coordinates. Nothing in the app
+     was broken — the phone (or computer) simply never gave a location, and nobody was told until
+     the note appeared afterwards. Say it on the punch card, before the tap, with what to change. */
+  function geoNote(){
+    var installed=(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone===true;
+    var box=function(html){ return '<div class="att-note" style="margin-top:8px;text-align:left;border:1px solid #f3c9c9;background:#fdf3f3;color:#a3271f;border-radius:10px;padding:9px 11px;font-weight:600">'+html+'</div>'; };
+    if(isDesktop()) return box('💻 You are on a computer — it has no GPS, so punches from here are saved <u>without location</u> and go to your manager for approval. Punch from your phone instead.');
+    if(!navigator.geolocation) return box('📍 This device cannot share its location — punches are saved without it.');
+    if(ATT.geoState==='denied') return box('📍 Location is <b>blocked</b> for this app, so your punches are saved without location.<br><span style="font-weight:500;color:#7a4a4a">'+
+      (installed ? 'Phone Settings → Apps → <b>this app</b> (its own name/icon, not Chrome) → Permissions → Location → Allow. Also turn the phone\'s Location/GPS ON.'
+                 : 'Phone Settings → Apps → Chrome → Permissions → Location → Allow (or tap 🔒 in the address bar → Location → Allow). Also turn the phone\'s Location/GPS ON.')+'</span>');
+    return '';
+  }
   function paintMe(){
     var box=$id('attMe'); if(!box) return;
     warmGeo();   // start GPS early so the fix is ready before the punch button is tapped
@@ -8776,6 +8793,7 @@ function renderMembershipCards(){
       '<div class="att-sub">'+esc(dutyTxt)+'</div>'+btn+
       '<div class="att-stat">'+esc(stat)+'</div>'+
       '<div class="att-note">'+[ (needSelfie()?'📷 selfie':''), ('📍 location'+(isFenced()?' verified at your branch':'')) ].filter(Boolean).join(' + ')+' · Late after shift+15 min = half day.</div>'+
+      geoNote()+
       photoNote+
       missingNote+
       qNote+
@@ -8877,22 +8895,31 @@ function renderMembershipCards(){
       if(url) return '<div style="position:relative;display:inline-block"><img src="'+esc(driveImg(url))+'" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:9px;border:1px solid #ddd;display:block" onerror="this.style.background=\'#f3f4f6\';this.style.border=\'1px dashed #ccc\'">'+savedBadge+'</div>';
       return '<div style="width:56px;height:56px;border-radius:9px;border:1px dashed #ccc;background:#f9fafb;display:flex;align-items:center;justify-content:center;font-size:9px;color:#aaa;text-align:center">'+(missing?'No photo':'—')+'</div>';
     }
-    /* v424: a PAST day with a check-in but no check-out used to show an empty "—" OUT box, so nobody
-       could tell "did not punch out" from "punch-out lost". Say it plainly — unless a punch-out for
-       that day is still waiting on this phone, in which case it is on its way, not missing. */
-    var _qOut=(ATT.q&&ATT.q.waiting||[]).some(function(p){ return p && p.date===r.date && (p.kind==='out'||p.type==='out'); });
-    var noOut=!!(r.checkIn && String(r.date||'')<todayS() && !_qOut);
+    /* v424/v426: the red "Punch-out not received" box is ONLY for a punch-out she actually MADE that the
+       server never recorded — i.e. this phone still holds a check-out for that day that could not be
+       sent (dead) or is still waiting. A day she simply forgot to punch out shows the normal "—" box;
+       the server's "No punch-out — half day" note already explains that day. */
+    function _qHasOut(list){ return (list||[]).some(function(p){ return p && p.date===r.date && (p.kind==='out'||p.type==='out'); }); }
+    var _qOut=_qHasOut(ATT.q&&ATT.q.waiting), _deadOut=_qHasOut(ATT.q&&ATT.q.dead);
+    var noOut=!!(r.checkIn && !r.checkOut && _deadOut);                  // punched out, server never got it
+    var sendingOut=!!(r.checkIn && !r.checkOut && _qOut && !_deadOut);   // punched out, still on its way
+    /* v425: a genuinely forgotten punch-out shows NOTHING extra on the staff card — the Half day badge
+       says it. The server's "No punch-out — half day" tag stays in the sheet for managers / payroll. */
+    var _shownNotes=String(r.notes||'').replace(/\s*·\s*No punch-out — half day/g,'').replace(/^No punch-out — half day\s*(·\s*)?/,'').trim();
     var dp=String(r.date||'').split('-'), dlabel=(dp.length===3)?(dp[2]+' '+(MON[Number(dp[1])-1]||'')+' '+dp[0]):esc(r.date||'');
     return '<div class="att-row" style="align-items:flex-start">'+
       '<div class="att-mid" style="flex:1">'+
         '<div class="att-nm"><b>'+esc(dlabel)+'</b>'+dayBadge(r.status)+(/work from home/i.test(String(r.notes||''))?' <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:#eeedfe;color:#534AB7">🏠 WFH</span>':'')+'</div>'+
         '<div class="att-m">In '+esc(r.checkIn||'—')+(r.checkOut?(' · Out '+esc(r.checkOut)):'')+((r.workHours&&!isNaN(Number(r.workHours)))?(' · '+esc(r.workHours)+'h'):'')+'</div>'+
-        (r.notes?'<div class="att-m" style="color:#a3271f;font-weight:600">📝 '+esc(r.notes)+'</div>':'')+
+        (_shownNotes?'<div class="att-m" style="color:#a3271f;font-weight:600">📝 '+esc(_shownNotes)+'</div>':'')+
         '<div style="margin:8px 0;display:flex;gap:10px">'+
           '<div style="text-align:center">'+thumb(r.selfieInUrl, true)+'<div style="font-size:9px;font-weight:600;color:#888;letter-spacing:.04em;margin-top:3px">IN</div></div>'+
-          '<div style="text-align:center">'+((!r.checkOut && noOut)?'<div style="width:56px;height:56px;border-radius:9px;border:1px dashed #e0a1a1;background:#fdf2f2;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:8.5px;line-height:1.2;color:#a3271f;font-weight:700;text-align:center">No punch-out<br>received</div>':thumb(r.selfieOutUrl, !!r.checkOut))+'<div style="font-size:9px;font-weight:600;color:#888;letter-spacing:.04em;margin-top:3px">OUT</div></div>'+
+          '<div style="text-align:center">'+(noOut?'<div style="width:56px;height:56px;border-radius:9px;border:1px dashed #e0a1a1;background:#fdf2f2;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:8.5px;line-height:1.2;color:#a3271f;font-weight:700;text-align:center">Punch-out<br>not<br>received</div>'
+            :sendingOut?'<div style="width:56px;height:56px;border-radius:9px;border:1px dashed #f5c56b;background:#fff8ea;display:flex;align-items:center;justify-content:center;font-size:8.5px;line-height:1.2;color:#8a5a00;font-weight:700;text-align:center">⏳ Sending…</div>'
+            :thumb(r.selfieOutUrl, !!r.checkOut))+'<div style="font-size:9px;font-weight:600;color:#888;letter-spacing:.04em;margin-top:3px">OUT</div></div>'+
         '</div>'+
-        ((!r.checkOut && noOut)?'<div class="att-m" style="font-size:11.5px;color:#a3271f">The server never got a check-out for this day. If you did punch out, tell your manager.</div>':'')+
+        (noOut?'<div class="att-m" style="font-size:11.5px;color:#a3271f">You punched out on this phone, but the server never received it. Tell your manager so it can be corrected.</div>'
+          :sendingOut?'<div class="att-m" style="font-size:11.5px;color:#8a5a00">Your punch-out is saved on this phone and will send by itself.</div>':'')+
       '</div>'+
       '<span style="font-size:10.5px;font-weight:600;color:#aaa;flex-shrink:0;white-space:nowrap" title="Only MIS / Operations Manager / Director can change a status, and never on their own day.">👁 view only</span>'+
     '</div>';
@@ -9128,7 +9155,13 @@ function renderMembershipCards(){
         setTimeout(function(){ if(_geoWatch!=null){ navigator.geolocation.clearWatch(_geoWatch); _geoWatch=null; } },120000);  // stop after 2 min — don't drain battery
       }catch(e){}
     }
-    if(navigator.permissions&&navigator.permissions.query){ navigator.permissions.query({name:'geolocation'}).then(function(st){ if(st.state==='granted') start(); },function(){}); }
+    if(navigator.permissions&&navigator.permissions.query){ navigator.permissions.query({name:'geolocation'}).then(function(st){
+      /* v425: remember the permission so the screen can warn BEFORE a punch goes out without location */
+      var was=ATT.geoState; ATT.geoState=st.state;
+      try{ st.onchange=function(){ ATT.geoState=st.state; if(document.getElementById('attMe')) paintMe(); }; }catch(e){}
+      if(was!==st.state && was!==undefined && document.getElementById('attMe')) paintMe();
+      else if(was===undefined && st.state==='denied' && document.getElementById('attMe')) paintMe();
+      if(st.state==='granted') start(); },function(){}); }
   }
   function getOnce_(hiAcc,timeoutMs){
     return new Promise(function(resolve,reject){
@@ -9154,6 +9187,7 @@ function renderMembershipCards(){
     var geoP=getLocation_();
     var selfieP=needSelfie() ? new Promise(function(resolve){ captureSelfie(resolve); }) : Promise.resolve(null);
     geoP.then(function(loc){ ATT.coords=loc; }).catch(function(err){
+      ATT.geoWhy=geoWhyOf(err);   // v425: sent with the punch, so the note says WHY there was no location
       var msg;
       if(!err||err.code===1){
         msg = installed
@@ -9180,7 +9214,7 @@ function renderMembershipCards(){
         var denied = (!err || err.code===1);
         if(denied){
           // Retrying a denied permission cannot succeed — submit immediately rather than stalling the user.
-          ATT.coords=null; ATT.noGeo=true;
+          ATT.coords=null; ATT.noGeo=true; ATT.geoWhy=geoWhyOf(err);
           toast('Sending your punch without location — it will go to your manager for approval.');
           submitMark(kind,b64);
           return;
@@ -9189,8 +9223,8 @@ function renderMembershipCards(){
         // retake it), and if that also fails we still submit rather than discard the punch.
         toast('Retrying location — keep the app open…');
         getLocation_().then(function(loc){ ATT.coords=loc; ATT.noGeo=false; submitMark(kind,b64); },
-          function(){
-            ATT.coords=null; ATT.noGeo=true;
+          function(err2){
+            ATT.coords=null; ATT.noGeo=true; ATT.geoWhy=geoWhyOf(err2);
             toast('Could not get location — punch sent without it, for manager approval.');
             submitMark(kind,b64);
           });
@@ -9265,7 +9299,7 @@ function renderMembershipCards(){
     ATT.kind=kind; ATT.outRemark=''; ATT.tapTs=Date.now();   // remember the REAL tap time for offline punches; under 4 hours auto-marks half day on the server — no reason prompt
     // v282: one id per TAP. Every retry, every WFH re-submit and every queue replay reuses it, so the
     // server can tell "the same punch arriving twice" apart from "the user punched twice".
-    ATT.punchId=punchUuid(); ATT.noGeo=false;
+    ATT.punchId=punchUuid(); ATT.noGeo=false; ATT.geoWhy='';
     // v242: two-shift staff are no longer asked which shift they're on. The server infers it from the
     // punch time (see pickShift_ in Code.gs), so a 11:56 arrival on the 12:00 shift is simply on time.
     if(kind==='in') ATT.altShift=false;
@@ -9366,7 +9400,7 @@ function renderMembershipCards(){
        inline path is the one apiCheckIn has always had.
        ============================================================================================ */
     var _photo = selfie || '';
-    var c=ATT.coords||{}, payload={punchId:_pid, selfie:_photo, selfiePending:0, lat:c.lat, lng:c.lng, noGeo:!!ATT.noGeo, wfh:!!ATT.wfh, altShift:!!ATT.altShift, remark:(kind==='out'?(ATT.outRemark||''):''), tapDate:_tapDate, tapTime:_tapTime};
+    var c=ATT.coords||{}, payload={punchId:_pid, selfie:_photo, selfiePending:0, lat:c.lat, lng:c.lng, noGeo:!!ATT.noGeo, geoWhy:(ATT.noGeo?(ATT.geoWhy||geoWhyOf(null)):''), wfh:!!ATT.wfh, altShift:!!ATT.altShift, remark:(kind==='out'?(ATT.outRemark||''):''), tapDate:_tapDate, tapTime:_tapTime};
     function tdy(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
     /* v283 — WHY THE BUTTON TOOK SO LONG TO CHANGE.
        The punch itself finishes, and then this used to wait for a FULL myAttendance round trip before
@@ -9456,7 +9490,7 @@ function renderMembershipCards(){
         kind: kind, date: tdy(),
         time: String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'),
         selfie: selfie, lat: c.lat, lng: c.lng,
-        noGeo: !!ATT.noGeo, wfh: !!ATT.wfh, altShift: !!ATT.altShift,
+        noGeo: !!ATT.noGeo, geoWhy: (ATT.noGeo?(ATT.geoWhy||geoWhyOf(null)):''), wfh: !!ATT.wfh, altShift: !!ATT.altShift,
         remark: (kind==='out'?(ATT.outRemark||''):''),
         hold: 1, holdTs: Date.now()   // a live attempt is in flight; a background flush must not race it
       });
