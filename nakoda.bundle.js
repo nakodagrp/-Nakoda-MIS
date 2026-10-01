@@ -1673,7 +1673,7 @@ function initInstall(){
    someone their app is stale, which matters a lot here: staff who assumed the mismatch banner was just
    always-on noise had no reliable signal to go tap "Check update" after a real deploy. Bump this to
    match sw.js's CACHE_VERSION on every deploy that changes sw.js — the two must always agree. */
-var APP_BUILD='v426';   /* v426: release of the v425 attendance fixes (early-out half day, lost punch-out, forgot punch-out = half day, no-location reason). */  /* v425:   /* v425: Attendance — forgot to punch out = Half day even when a manager approved the check-in (31_AttFix.gs attHourlyFix_); the punch card warns when location is blocked / on a computer, and the note now says WHY there was no location. */  /* v424:   /* v424: Attendance — an early check-out (under 4h) stays Half day: setting Full day on such a day now asks for a reason; approvals can no longer wipe a punch-out; a past day with no punch-out says "No punch-out received". Backend v424 (31_AttFix.gs + 03_Router.gs). */  /* v423:   /* v423: Bulk Message Send / Timely Message for CRM staff (own branch only, enforced server-side) + an "Are you sure?" popup on Cancel/Delete campaign. */  /* v422:   /* v422: Membership Cards — branch staff see only their own branch's cards; Operations Manager / MIS / Director see all with a branch filter (30_CardScope.gs). Also carries backend v420–v421. */  /* v419:   /* v419: Bulk Message Send — card templates send each lead THEIR OWN card again (drawn from the real card design, 8 at a time, Drive direct link when WhatsBizAPI refuses); see sw.js's v419 note. */  /* v416:   /* v416: Bulk Message Send — card templates with an image use the previous (18 Sep) method exactly: one image + {{3}}.. filled once; see sw.js's v416 note. */  /* v415:   /* v415: Bulk Message Send — card templates get a "One image for everyone" mode (default): upload one image, fill {{3}}.. once, like the original screen; see sw.js's v415 note. */  /* v414:   /* v414: Bulk Message Send — Card design per template (upload a blank card, drag fields, every lead's card is drawn from it); see sw.js's v414 note. */  /* v413:   /* v413: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: drag-and-drop card picture box (remembered per template), "Fix pictures & retry failed" with a what-was-fixed banner and per-row notes, and the top bar now also shows the BACKEND build (Router 'version' → backendBuild); see sw.js's v413 note. */  /* v410:   /* v410: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send makes its own card pictures + sample card picture fallback; see sw.js's v410 note. app.js itself only changed by this version-number line. */  /* v409: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: Add Leads now REPLACES a mismatched card instead of skipping that person forever, and the "preparing card pictures" step no longer re-fetches the whole company's card list — see sw.js's v409 note. app.js itself only changed by this version-number line. */  /* v408: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send / Timely Message: Patient Delivery gets a "Retry failed (N)" button that resets a campaign's already-failed leads back to Pending in place (no delete + re-upload, which would just be reported as duplicates) so the next automatic send actually retries them — see sw.js's v408 note. app.js itself only changed by this version-number line. */  /* v406: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: Gold / Platinum 7 campaigns now create the missing membership cards from the Excel; see sw.js's v406 note. app.js itself only changed by this version-number line. */  /* v405: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: "Next batch" note + Change time button on Campaign History, explanation box in Patient Delivery, Total Leads tile fix; see sw.js's v405 note. app.js itself only changed by this version-number line. */  /* v404: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: a Delete button on Completed/Failed campaigns (was Cancel only while active); see sw.js's v404 note. app.js itself only changed by this version-number line. */  /* v403: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send round 3: every active template is listed; card templates (Gold / Platinum / Platinum+ / Diamond / membership_card / Benefits) are filled per recipient from that person's OWN card; see sw.js's v403 note. app.js itself only changed by this one version-number line. */
+var APP_BUILD='v427';   /* v427: Attendance — an older day's saved punch sent today no longer shows as today's check-in (the phantom "In ✓" + Check out button); a refused punch no longer leaves "Done for today" on screen. */  /* v426:   /* v426: release of the v425 attendance fixes (early-out half day, lost punch-out, forgot punch-out = half day, no-location reason). */  /* v425:   /* v425: Attendance — forgot to punch out = Half day even when a manager approved the check-in (31_AttFix.gs attHourlyFix_); the punch card warns when location is blocked / on a computer, and the note now says WHY there was no location. */  /* v424:   /* v424: Attendance — an early check-out (under 4h) stays Half day: setting Full day on such a day now asks for a reason; approvals can no longer wipe a punch-out; a past day with no punch-out says "No punch-out received". Backend v424 (31_AttFix.gs + 03_Router.gs). */  /* v423:   /* v423: Bulk Message Send / Timely Message for CRM staff (own branch only, enforced server-side) + an "Are you sure?" popup on Cancel/Delete campaign. */  /* v422:   /* v422: Membership Cards — branch staff see only their own branch's cards; Operations Manager / MIS / Director see all with a branch filter (30_CardScope.gs). Also carries backend v420–v421. */  /* v419:   /* v419: Bulk Message Send — card templates send each lead THEIR OWN card again (drawn from the real card design, 8 at a time, Drive direct link when WhatsBizAPI refuses); see sw.js's v419 note. */  /* v416:   /* v416: Bulk Message Send — card templates with an image use the previous (18 Sep) method exactly: one image + {{3}}.. filled once; see sw.js's v416 note. */  /* v415:   /* v415: Bulk Message Send — card templates get a "One image for everyone" mode (default): upload one image, fill {{3}}.. once, like the original screen; see sw.js's v415 note. */  /* v414:   /* v414: Bulk Message Send — Card design per template (upload a blank card, drag fields, every lead's card is drawn from it); see sw.js's v414 note. */  /* v413:   /* v413: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: drag-and-drop card picture box (remembered per template), "Fix pictures & retry failed" with a what-was-fixed banner and per-row notes, and the top bar now also shows the BACKEND build (Router 'version' → backendBuild); see sw.js's v413 note. */  /* v410:   /* v410: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send makes its own card pictures + sample card picture fallback; see sw.js's v410 note. app.js itself only changed by this version-number line. */  /* v409: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: Add Leads now REPLACES a mismatched card instead of skipping that person forever, and the "preparing card pictures" step no longer re-fetches the whole company's card list — see sw.js's v409 note. app.js itself only changed by this version-number line. */  /* v408: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send / Timely Message: Patient Delivery gets a "Retry failed (N)" button that resets a campaign's already-failed leads back to Pending in place (no delete + re-upload, which would just be reported as duplicates) so the next automatic send actually retries them — see sw.js's v408 note. app.js itself only changed by this version-number line. */  /* v406: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: Gold / Platinum 7 campaigns now create the missing membership cards from the Excel; see sw.js's v406 note. app.js itself only changed by this version-number line. */  /* v405: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: "Next batch" note + Change time button on Campaign History, explanation box in Patient Delivery, Total Leads tile fix; see sw.js's v405 note. app.js itself only changed by this version-number line. */  /* v404: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: a Delete button on Completed/Failed campaigns (was Cancel only while active); see sw.js's v404 note. app.js itself only changed by this version-number line. */  /* v403: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send round 3: every active template is listed; card templates (Gold / Platinum / Platinum+ / Diamond / membership_card / Benefits) are filled per recipient from that person's OWN card; see sw.js's v403 note. app.js itself only changed by this one version-number line. */
 /* v402 (superseded by v403): SYNCED TO sw.js's CACHE_VERSION — see that file's v402 note (Bulk
    Message Send / Timely Message can now use "membership_benefits" templates safely, per-recipient
    card lookup). app.js itself only changed by this one version-number line. */
@@ -8203,6 +8203,7 @@ function renderMembershipCards(){
      words the person can act on. */
   function _plainPunchError(em){
     em=String(em||'');
+    if(/please check in first/i.test(em)) return 'You have not checked in today, so this check-out was not saved. Check in first.';   // v427
     if(/PUNCH_TOO_SOON/.test(em)) return 'That would record a check-out at the same time as your check-in, so it was not saved. Punch out when you actually leave.';
     if(/PUNCH_MONTH_CLOSED/.test(em)) return String(em).replace(/^.*PUNCH_MONTH_CLOSED:\s*/,'');
     if(/PUNCH_FUTURE|PUNCH_TOO_OLD/.test(em)) return 'The date and time on this phone are wrong, so this punch could not be recorded. Please fix the phone clock.';
@@ -8268,7 +8269,7 @@ function renderMembershipCards(){
         if(evt.type==='sent'){
           var mine = String(evt.rec.ownerEmpId||'')===myEmpId();
           if(mine){
-            applyPunchToRecs(evt.rec.kind, evt.result);   // v345: see the note above applyPunchToRecs — this is the line that closes the gap
+            applyPunchToRecs(evt.rec.kind, evt.result, evt.rec.date);   // v427: pass the punch's OWN date — v345: see the note above applyPunchToRecs — this is the line that closes the gap
             toast('Saved punch sent ✓ '+(evt.rec.kind==='in'?'In ':'Out ')+evt.rec.time);
           }
         }
@@ -8389,6 +8390,14 @@ function renderMembershipCards(){
     if(!loc || (!loc.checkIn && !loc.checkOut)) return recs;
     var srv=null;
     for(var i=0;i<recs.length;i++){ if(String(recs[i].date).slice(0,10)===t){ srv=recs[i]; break; } }
+    /* v427: a local-only row is kept for a short grace period (the server may simply not have caught
+       up yet) or while this phone still holds an unsent punch for today. After that, if the server
+       still has nothing, the local row was wrong — drop it rather than keep a phantom check-in. */
+    var _fresh = !loc._localTs || (Date.now()-loc._localTs) < 10*60000 || !!(qToday('in')||qToday('out'));
+    if(!_fresh && loc._local){
+      if(!srv) return recs;
+      if(!srv.checkIn && !srv.checkOut) return recs;
+    }
     if(!srv){ recs.push(loc); return recs; }                       // server has nothing for today yet — keep ours
     if(loc.checkIn  && !srv.checkIn ){ srv.checkIn =loc.checkIn;  srv._local=true; }
     if(loc.checkOut && !srv.checkOut){ srv.checkOut=loc.checkOut; srv._local=true; }
@@ -8413,10 +8422,18 @@ function renderMembershipCards(){
      rather than waiting for the separate server round-trip. applyLocalPunch (inside submitMark,
      the live-send path) now shares this same function, so there is one place, not two, that knows
      how to fold a punch response into today's row. */
-  function applyPunchToRecs(kind, r){
+  /* v427 — "CHECK OUT" SHOWN BEFORE ANYONE CHECKED IN (1 Oct).
+     A punch saved on the phone YESTERDAY (or any earlier day) that the queue finally sent today was
+     painted into TODAY's row, because this function always used todayS() and never looked at the
+     punch's own date. Today then read "In ✓" with no photo, the big button became Check out, the
+     staff member tapped it, the server refused it (no check-in today) — and the optimistic
+     "Done for today" stayed on screen. Now a punch is only painted onto the day it belongs to. */
+  function applyPunchToRecs(kind, r, date){
     var t=todayS(), recs=(ATT.recs||[]), rec=null;
+    if(date && String(date).slice(0,10)!==t) return;   // v427: an older day's punch — the server refresh will show it on its own day
     for(var i=0;i<recs.length;i++){ if(String(recs[i].date).slice(0,10)===t){ rec=recs[i]; break; } }
     if(!rec){ rec={date:t}; recs.push(rec); ATT.recs=recs; }
+    rec._localTs=Date.now();   // v427: lets mergeServerRecs drop a local row the server never confirms
     rec._local=true;   // marks this as not-yet-confirmed: paintMe must not read a missing selfie URL as "selfie failed to save"
     if(kind==='in'){
       rec.checkIn=(r&&r.checkIn)||rec.checkIn||'✓';
@@ -9610,7 +9627,9 @@ function renderMembershipCards(){
            recorded as sent" — too old to date, no usable time, dated in the future, or a check-out
            at the same minute as the check-in. Retrying any of them for ever would be pointless. */
         if(em && /PUNCH_TOO_OLD|PUNCH_UNDATED|PUNCH_FUTURE|PUNCH_TOO_SOON|PUNCH_MONTH_CLOSED|not scheduled to work|already worked .*sundays|alternate sunday limit|selfie is required|not authorised|please check in first/i.test(em)){
-          dropStaged(); ATT.sending=null; ATT.optUntil=0; stopFast(); _photo=''; toast(_plainPunchError(em), true); paintMe(); return;
+          dropStaged(); ATT.sending=null; ATT.optUntil=0; stopFast(); revertOptimisticPaint(); _photo=''; toast(_plainPunchError(em), true); paintMe();   // v427: undo the optimistic "Done for today" too — the punch was NOT recorded
+          if(/please check in first/i.test(em)){ refreshAfterSync(); }   // v427: re-read today from the server so a phantom check-in disappears
+          return;
         }
         // Anything else (session expired, a Drive hiccup, an unexpected server error) is potentially
         // recoverable — keep the punch queued rather than throwing away someone's day.
