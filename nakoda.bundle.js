@@ -616,12 +616,17 @@
     attachSelfie:function(d){ return queueSelfie(d.attId,d.kind,d.base64); },
     /* v284: 'myatt' was a single global key — the direct cause of one employee's attendance card being
        painted with another employee's punches. Namespaced per user, like every other cached read. */
-    cachedAttendance:function(){ return kvGet('myatt:'+curUid()); },
+    /* v431: the saved copy is kept PER MONTH. It used to be one copy per person, overwritten by whatever
+       month was last opened — after looking at September's history, a no-signal open of the attendance
+       screen fell back to September and showed "Check in" to someone already checked in today. A copy
+       read back from the phone is marked cached:true so the screen never treats it as the server's word. */
+    cachedAttendance:function(ym){ var u=curUid(); return kvGet('myatt:'+u+':'+(ym||'')).then(function(x){ if(x) return Object.assign({},x,{cached:true}); return kvGet('myatt:'+u).then(function(y){ return (y && (!ym || y.month===ym)) ? Object.assign({},y,{cached:true}) : null; }); }); },
+    saveMyAtt:function(ym,records,openShift){ var u=curUid(); return kvSet('myatt:'+u+':'+ym,{ok:true,records:records||[],month:ym,openShift:openShift||null,savedOnPhone:1}); },
     /* v295: this is the call fired straight after a punch, and it is guaranteed to be the SLOWEST one
        the server ever answers — the punch has just invalidated this employee's month cache, so it must
        re-read the Attendance sheet from scratch. At the old 60s default the attendance screen could sit
        there for a full minute before falling back to the copy already in IndexedDB. 20s, then fall back. */
-    myAttendance:function(ym,timeoutMs){ return call('myAttendance',{token:getToken(),ym:ym}, timeoutMs||20000).then(function(r){ if(r.ok) kvSet('myatt:'+curUid(),r); return r; }).catch(function(){ return kvGet('myatt:'+curUid()).then(function(x){ return x||{ok:true,records:[],offline:true}; }); }); },
+    myAttendance:function(ym,timeoutMs){ var u=curUid(); return call('myAttendance',{token:getToken(),ym:ym}, timeoutMs||20000).then(function(r){ if(r.ok) kvSet('myatt:'+u+':'+(r.month||ym),r); return r; }).catch(function(){ return API.cachedAttendance(ym).then(function(x){ return x||{ok:true,records:[],offline:true,cached:true}; }); }); },   /* v431: per-month copy, marked cached when it is the fallback */
     listAttendance:function(branch,date,dateTo){ return call('listAttendance',{token:getToken(),branch:branch,date:date,dateTo:dateTo||''}); },
     staffMonthAttendance:function(empId,ym){ return call('staffMonthAttendance',{token:getToken(),empId:empId,ym:ym}); },
     monthlyAttendance:function(branch,ym){ return call('monthlyAttendance',{token:getToken(),branch:branch,ym:ym}); },
@@ -1673,7 +1678,7 @@ function initInstall(){
    someone their app is stale, which matters a lot here: staff who assumed the mismatch banner was just
    always-on noise had no reliable signal to go tap "Check update" after a real deploy. Bump this to
    match sw.js's CACHE_VERSION on every deploy that changes sw.js — the two must always agree. */
-var APP_BUILD='v430';   /* v430: Bulk Message Send — ⚙ Limit per campaign (messages per day, rest stay Pending); Dashboard Membership cards — Per day column + day picker, Issued = 1st → selected day. */  /* v429: Bulk Message Send — Add Leads sends up to 1,000 leads in one trip and the server dedupes by reading 3 columns, not the whole sheet. */  /* v428: */   /* v428: Branches — "Use my current location" no longer fails with "allow location access" when GPS is merely slow: 20 s GPS try + network fallback, real reason shown, accuracy (±m) shown. */  /* v427:   /* v427: Attendance — an older day's saved punch sent today no longer shows as today's check-in (the phantom "In ✓" + Check out button); a refused punch no longer leaves "Done for today" on screen. */  /* v426:   /* v426: release of the v425 attendance fixes (early-out half day, lost punch-out, forgot punch-out = half day, no-location reason). */  /* v425:   /* v425: Attendance — forgot to punch out = Half day even when a manager approved the check-in (31_AttFix.gs attHourlyFix_); the punch card warns when location is blocked / on a computer, and the note now says WHY there was no location. */  /* v424:   /* v424: Attendance — an early check-out (under 4h) stays Half day: setting Full day on such a day now asks for a reason; approvals can no longer wipe a punch-out; a past day with no punch-out says "No punch-out received". Backend v424 (31_AttFix.gs + 03_Router.gs). */  /* v423:   /* v423: Bulk Message Send / Timely Message for CRM staff (own branch only, enforced server-side) + an "Are you sure?" popup on Cancel/Delete campaign. */  /* v422:   /* v422: Membership Cards — branch staff see only their own branch's cards; Operations Manager / MIS / Director see all with a branch filter (30_CardScope.gs). Also carries backend v420–v421. */  /* v419:   /* v419: Bulk Message Send — card templates send each lead THEIR OWN card again (drawn from the real card design, 8 at a time, Drive direct link when WhatsBizAPI refuses); see sw.js's v419 note. */  /* v416:   /* v416: Bulk Message Send — card templates with an image use the previous (18 Sep) method exactly: one image + {{3}}.. filled once; see sw.js's v416 note. */  /* v415:   /* v415: Bulk Message Send — card templates get a "One image for everyone" mode (default): upload one image, fill {{3}}.. once, like the original screen; see sw.js's v415 note. */  /* v414:   /* v414: Bulk Message Send — Card design per template (upload a blank card, drag fields, every lead's card is drawn from it); see sw.js's v414 note. */  /* v413:   /* v413: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: drag-and-drop card picture box (remembered per template), "Fix pictures & retry failed" with a what-was-fixed banner and per-row notes, and the top bar now also shows the BACKEND build (Router 'version' → backendBuild); see sw.js's v413 note. */  /* v410:   /* v410: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send makes its own card pictures + sample card picture fallback; see sw.js's v410 note. app.js itself only changed by this version-number line. */  /* v409: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: Add Leads now REPLACES a mismatched card instead of skipping that person forever, and the "preparing card pictures" step no longer re-fetches the whole company's card list — see sw.js's v409 note. app.js itself only changed by this version-number line. */  /* v408: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send / Timely Message: Patient Delivery gets a "Retry failed (N)" button that resets a campaign's already-failed leads back to Pending in place (no delete + re-upload, which would just be reported as duplicates) so the next automatic send actually retries them — see sw.js's v408 note. app.js itself only changed by this version-number line. */  /* v406: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: Gold / Platinum 7 campaigns now create the missing membership cards from the Excel; see sw.js's v406 note. app.js itself only changed by this version-number line. */  /* v405: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: "Next batch" note + Change time button on Campaign History, explanation box in Patient Delivery, Total Leads tile fix; see sw.js's v405 note. app.js itself only changed by this version-number line. */  /* v404: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: a Delete button on Completed/Failed campaigns (was Cancel only while active); see sw.js's v404 note. app.js itself only changed by this version-number line. */  /* v403: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send round 3: every active template is listed; card templates (Gold / Platinum / Platinum+ / Diamond / membership_card / Benefits) are filled per recipient from that person's OWN card; see sw.js's v403 note. app.js itself only changed by this one version-number line. */
+var APP_BUILD='v431';   /* v431: Attendance — 3h-shift staff no longer Half day for a full shift (limit = shift length − 15 min, max 4h); night duty can punch out after 12 midnight (closes yesterday's shift); the screen no longer wipes a real check-in because of a stale offline copy. Backend v431 (33_AttNight.gs). */  /* v430: */    /* v430: Bulk Message Send — ⚙ Limit per campaign (messages per day, rest stay Pending); Dashboard Membership cards — Per day column + day picker, Issued = 1st → selected day. */  /* v429: Bulk Message Send — Add Leads sends up to 1,000 leads in one trip and the server dedupes by reading 3 columns, not the whole sheet. */  /* v428: */   /* v428: Branches — "Use my current location" no longer fails with "allow location access" when GPS is merely slow: 20 s GPS try + network fallback, real reason shown, accuracy (±m) shown. */  /* v427:   /* v427: Attendance — an older day's saved punch sent today no longer shows as today's check-in (the phantom "In ✓" + Check out button); a refused punch no longer leaves "Done for today" on screen. */  /* v426:   /* v426: release of the v425 attendance fixes (early-out half day, lost punch-out, forgot punch-out = half day, no-location reason). */  /* v425:   /* v425: Attendance — forgot to punch out = Half day even when a manager approved the check-in (31_AttFix.gs attHourlyFix_); the punch card warns when location is blocked / on a computer, and the note now says WHY there was no location. */  /* v424:   /* v424: Attendance — an early check-out (under 4h) stays Half day: setting Full day on such a day now asks for a reason; approvals can no longer wipe a punch-out; a past day with no punch-out says "No punch-out received". Backend v424 (31_AttFix.gs + 03_Router.gs). */  /* v423:   /* v423: Bulk Message Send / Timely Message for CRM staff (own branch only, enforced server-side) + an "Are you sure?" popup on Cancel/Delete campaign. */  /* v422:   /* v422: Membership Cards — branch staff see only their own branch's cards; Operations Manager / MIS / Director see all with a branch filter (30_CardScope.gs). Also carries backend v420–v421. */  /* v419:   /* v419: Bulk Message Send — card templates send each lead THEIR OWN card again (drawn from the real card design, 8 at a time, Drive direct link when WhatsBizAPI refuses); see sw.js's v419 note. */  /* v416:   /* v416: Bulk Message Send — card templates with an image use the previous (18 Sep) method exactly: one image + {{3}}.. filled once; see sw.js's v416 note. */  /* v415:   /* v415: Bulk Message Send — card templates get a "One image for everyone" mode (default): upload one image, fill {{3}}.. once, like the original screen; see sw.js's v415 note. */  /* v414:   /* v414: Bulk Message Send — Card design per template (upload a blank card, drag fields, every lead's card is drawn from it); see sw.js's v414 note. */  /* v413:   /* v413: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: drag-and-drop card picture box (remembered per template), "Fix pictures & retry failed" with a what-was-fixed banner and per-row notes, and the top bar now also shows the BACKEND build (Router 'version' → backendBuild); see sw.js's v413 note. */  /* v410:   /* v410: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send makes its own card pictures + sample card picture fallback; see sw.js's v410 note. app.js itself only changed by this version-number line. */  /* v409: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: Add Leads now REPLACES a mismatched card instead of skipping that person forever, and the "preparing card pictures" step no longer re-fetches the whole company's card list — see sw.js's v409 note. app.js itself only changed by this version-number line. */  /* v408: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send / Timely Message: Patient Delivery gets a "Retry failed (N)" button that resets a campaign's already-failed leads back to Pending in place (no delete + re-upload, which would just be reported as duplicates) so the next automatic send actually retries them — see sw.js's v408 note. app.js itself only changed by this version-number line. */  /* v406: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: Gold / Platinum 7 campaigns now create the missing membership cards from the Excel; see sw.js's v406 note. app.js itself only changed by this version-number line. */  /* v405: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: "Next batch" note + Change time button on Campaign History, explanation box in Patient Delivery, Total Leads tile fix; see sw.js's v405 note. app.js itself only changed by this version-number line. */  /* v404: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: a Delete button on Completed/Failed campaigns (was Cancel only while active); see sw.js's v404 note. app.js itself only changed by this version-number line. */  /* v403: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send round 3: every active template is listed; card templates (Gold / Platinum / Platinum+ / Diamond / membership_card / Benefits) are filled per recipient from that person's OWN card; see sw.js's v403 note. app.js itself only changed by this one version-number line. */
 /* v402 (superseded by v403): SYNCED TO sw.js's CACHE_VERSION — see that file's v402 note (Bulk
    Message Send / Timely Message can now use "membership_benefits" templates safely, per-recipient
    card lookup). app.js itself only changed by this one version-number line. */
@@ -8242,6 +8247,39 @@ function renderMembershipCards(){
   // strict compare, so the moment the server returns a full ISO date (or a cached record from an older
   // build) it matched nothing — and paintMe then showed "Check in" to somebody who had already checked in.
   function todayRec(){ var t=todayS(); return (ATT.recs||[]).filter(function(r){return String(r.date).slice(0,10)===t;})[0]; }
+  /* v431 — NIGHT DUTY. A night-duty person (profile Duty End earlier than Duty Start, e.g. 22:00–07:00)
+     checks in on one date and out on the next. todayRec() only knows TODAY, so after 12 midnight the
+     screen found no check-in and showed "Check in" — and the server refused the punch-out. nightRec()
+     returns YESTERDAY's shift while it can still be closed (within 16 h of its check-in), taken from the
+     server's own openShift (works on the 1st of the month too) or from this month's list. Day staff:
+     isNightDuty() is false, so nothing below changes anything for them. */
+  function yesterdayS(){ var d=new Date(Date.now()-864e5); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  function dutyMin(t){ var m=/^(\d{1,2}):(\d{2})/.exec(fmtDutyTime(t)); return m?((+m[1])*60+(+m[2])):null; }
+  function isNightDuty(){ var u=S.user||{}, a=dutyMin(u.DutyStart), b=dutyMin(u.DutyEnd), c=dutyMin(u.AltDutyStart), d=dutyMin(u.AltDutyEnd); return (a!=null&&b!=null&&b<a)||(c!=null&&d!=null&&d<c); }
+  function nightRec(){
+    if(!isNightDuty()) return null;
+    var t=todayRec(); if(t && t.checkIn) return null;
+    if(qToday('in')) return null;
+    var y=yesterdayS(), os=ATT.openShift, r=(os && String(os.date).slice(0,10)===y) ? os : null;
+    if(!r) r=(ATT.recs||[]).filter(function(x){ return String(x.date).slice(0,10)===y; })[0]||null;
+    if(!r || !r.checkIn || /^(leave|absent)$/.test(String(r.status||''))) return null;
+    var m=/^(\d{1,2}):(\d{2})/.exec(String(r.checkIn)); if(!m) return null;
+    var n=new Date(), el=(n.getHours()*60+n.getMinutes())+1440-((+m[1])*60+(+m[2]));
+    return (el>0 && el<=16*60) ? r : null;
+  }
+  /* v431: remember what the server said about the night shift. A reply that is only the copy saved
+     on this phone, or that has not caught up yet, may not erase a punch-out this phone already saw. */
+  function takeOpenShift(meta){
+    if(!meta) return;
+    var live=!(meta.cached||meta.offline);
+    if(meta.openShift===undefined){ if(live && !meta.nightDuty) ATT.openShift=null; return; }
+    var n=meta.openShift, o=ATT.openShift;
+    if(n && o && String(n.attId)===String(o.attId) && o.checkOut && !n.checkOut){ n.checkOut=o.checkOut; if(o.workHours) n.workHours=o.workHours; n._local=true; }
+    ATT.openShift=n||null;
+  }
+  /* v431: keep this phone's saved copy of the month in step with what the screen shows, so a later
+     no-signal open can never fall back to a copy from BEFORE today's punch (problem 3). */
+  function saveAttCopy(){ try{ if(API.saveMyAtt) API.saveMyAtt(ymNow(), ATT.recs||[], ATT.openShift||null); }catch(e){} }
   // v282: one id per TAP, reused across every retry and every queue replay, so the server can recognise
   // the same physical punch arriving twice and answer with the original result instead of writing it again.
   function punchUuid(){ return 'p'+Date.now().toString(36)+'-'+'xxxxxxxx'.replace(/x/g,function(){ return (Math.random()*16|0).toString(16); }); }
@@ -8378,7 +8416,7 @@ function renderMembershipCards(){
         if(evt.type==='sent'){
           var mine = String(evt.rec.ownerEmpId||'')===myEmpId();
           if(mine){
-            applyPunchToRecs(evt.rec.kind, evt.result, evt.rec.date);   // v427: pass the punch's OWN date — v345: see the note above applyPunchToRecs — this is the line that closes the gap
+            applyPunchToRecs(evt.rec.kind, evt.result, evt.rec.date); saveAttCopy();   // v427: pass the punch's OWN date — v345: see the note above applyPunchToRecs — this is the line that closes the gap
             toast('Saved punch sent ✓ '+(evt.rec.kind==='in'?'In ':'Out ')+evt.rec.time);
           }
         }
@@ -8494,7 +8532,13 @@ function renderMembershipCards(){
      The server still wins on everything it actually knows — times, status, approval, selfie URLs — it
      simply may not DELETE a check-in or check-out we have already seen land.
      ============================================================================================ */
-  function mergeServerRecs(records){
+  function mergeServerRecs(records, meta){
+    /* v431 (problem 3): API.myAttendance answers with the copy SAVED ON THIS PHONE (or an empty list)
+       whenever the network fails, still marked ok. v427's "drop a local check-in the server never
+       confirmed" then read that stale copy as the server saying "no check-in" and wiped a REAL one —
+       hours later, at punch-out time, the button said Check in. Only a LIVE reply may drop it now. */
+    var _live=!(meta && (meta.cached||meta.offline));
+    if(meta){ takeOpenShift(meta); if(!meta._preload) ATT.viewCached=!_live; }
     var recs=(records||[]).slice(), t=todayS(), loc=todayRec();
     if(!loc || (!loc.checkIn && !loc.checkOut)) return recs;
     var srv=null;
@@ -8503,7 +8547,7 @@ function renderMembershipCards(){
        up yet) or while this phone still holds an unsent punch for today. After that, if the server
        still has nothing, the local row was wrong — drop it rather than keep a phantom check-in. */
     var _fresh = !loc._localTs || (Date.now()-loc._localTs) < 10*60000 || !!(qToday('in')||qToday('out'));
-    if(!_fresh && loc._local){
+    if(!_fresh && loc._local && _live){
       if(!srv) return recs;
       if(!srv.checkIn && !srv.checkOut) return recs;
     }
@@ -8538,6 +8582,13 @@ function renderMembershipCards(){
      staff member tapped it, the server refused it (no check-in today) — and the optimistic
      "Done for today" stayed on screen. Now a punch is only painted onto the day it belongs to. */
   function applyPunchToRecs(kind, r, date){
+    if(kind==='out'){   // v431: night duty — the punch-out belongs to yesterday's shift
+      var _nr=nightRec();
+      if(_nr || (r&&r.night)){
+        if(_nr){ _nr.checkOut=(r&&r.checkOut)||_nr.checkOut||'✓'; if(r&&r.workHours) _nr.workHours=r.workHours; if(r&&r.half) _nr.status='half'; _nr._local=true; _nr._localTs=Date.now(); }
+        saveAttCopy(); return;
+      }
+    }
     var t=todayS(), recs=(ATT.recs||[]), rec=null;
     if(date && String(date).slice(0,10)!==t) return;   // v427: an older day's punch — the server refresh will show it on its own day
     for(var i=0;i<recs.length;i++){ if(String(recs[i].date).slice(0,10)===t){ rec=recs[i]; break; } }
@@ -8555,7 +8606,7 @@ function renderMembershipCards(){
     }
     if(r&&r.attId) rec.attId=r.attId;
   }
-  function refreshAfterSync(){ API.myAttendance(ymNow()).then(function(x){ if(x&&x.ok){ ATT.recs=mergeServerRecs(x.records); if(document.getElementById('attMe')) paintMe(); } }); }
+  function refreshAfterSync(){ API.myAttendance(ymNow()).then(function(x){ if(x&&x.ok){ ATT.recs=mergeServerRecs(x.records, x); if(document.getElementById('attMe')) paintMe(); } }); }
   /* ============================================================================================
      WHEN THE QUEUE ACTUALLY GETS FLUSHED — v333
 
@@ -8669,14 +8720,14 @@ function renderMembershipCards(){
        Fixed with a sequence number: a stale reply is simply ignored if a fresher one already applied.
        The cached read is the low-priority one; it only paints if nothing better has arrived yet. */
     var _seq=(ATT._loadSeq=(ATT._loadSeq||0)+1);
-    API.cachedAttendance().then(function(r){
+    API.cachedAttendance(ymNow()).then(function(r){
       if(_seq!==ATT._loadSeq) return;              // a newer page-open superseded this one
       if(ATT._liveIn===_seq) return;               // the live answer already landed — don't go backwards
-      if(r&&r.records){ ATT.recs=mergeServerRecs(r.records); paintMe(); }
+      if(r&&r.records){ ATT.recs=mergeServerRecs(r.records, Object.assign({}, r, {cached:true, _preload:true})); paintMe(); }
     });
     API.myAttendance(ymNow()).then(function(r){
       if(_seq!==ATT._loadSeq) return;
-      if(r&&r.ok){ ATT._liveIn=_seq; ATT.recs=mergeServerRecs(r.records); paintMe(); }
+      if(r&&r.ok){ if(!(r.cached||r.offline)) ATT._liveIn=_seq; ATT.recs=mergeServerRecs(r.records, r); paintMe(); }
     });
     if(canApprove()){
       loadApprove(todayS());
@@ -8807,8 +8858,10 @@ function renderMembershipCards(){
        queue timestamp is not older than the check-in's). Guards against a stray/stuck check-out left
        over in the offline queue from a different day painting "Done for today" the instant someone
        checks in, before they have ever tapped Check out. */
-    if(!rec && qIn) rec={checkIn:qIn.time, checkOut:(qOut && qOut.ts>=qIn.ts ? qOut.time : ''), _queued:true};
-    else if(rec && rec.checkIn && !rec.checkOut && qOut){
+    var _night=((!rec || !rec.checkIn) && !qIn) ? nightRec() : null;   // v431: night duty after 12 midnight
+    if(_night) rec={date:_night.date, checkIn:_night.checkIn, checkOut:(_night.checkOut||(qOut?qOut.time:'')), workHours:_night.workHours, late:_night.late, status:_night.status, attId:_night.attId, selfieInUrl:_night.selfieInUrl, selfieOutUrl:_night.selfieOutUrl, _local:true, _night:true, _queued:(!_night.checkOut && !!qOut)};
+    else if(!rec && qIn) rec={checkIn:qIn.time, checkOut:(qOut && qOut.ts>=qIn.ts ? qOut.time : ''), _queued:true};
+    else if(rec && rec.checkIn && !rec.checkOut && qOut && !rec._night){
       /* v-fix ("Done for today" flash): doMark() already refuses to even QUEUE a check-out less than
          3 minutes after this check-in (see the v333 note above doMark), and the server enforces the
          same floor with PUNCH_TOO_SOON for one that reaches it late. What was missing was here: this
@@ -8836,7 +8889,7 @@ function renderMembershipCards(){
     } else {
       btn = inb
         ? '<button class="att-big in" id="attBtn">⊕ Check in</button>'
-        : (!rec.checkOut ? '<button class="att-big out" id="attBtn">⊖ Check out</button>' : '<div class="att-done">✓ Done for today</div>');
+        : (!rec.checkOut ? '<button class="att-big out" id="attBtn">⊖ Check out</button>' : '<div class="att-done">✓ '+(rec._night?'Night shift done':'Done for today')+'</div>');
     }
     /* v335: for the first half-minute after a punch the live request is very probably still in
        flight, and telling the person their punch is "waiting to send" during that window is both
@@ -8845,7 +8898,7 @@ function renderMembershipCards(){
        suppressed when there is more than one punch waiting, because then something really is
        stuck and they need to know. */
     var _opt = !!(ATT.optUntil && Date.now() < ATT.optUntil && qN === 1);
-    var stat = rec ? ('In '+(rec.checkIn||'—')+(rec.checkOut?(' · Out '+rec.checkOut):'')+(rec.workHours?(' · '+rec.workHours+'h'):'')+(String(rec.late)==='yes'?' · ⚠ late (½ day)':'')+((rec._queued&&!_opt)?' · ☁ waiting to send':'')) : 'Not checked in yet';
+    var stat = rec ? ((rec._night?('🌙 Night shift from '+String(rec.date).slice(8,10)+' '+MON[(+String(rec.date).slice(5,7))-1]+' · '):'')+'In '+(rec.checkIn||'—')+(rec.checkOut?(' · Out '+rec.checkOut):'')+(rec.workHours?(' · '+rec.workHours+'h'):'')+(String(rec.late)==='yes'?' · ⚠ late (½ day)':'')+((rec._queued&&!_opt)?' · ☁ waiting to send':'')) : 'Not checked in yet';
     /* v325: a "Send now" the staff member can actually press, instead of watching a number that
        never moves and having no way to ask why.
        v333: the wording is now true. Before this build "will send automatically" was a promise
@@ -8861,6 +8914,8 @@ function renderMembershipCards(){
        tell them what actually gets it moving (reopen the app on a real connection), instead of
        leaving them to assume "saved on this phone" already means "my manager can see this". */
     var qStuck = qOldestMin>=15;
+    /* v431: say so when the server could not be reached and this is only the copy saved on the phone. */
+    var cachedNote = (ATT.viewCached && !qN) ? '<div class="att-note" style="color:#5f6672">📶 No connection to the server — showing the copy saved on this phone. If it looks wrong, tap the button anyway: the server checks it.</div>' : '';
     var qNote = (qN && !_opt) ? (
       !navigator.onLine
         ? '<div class="att-note" style="color:#8a5a00;font-weight:600;text-align:left;background:#FEF3E2;border:1px solid #f5c56b;border-radius:9px;padding:9px 11px;margin-top:8px">📶 <b>You\'re offline.</b> '+qN+' punch'+(qN>1?'es':'')+' saved on this phone — it will send by itself the moment you\'re back online. You don\'t need to do anything.'+
@@ -8923,6 +8978,7 @@ function renderMembershipCards(){
       photoNote+
       missingNote+
       qNote+
+      cachedNote+
       deadNote+
       sundayNote+'</div>'+
       monthStrip()+
@@ -8970,7 +9026,7 @@ function renderMembershipCards(){
       captureSelfie(function(b64){
         API.attachSelfie({attId:rec.attId, kind:missingKind, base64:b64}).then(function(r){
           toast((r&&r.ok)?'Selfie added':'Saved on device — will sync');
-          API.myAttendance(ymNow()).then(function(x){ if(x&&x.ok){ ATT.recs=mergeServerRecs(x.records); paintMe(); } });   // v295: never let a stale reply erase a punch we know landed
+          API.myAttendance(ymNow()).then(function(x){ if(x&&x.ok){ ATT.recs=mergeServerRecs(x.records, x); paintMe(); } });   // v295: never let a stale reply erase a punch we know landed
         });
       });
     };
@@ -9477,6 +9533,7 @@ function renderMembershipCards(){
     // wfhPrompt) can put the screen back exactly as it was instead of leaving a fake "done"
     // behind (see _fastFired / revertOptimisticPaint below).
     var _prevRec=(function(){ var r=todayRec(); return r?JSON.parse(JSON.stringify(r)):null; })();
+    var _night0=(kind==='out')?nightRec():null, _night0Out=_night0?(_night0.checkOut||''):'';   // v431: so a refused night punch-out can be undone too
     var _fastFired=false;
     /* ============================================================================================
        v335 — THE PHOTO NO LONGER HOLDS THE PUNCH UP.
@@ -9568,8 +9625,8 @@ function renderMembershipCards(){
       ATT.wfh=false; ATT.optUntil=0; stopFast();
       toast(msg);
       queuePhoto(r);                                       // v335: the photo goes on its own way
-      applyLocalPunch(r); paintMe();                       // instant — the button flips now, not in five seconds
-      API.myAttendance(ymNow()).then(function(x){ if(x&&x.ok){ ATT.recs=mergeServerRecs(x.records); paintMe(); } });   // reconcile quietly
+      applyLocalPunch(r); saveAttCopy(); paintMe();                       // instant — the button flips now, not in five seconds
+      API.myAttendance(ymNow()).then(function(x){ if(x&&x.ok){ ATT.recs=mergeServerRecs(x.records, x); paintMe(); } });   // reconcile quietly
     }
     /* ============================================================================================
        v295 — STAGE FIRST, THEN SEND.  This is the change that fixes "photo taken, then nothing".
@@ -9679,6 +9736,7 @@ function renderMembershipCards(){
       _fastFired=false;
       var t=todayS(), recs=(ATT.recs||[]), idx=-1;
       for(var i=0;i<recs.length;i++){ if(String(recs[i].date).slice(0,10)===t){ idx=i; break; } }
+      if(_night0){ _night0.checkOut=_night0Out; }   // v431
       if(_prevRec){ if(idx>=0) recs[idx]=_prevRec; else recs.push(_prevRec); }
       else if(idx>=0){ recs.splice(idx,1); }
       ATT.recs=recs;
