@@ -1,7 +1,7 @@
 /* Nakoda CRM service worker — scope /crm/ only (the MIS keeps its own worker at the site root).
    Network first, so a new upload is picked up on the next open; the cached copy is used only
    when there is no network. API calls (script.google.com) are never cached. */
-var CACHE = 'nakoda-crm-v1.0';
+var CACHE = 'nakoda-crm-v1.1';
 var SHELL = ['./', './index.html', './crm.css', './crm.js', './config.js', './manifest.webmanifest', './icons/crm-192.png', './icons/crm-512.png'];
 self.addEventListener('install', function(e){
   e.waitUntil(caches.open(CACHE).then(function(c){ return Promise.all(SHELL.map(function(u){ return c.add(u).catch(function(){}); })); }).then(function(){ return self.skipWaiting(); }));

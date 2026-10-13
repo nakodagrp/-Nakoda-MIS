@@ -1,5 +1,5 @@
 /* ============================================================================================
- *  NAKODA CRM — the app                                                     crm.js  v1.0
+ *  NAKODA CRM — the app                                                     crm.js  v1.1
  *  One file, no framework (same approach as the MIS). Screens:
  *    followups · cold · nocard · add (single + bulk) · bulk (WhatsApp) · mis · exec
  *  Login = MIS login. The token is shared with the MIS through localStorage 'nk_tok'
@@ -678,7 +678,7 @@ function bUpload(){
 }
 
 /* ================================================================== BULK MESSAGE (the CRM's own system) */
-var M = {meta:null, tpl:'', f:{type:'', due:'7d', card:'any', source:'', area:''}, time:'10:00', limit:'', params:[], header:'', mode:'filter', rows:null, prev:null, tab:'all', list:[]};
+var M = {meta:null, tpl:'', f:{type:'', due:'any', card:'any', source:'', area:''}, time:'10:00', limit:'', params:[], header:'', cardMode:'own', mode:'filter', rows:null, prev:null, tab:'all', list:[]};
 var MSTAT = {draft:['Draft','t-nc'], scheduled:['Scheduled','t-New'], in_progress:['Sending','t-ok'], paused:['Paused','t-warn'], completed:['Completed','t-ok'], cancelled:['Cancelled','t-bad']};
 PAGES.bulk = function(){
   $('main').innerHTML = head('Bulk Message Send', 'Send one approved WhatsApp template to a list of CRM patients, for one branch and filter, on a daily schedule.',
@@ -705,7 +705,8 @@ function mKpis(){
     '<div class="kpi row" style="gap:14px"><div class="ring" style="background:conic-gradient(var(--red) ' + pct(used, cap) + '%,#eee 0)"><div>' + used + '/' + cap + '</div></div><div><div class="l">Today’s daily limit</div><b>' + pct(used, cap) + '% used</b><div class="h">shared with MIS · resets 12:00 AM' + (q.hasKey === false ? '<br><span style="color:var(--red)">No WhatsApp key for this branch in the MIS</span>' : '') + '</div></div></div>';
 }
 function mSetup(){
-  var r = M.meta, t = tplOf(M.tpl), np = t ? Math.max(0, t.paramCount - 2) : 0, hdr = t ? t.headerType : 'none', fl = M.mode === 'filter';
+  var r = M.meta, t = tplOf(M.tpl), cardT = !!(t && t.card), np = t && !cardT ? Math.max(0, t.paramCount - 2) : 0, hdr = t ? t.headerType : 'none', fl = M.mode === 'filter';
+  var hasHdr = ['image','video','document'].indexOf(hdr) >= 0;
   var hints = t && t.paramHints ? String(t.paramHints).split(/\s*[|,;]\s*/) : [];
   while(M.params.length < np){
     var h = String(hints[M.params.length + 2] || '').toLowerCase();
@@ -713,16 +714,18 @@ function mSetup(){
   }
   $('mSet').innerHTML = '<div style="font-size:20px;font-weight:700">Campaign Setup</div><div class="sub" style="margin-bottom:14px">Choose who gets the message, which template, and when it should go out.</div>' +
     '<div class="grid5"><div class="field"><label>Branch</label><input value="' + esc(branch().name) + '" disabled></div>' +
-    '<div class="field"><label>Template</label><select id="mTpl">' + (r.templates.length ? r.templates.map(function(x){ return opt(x.name, x.name, M.tpl); }).join('') : '<option value="">No templates in the MIS</option>') + '</select></div>' +
+    '<div class="field"><label>Template</label><select id="mTpl">' + (r.templates.length ? r.templates.map(function(x){ return opt(x.name, x.name + (x.card ? ' 💳 ' + (x.cardTypeName || 'card') : ''), M.tpl); }).join('') : '<option value="">No templates in the MIS</option>') + '</select></div>' +
     '<div class="field"><label>Patient type</label><select id="mTy" ' + (fl ? '' : 'disabled') + '>' + opt('', 'All Tags', M.f.type) + S.types.map(function(x){ return opt(x, x, M.f.type); }).join('') + '</select></div>' +
     '<div class="field"><label>Send Time</label><input type="time" id="mTime" value="' + esc(M.time) + '"></div>' +
     '<div class="field"><label>Daily Limit</label><input id="mLim" inputmode="numeric" placeholder="' + ((r.quota || {}).cap || 250) + ' / day (default)" value="' + esc(M.limit) + '"></div></div>' +
     (fl ? '<div class="grid4"><div class="field"><label>Follow-up</label><select id="mDue">' + opt('7d', 'Due in next 7 days', M.f.due) + opt('overdue', 'Overdue', M.f.due) + opt('today', 'Due today', M.f.due) + opt('30d', 'Due in next 30 days', M.f.due) + opt('any', 'Any time', M.f.due) + '</select></div>' +
-      '<div class="field"><label>Membership card</label><select id="mCard">' + opt('any', 'Any', M.f.card) + opt('with', 'Has a card', M.f.card) + opt('without', 'No card', M.f.card) + '</select></div>' +
+      '<div class="field"><label>Membership card</label><select id="mCard"' + (cardT ? ' disabled' : '') + '>' + (cardT ? opt('with', 'Has a card (card template)', 'with') : opt('any', 'Any', M.f.card) + opt('with', 'Has a card', M.f.card) + opt('without', 'No card', M.f.card)) + '</select></div>' +
       '<div class="field"><label>Source</label><select id="mSrc">' + opt('', 'All sources', M.f.source) + r.sources.map(function(x){ return opt(x, x, M.f.source); }).join('') + '</select></div>' +
       '<div class="field"><label>Area / society</label><select id="mArea">' + opt('', 'All areas', M.f.area) + r.areas.map(function(x){ return opt(x, x, M.f.area); }).join('') + '</select></div></div>'
     : '<div class="field"><label>Paste rows from Excel (Mobile, Name)</label><textarea class="inp" id="mRows" style="font-family:monospace;height:96px" placeholder="9825012345\tRamesh Patel"></textarea><button class="btn ghost sm" id="mRead" style="margin-top:6px">Read rows</button></div>') +
-    (np || ['image','video','document'].indexOf(hdr) >= 0 ? '<div class="grid3">' + (['image','video','document'].indexOf(hdr) >= 0 ? '<div class="field"><label>Header ' + hdr + ' link (public URL)</label><input id="mHdr" value="' + esc(M.header) + '" placeholder="https://…"></div>' : '') +
+    (cardT && hasHdr ? '<div class="grid3"><div class="field"><label>Card picture</label><select id="mCm">' + opt('own', 'Each member’s OWN card picture', M.cardMode) + opt('one', 'One picture for everyone', M.cardMode) + '</select></div>' +
+      '<div class="field" style="grid-column:span 2"><label>' + (M.cardMode === 'one' ? 'Picture link for everyone (public URL)' : 'Spare picture if a member’s own picture isn’t made yet (optional link)') + '</label><input id="mHdr" value="' + esc(M.header) + '" placeholder="https://…"></div></div>' : '') +
+    (!cardT && (np || hasHdr) ? '<div class="grid3">' + (hasHdr ? '<div class="field"><label>Header ' + hdr + ' link (public URL)</label><input id="mHdr" value="' + esc(M.header) + '" placeholder="https://…"></div>' : '') +
       M.params.slice(0, np).map(function(v, i){ return '<div class="field"><label>{{' + (i + 3) + '}} ' + esc(hints[i + 2] || '') + '</label><input data-pi="' + i + '" value="' + esc(v) + '"></div>'; }).join('') + '</div>' +
       '<div class="small muted" style="margin:-6px 0 8px">Per-patient words you can use: {due} next call date · {test} suggested test · {type} · {card} card no. · {phone} branch contact · {area}</div>' : '') +
     '<div class="msg ok" id="mBox" style="margin-top:6px"></div>' +
@@ -731,7 +734,8 @@ function mSetup(){
     '<button class="btn ghost" id="mDraft">Save as Draft</button><button class="btn" id="mStart">Start Campaign</button></div>';
   function sched(){ var lim = +M.limit || (r.quota || {}).cap || 250; $('mSched').innerHTML = 'Scheduled for <b style="color:var(--ink)">' + hm12(M.time) + '</b> — auto-sends the next <b style="color:var(--ink)">' + lim + '</b> leads daily until the queue is cleared.'; }
   sched();
-  $('mTpl').onchange = function(){ M.tpl = this.value; M.params = []; mSetup(); mBox(); };
+  $('mTpl').onchange = function(){ M.tpl = this.value; M.params = []; mSetup(); mPreview(); };
+  if($('mCm')) $('mCm').onchange = function(){ M.cardMode = this.value; mSetup(); };
   $('mTime').onchange = function(){ M.time = this.value; sched(); };
   $('mLim').oninput = function(){ M.limit = this.value.replace(/\D/g, ''); sched(); };
   var refresh = debounce(mPreview, 300);
@@ -755,13 +759,18 @@ function mBox(){
   b.className = 'msg ok';
   var v = '<b>{{1}} branch name · {{2}} patient name</b>' + (t.paramCount > 2 ? ' · {{3}}… as set above' : '');
   var p = M.prev;
-  b.innerHTML = '✓ <b>' + esc(t.name) + '</b> — nothing else to fill per patient. Each patient gets THEIR OWN values: ' + v + '<br>' +
+  var head = t.card
+    ? '💳 <b>' + esc(t.name) + '</b> is a membership-card template' + (t.cardTypeName ? ' for <b>' + esc(t.cardTypeName) + '</b> cards' : '') + '. Nothing to fill: each member gets THEIR OWN <b>name · card no. · card type · valid till · branch contact</b> from the MIS card register' +
+      (['image','video','document'].indexOf(t.headerType) >= 0 ? (M.cardMode === 'one' ? ', with the one picture above' : ', with <b>their own card picture</b>') : '') + '. Only patients who hold ' + (t.cardTypeName ? 'a ' + esc(t.cardTypeName) : 'a') + ' card get it.'
+    : '✓ <b>' + esc(t.name) + '</b> — nothing else to fill per patient. Each patient gets THEIR OWN values: ' + v;
+  b.innerHTML = head + '<br>' +
     (p ? '<b>' + p.match + ' patients</b> ' + (M.mode === 'filter' ? 'match' : 'read') + (p.skipDnc ? ' · ' + p.skipDnc + ' on the do-not-call list skipped automatically' : '') + (p.skipBad ? ' · ' + p.skipBad + ' bad mobiles skipped' : '') : (M.mode === 'filter' ? '<span class="spin"></span> counting…' : 'Paste rows and press Read rows.'));
 }
 function mPreview(){
   if(M.mode !== 'filter') return;
   M.prev = null; mBox();
-  api('msgPreview', {filter:M.f}).then(function(r){ if(r.ok){ M.prev = r; mBox(); } });
+  var t = tplOf(M.tpl), f = Object.assign({}, M.f); if(t && t.card) f.card = 'with';
+  api('msgPreview', {filter:f}).then(function(r){ if(r.ok){ M.prev = r; mBox(); } });
 }
 function mSave(start, btn){
   var t = tplOf(M.tpl);
@@ -769,8 +778,8 @@ function mSave(start, btn){
   if(M.mode === 'excel' && !(M.rows && M.rows.length)){ toast('Paste rows and press Read rows first.', true); return; }
   if(M.prev && !M.prev.match){ toast('No patients match this filter.', true); return; }
   busy(btn, true);
-  api('msgSave', {data:{branchId:S.branchId, templateName:M.tpl, params:M.params.slice(0, Math.max(0, t.paramCount - 2)), headerMediaUrl:M.header, sendTime:M.time, dailyLimit:+M.limit || 0,
-    start:start, useFilter:M.mode === 'filter', filter:M.f, rows:M.mode === 'excel' ? M.rows : null}}).then(function(r){
+  api('msgSave', {data:{branchId:S.branchId, templateName:M.tpl, params:t.card ? [] : M.params.slice(0, Math.max(0, t.paramCount - 2)), headerMediaUrl:M.header, sendTime:M.time, dailyLimit:+M.limit || 0,
+    start:start, useFilter:M.mode === 'filter', filter:Object.assign({}, M.f, t.card ? {card:'with'} : {}), cardMode:M.cardMode, rows:M.mode === 'excel' ? M.rows : null}}).then(function(r){
     busy(btn, false);
     if(!r.ok){ toast(r.error, true); return; }
     toast(r.campaign.code + ' ' + (start ? 'started' : 'saved as draft') + ' with ' + r.counts.added + ' leads.');
@@ -794,7 +803,7 @@ function mHist(){
         '<td style="white-space:nowrap">' + hm12(c.sendTime) + (c.dailyLimit ? '<div class="small muted">' + c.dailyLimit + '/day</div>' : '') + '</td>' +
         '<td style="white-space:nowrap">' + c.sent + ' / ' + c.total + (c.failed ? ' <span class="small" style="color:var(--red)">' + c.failed + ' failed</span>' : '') + '<div class="bar g" style="width:110px"><i style="width:' + pct(done, c.total) + '%"></i></div></td>' +
         '<td><span class="tag ' + s[1] + '">' + s[0] + '</span>' + (c.lastError ? '<div class="small" style="color:var(--red);max-width:180px">' + esc(c.lastError) + '</div>' : '') + '</td><td style="white-space:nowrap">' + fdy(c.createdAt) + '</td>' +
-        '<td><div class="row wrap" style="gap:5px;min-width:250px">' + acts.map(function(a){ return '<button class="btn ' + (a === 'Cancel' || a === 'Delete' ? 'danger' : 'ghost') + ' sm" data-ca="' + a + '" data-id="' + c.campaignId + '">' + a + '</button>'; }).join('') + '</div></td></tr>';
+        '<td><div class="row wrap" style="gap:5px;min-width:180px;max-width:230px">' + acts.map(function(a){ return '<button class="btn ' + (a === 'Cancel' || a === 'Delete' ? 'danger' : 'ghost') + ' sm" data-ca="' + a + '" data-id="' + c.campaignId + '">' + a + '</button>'; }).join('') + '</div></td></tr>';
     }).join('') + '</table></div>';
     $('mH').querySelectorAll('[data-ca]').forEach(function(b){ b.onclick = function(){ mAct(b.getAttribute('data-id'), b.getAttribute('data-ca')); }; });
   });
