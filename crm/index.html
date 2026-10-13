@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#DA1017">
+<title>Nakoda CRM</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/crm-192.png">
+<link rel="apple-touch-icon" href="icons/crm-192.png">
+<link rel="stylesheet" href="crm.css">
+</head>
+<body>
+<div id="installBar" class="banner hidden">📲 Install Nakoda CRM on this device <button class="btn sm" id="installBtn" style="background:#185fa5">Install</button> <button class="btn sm ghost" id="installNo">Later</button></div>
+
+<!-- sign in (same Login ID and password as the MIS) -->
+<div id="vLogin" class="auth hidden">
+  <div class="auth-card">
+    <img src="../icons/login-logo.png" alt="Nakoda Diagnostics" onerror="this.style.display='none'">
+    <div class="pillred">PATIENT CRM</div>
+    <div class="sub" style="font-size:15px;margin-bottom:20px">Sign in with your <b style="color:var(--ink)">MIS</b> User ID and password</div>
+    <div id="loginMsg"></div>
+    <form id="loginForm">
+      <div class="field"><label>User ID</label><input id="loginId" autocomplete="username" required></div>
+      <div class="field"><label>Password</label><input id="loginPw" type="password" autocomplete="current-password" required></div>
+      <button class="btn block" id="loginBtn" type="submit" style="padding:13px">Sign in</button>
+    </form>
+    <div class="sub" style="margin-top:14px;font-size:13px">Same login as Nakoda MIS · no new password</div>
+    <div class="muted small" style="margin-top:16px" id="loginBuild">Nakoda Diagnostics &amp; Research Center · CRM</div>
+  </div>
+</div>
+
+<div id="vBoot" class="loading"><span class="spin"></span> Opening Nakoda CRM…</div>
+
+<!-- the app -->
+<div id="vApp" class="hidden" style="height:100%">
+  <div class="top">
+    <img src="../icons/login-logo.png" alt="Nakoda" onerror="this.style.display='none'"><span class="appname">CRM</span>
+    <select id="branchSel" title="Branch"></select>
+    <span class="sp"></span>
+    <span class="chip hide-m" id="netChip"><span class="s"></span><span>Online</span></span>
+    <span class="chip hide-m" id="buildChip">CRM</span>
+    <a class="btn ghost sm" href="../" title="Back to the MIS">↩<span class="hide-m">&nbsp;Back to MIS</span></a>
+    <div class="who"><span class="av" id="meAv">?</span><div><b id="meName"></b><small id="meRole"></small></div>
+      <button class="btn ghost sm" id="logoutBtn" style="border-radius:30px" title="Logout"><span class="lo-t">Logout</span><span class="lo-i">⏻</span></button></div>
+  </div>
+  <div class="shell">
+    <nav class="side" id="side"></nav>
+    <main class="main" id="main"></main>
+  </div>
+  <div class="bottom" id="bottom"></div>
+</div>
+<div id="layer"></div>
+
+<script src="config.js"></script>
+<script src="crm.js"></script>
+</body>
+</html>
