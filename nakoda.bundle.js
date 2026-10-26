@@ -1685,7 +1685,7 @@ function initInstall(){
    someone their app is stale, which matters a lot here: staff who assumed the mismatch banner was just
    always-on noise had no reliable signal to go tap "Check update" after a real deploy. Bump this to
    match sw.js's CACHE_VERSION on every deploy that changes sw.js — the two must always agree. */
-var APP_BUILD='v447';   /* v447: iPhone Check in safety net (card only rebuilt when it changed) + build-bundle.py refuses a bundle that lost a fix. */    /* v446: MERGE — v445 (Nakoda Marketing button) + v444 iPhone Check in / Check out fix, which the Marketing build had left out (it was built from older files). */    /* v445: Nakoda Marketing button opens Marketing's own Apps Script link (told to the MIS by Marketing itself) — no /mkt/ folder on GitHub. */  /* v444 was: */   /* v444: NAKODA MARKETING button — sidebar (above Bulk Message Send) + Dashboard card; Marketing is a separate app in /mkt/ (mktlink.js). Backend: 37_MktBridge.gs + 03_Router.gs (v444). */  /* v443 was: */   /* v443: DOCTOR COT — Accounts tab (+ ADD: date, branch, amount, photo, note) + Dashboard by-branch column; Cash shown after COT. Needs 36_DoctorCot.gs + 03_Router.gs. */    /* v442: MEMBERSHIP CARDS — click (or touch) and drag down the tick boxes to tick many cards at once. */    /* v441: Nakoda CRM button also for Samira Pathan (by name, crmlink.js). */    /* v440: ATTENDANCE — your day-by-day list shows the real punch location (needs 35_AttMyLoc.gs). */    /* v439: ATTENDANCE — IN / OUT photo boxes removed (Approve screen + your day-by-day list); time + location only. */    /* v438: ATTENDANCE — no selfie; punch = time + location (shown on the card). */  /* v437: Nakoda CRM button only for MIS / Director / Operations Manager / CRM roles (crmlink.js). */  /* v436: */   /* v436: Nakoda CRM "Send card (WhatsApp API)" opens the MIS card popup (crmlink.js #crmcard=). */    /* v435: Open CRM button — Nakoda CRM is a separate app in /crm/ (crmlink.js); MIS backend adds the 'crm' bridge (29_CrmBridge.gs). */  /* v434: */   /* v434: Bulk Message Send / Timely Message — once-only rule: the same template is never sent twice to the same mobile (Skipped), a different template still goes. */  /* v433: */   /* v433: Dashboard cards board — Per day / Issued also count cards SENT by Bulk Message Send (every branch, each person once). Backend v433 (34_CardBulkSent.gs). */  /* v432: */    /* v432: Membership Cards — Issued from / to date filter with a summary (Bulk Message Send cards counted) and an Issued column; Dashboard cards board — Per day shows the number only. */  /* v431: */    /* v431: Attendance — 3h-shift staff no longer Half day for a full shift (limit = shift length − 15 min, max 4h); night duty can punch out after 12 midnight (closes yesterday's shift); the screen no longer wipes a real check-in because of a stale offline copy. Backend v431 (33_AttNight.gs). */  /* v430: */    /* v430: Bulk Message Send — ⚙ Limit per campaign (messages per day, rest stay Pending); Dashboard Membership cards — Per day column + day picker, Issued = 1st → selected day. */  /* v429: Bulk Message Send — Add Leads sends up to 1,000 leads in one trip and the server dedupes by reading 3 columns, not the whole sheet. */  /* v428: */   /* v428: Branches — "Use my current location" no longer fails with "allow location access" when GPS is merely slow: 20 s GPS try + network fallback, real reason shown, accuracy (±m) shown. */  /* v427:   /* v427: Attendance — an older day's saved punch sent today no longer shows as today's check-in (the phantom "In ✓" + Check out button); a refused punch no longer leaves "Done for today" on screen. */  /* v426:   /* v426: release of the v425 attendance fixes (early-out half day, lost punch-out, forgot punch-out = half day, no-location reason). */  /* v425:   /* v425: Attendance — forgot to punch out = Half day even when a manager approved the check-in (31_AttFix.gs attHourlyFix_); the punch card warns when location is blocked / on a computer, and the note now says WHY there was no location. */  /* v424:   /* v424: Attendance — an early check-out (under 4h) stays Half day: setting Full day on such a day now asks for a reason; approvals can no longer wipe a punch-out; a past day with no punch-out says "No punch-out received". Backend v424 (31_AttFix.gs + 03_Router.gs). */  /* v423:   /* v423: Bulk Message Send / Timely Message for CRM staff (own branch only, enforced server-side) + an "Are you sure?" popup on Cancel/Delete campaign. */  /* v422:   /* v422: Membership Cards — branch staff see only their own branch's cards; Operations Manager / MIS / Director see all with a branch filter (30_CardScope.gs). Also carries backend v420–v421. */  /* v419:   /* v419: Bulk Message Send — card templates send each lead THEIR OWN card again (drawn from the real card design, 8 at a time, Drive direct link when WhatsBizAPI refuses); see sw.js's v419 note. */  /* v416:   /* v416: Bulk Message Send — card templates with an image use the previous (18 Sep) method exactly: one image + {{3}}.. filled once; see sw.js's v416 note. */  /* v415:   /* v415: Bulk Message Send — card templates get a "One image for everyone" mode (default): upload one image, fill {{3}}.. once, like the original screen; see sw.js's v415 note. */  /* v414:   /* v414: Bulk Message Send — Card design per template (upload a blank card, drag fields, every lead's card is drawn from it); see sw.js's v414 note. */  /* v413:   /* v413: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: drag-and-drop card picture box (remembered per template), "Fix pictures & retry failed" with a what-was-fixed banner and per-row notes, and the top bar now also shows the BACKEND build (Router 'version' → backendBuild); see sw.js's v413 note. */  /* v410:   /* v410: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send makes its own card pictures + sample card picture fallback; see sw.js's v410 note. app.js itself only changed by this version-number line. */  /* v409: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: Add Leads now REPLACES a mismatched card instead of skipping that person forever, and the "preparing card pictures" step no longer re-fetches the whole company's card list — see sw.js's v409 note. app.js itself only changed by this version-number line. */  /* v408: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send / Timely Message: Patient Delivery gets a "Retry failed (N)" button that resets a campaign's already-failed leads back to Pending in place (no delete + re-upload, which would just be reported as duplicates) so the next automatic send actually retries them — see sw.js's v408 note. app.js itself only changed by this version-number line. */  /* v406: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: Gold / Platinum 7 campaigns now create the missing membership cards from the Excel; see sw.js's v406 note. app.js itself only changed by this version-number line. */  /* v405: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: "Next batch" note + Change time button on Campaign History, explanation box in Patient Delivery, Total Leads tile fix; see sw.js's v405 note. app.js itself only changed by this version-number line. */  /* v404: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: a Delete button on Completed/Failed campaigns (was Cancel only while active); see sw.js's v404 note. app.js itself only changed by this version-number line. */  /* v403: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send round 3: every active template is listed; card templates (Gold / Platinum / Platinum+ / Diamond / membership_card / Benefits) are filled per recipient from that person's OWN card; see sw.js's v403 note. app.js itself only changed by this one version-number line. */
+var APP_BUILD='v448';   /* v448: Attendance card first on the Dashboard — Check in / Check out there + In / Out time and location. */    /* v447: iPhone Check in safety net (card only rebuilt when it changed) + build-bundle.py refuses a bundle that lost a fix. */    /* v446: MERGE — v445 (Nakoda Marketing button) + v444 iPhone Check in / Check out fix, which the Marketing build had left out (it was built from older files). */    /* v445: Nakoda Marketing button opens Marketing's own Apps Script link (told to the MIS by Marketing itself) — no /mkt/ folder on GitHub. */  /* v444 was: */   /* v444: NAKODA MARKETING button — sidebar (above Bulk Message Send) + Dashboard card; Marketing is a separate app in /mkt/ (mktlink.js). Backend: 37_MktBridge.gs + 03_Router.gs (v444). */  /* v443 was: */   /* v443: DOCTOR COT — Accounts tab (+ ADD: date, branch, amount, photo, note) + Dashboard by-branch column; Cash shown after COT. Needs 36_DoctorCot.gs + 03_Router.gs. */    /* v442: MEMBERSHIP CARDS — click (or touch) and drag down the tick boxes to tick many cards at once. */    /* v441: Nakoda CRM button also for Samira Pathan (by name, crmlink.js). */    /* v440: ATTENDANCE — your day-by-day list shows the real punch location (needs 35_AttMyLoc.gs). */    /* v439: ATTENDANCE — IN / OUT photo boxes removed (Approve screen + your day-by-day list); time + location only. */    /* v438: ATTENDANCE — no selfie; punch = time + location (shown on the card). */  /* v437: Nakoda CRM button only for MIS / Director / Operations Manager / CRM roles (crmlink.js). */  /* v436: */   /* v436: Nakoda CRM "Send card (WhatsApp API)" opens the MIS card popup (crmlink.js #crmcard=). */    /* v435: Open CRM button — Nakoda CRM is a separate app in /crm/ (crmlink.js); MIS backend adds the 'crm' bridge (29_CrmBridge.gs). */  /* v434: */   /* v434: Bulk Message Send / Timely Message — once-only rule: the same template is never sent twice to the same mobile (Skipped), a different template still goes. */  /* v433: */   /* v433: Dashboard cards board — Per day / Issued also count cards SENT by Bulk Message Send (every branch, each person once). Backend v433 (34_CardBulkSent.gs). */  /* v432: */    /* v432: Membership Cards — Issued from / to date filter with a summary (Bulk Message Send cards counted) and an Issued column; Dashboard cards board — Per day shows the number only. */  /* v431: */    /* v431: Attendance — 3h-shift staff no longer Half day for a full shift (limit = shift length − 15 min, max 4h); night duty can punch out after 12 midnight (closes yesterday's shift); the screen no longer wipes a real check-in because of a stale offline copy. Backend v431 (33_AttNight.gs). */  /* v430: */    /* v430: Bulk Message Send — ⚙ Limit per campaign (messages per day, rest stay Pending); Dashboard Membership cards — Per day column + day picker, Issued = 1st → selected day. */  /* v429: Bulk Message Send — Add Leads sends up to 1,000 leads in one trip and the server dedupes by reading 3 columns, not the whole sheet. */  /* v428: */   /* v428: Branches — "Use my current location" no longer fails with "allow location access" when GPS is merely slow: 20 s GPS try + network fallback, real reason shown, accuracy (±m) shown. */  /* v427:   /* v427: Attendance — an older day's saved punch sent today no longer shows as today's check-in (the phantom "In ✓" + Check out button); a refused punch no longer leaves "Done for today" on screen. */  /* v426:   /* v426: release of the v425 attendance fixes (early-out half day, lost punch-out, forgot punch-out = half day, no-location reason). */  /* v425:   /* v425: Attendance — forgot to punch out = Half day even when a manager approved the check-in (31_AttFix.gs attHourlyFix_); the punch card warns when location is blocked / on a computer, and the note now says WHY there was no location. */  /* v424:   /* v424: Attendance — an early check-out (under 4h) stays Half day: setting Full day on such a day now asks for a reason; approvals can no longer wipe a punch-out; a past day with no punch-out says "No punch-out received". Backend v424 (31_AttFix.gs + 03_Router.gs). */  /* v423:   /* v423: Bulk Message Send / Timely Message for CRM staff (own branch only, enforced server-side) + an "Are you sure?" popup on Cancel/Delete campaign. */  /* v422:   /* v422: Membership Cards — branch staff see only their own branch's cards; Operations Manager / MIS / Director see all with a branch filter (30_CardScope.gs). Also carries backend v420–v421. */  /* v419:   /* v419: Bulk Message Send — card templates send each lead THEIR OWN card again (drawn from the real card design, 8 at a time, Drive direct link when WhatsBizAPI refuses); see sw.js's v419 note. */  /* v416:   /* v416: Bulk Message Send — card templates with an image use the previous (18 Sep) method exactly: one image + {{3}}.. filled once; see sw.js's v416 note. */  /* v415:   /* v415: Bulk Message Send — card templates get a "One image for everyone" mode (default): upload one image, fill {{3}}.. once, like the original screen; see sw.js's v415 note. */  /* v414:   /* v414: Bulk Message Send — Card design per template (upload a blank card, drag fields, every lead's card is drawn from it); see sw.js's v414 note. */  /* v413:   /* v413: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: drag-and-drop card picture box (remembered per template), "Fix pictures & retry failed" with a what-was-fixed banner and per-row notes, and the top bar now also shows the BACKEND build (Router 'version' → backendBuild); see sw.js's v413 note. */  /* v410:   /* v410: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send makes its own card pictures + sample card picture fallback; see sw.js's v410 note. app.js itself only changed by this version-number line. */  /* v409: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: Add Leads now REPLACES a mismatched card instead of skipping that person forever, and the "preparing card pictures" step no longer re-fetches the whole company's card list — see sw.js's v409 note. app.js itself only changed by this version-number line. */  /* v408: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send / Timely Message: Patient Delivery gets a "Retry failed (N)" button that resets a campaign's already-failed leads back to Pending in place (no delete + re-upload, which would just be reported as duplicates) so the next automatic send actually retries them — see sw.js's v408 note. app.js itself only changed by this version-number line. */  /* v406: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: Gold / Platinum 7 campaigns now create the missing membership cards from the Excel; see sw.js's v406 note. app.js itself only changed by this version-number line. */  /* v405: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: "Next batch" note + Change time button on Campaign History, explanation box in Patient Delivery, Total Leads tile fix; see sw.js's v405 note. app.js itself only changed by this version-number line. */  /* v404: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: a Delete button on Completed/Failed campaigns (was Cancel only while active); see sw.js's v404 note. app.js itself only changed by this version-number line. */  /* v403: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send round 3: every active template is listed; card templates (Gold / Platinum / Platinum+ / Diamond / membership_card / Benefits) are filled per recipient from that person's OWN card; see sw.js's v403 note. app.js itself only changed by this one version-number line. */
 /* v402 (superseded by v403): SYNCED TO sw.js's CACHE_VERSION — see that file's v402 note (Bulk
    Message Send / Timely Message can now use "membership_benefits" templates safely, per-recipient
    card lookup). app.js itself only changed by this one version-number line. */
@@ -9003,6 +9003,7 @@ function renderMembershipCards(){
     return h ? '<div class="att-note" style="margin-top:6px;line-height:1.7">'+h+'</div>' : '';
   }
   function paintMe(){
+    try{ paintDash(); }catch(_pd){}   // v448: the Dashboard's Attendance card follows every change too
     var box=$id('attMe'); if(!box) return;
     warmGeo();   // start GPS early so the fix is ready before the punch button is tapped
     var rec=todayRec(), now=new Date();
@@ -10264,6 +10265,105 @@ function renderMembershipCards(){
       renderApproveRecs(recs);
     }).catch(function(){ if(box) box.innerHTML='<div class="empty">Connect to load attendance for this date.</div>'; });
   }
+  /* ============================================================================================
+     v448 — ATTENDANCE CARD ON THE DASHBOARD (1st card, above Nakoda CRM / Nakoda Marketing)
+     Check in / Check out straight from the Dashboard + today's In / Out time and location.
+     It uses the SAME punch code as the Attendance page (doMark → startMark → submitMark, offline
+     queue, WFH prompt, 3-minute check, night duty), so a punch here is exactly the same punch.
+     paintMe() calls paintDash() first, so the card follows every change the punch code makes.
+     Like the v447 safety net, the card's HTML is only replaced when it actually changed, so the
+     button is never swapped out under a finger (iPhone tap problem).
+     ============================================================================================ */
+  function attDashWanted_(){
+    if(!S.user || !S.user.EmpID) return false;
+    return String(S.user.PunchRequired||'').toLowerCase().trim()!=='no';
+  }
+  function attCurRec_(){
+    var rec=todayRec(), qIn=qToday('in'), qOut=qToday('out');
+    var _night=((!rec || !rec.checkIn) && !qIn) ? nightRec() : null;
+    if(_night) rec=Object.assign({}, _night, {checkOut:(_night.checkOut||(qOut?qOut.time:'')), _night:true});
+    else if(!rec && qIn) rec={checkIn:qIn.time, checkOut:(qOut && qOut.ts>=qIn.ts ? qOut.time : ''), _queued:true};
+    else if(rec && rec.checkIn && !rec.checkOut && qOut){
+      var _tooSoon=false;
+      if(/^\d{1,2}:\d{2}$/.test(String(rec.checkIn)) && /^\d{1,2}:\d{2}$/.test(String(qOut.time))){
+        var _ip=String(rec.checkIn).split(':'), _op=String(qOut.time).split(':');
+        var _d=((+_op[0])*60+(+_op[1]))-((+_ip[0])*60+(+_ip[1])); _tooSoon=(_d>=0 && _d<3);
+      }
+      if(!_tooSoon) rec=Object.assign({}, rec, {checkOut:qOut.time, _queued:true});
+    }
+    return rec||null;
+  }
+  function attDashPlace_(la, lo, addr){
+    if(addr) return '<a href="https://maps.google.com/?q='+esc(la||'')+','+esc(lo||'')+'" target="_blank" rel="noopener" style="color:#1a6fd1;font-weight:600">'+esc(addr)+'</a>';
+    if(la && lo && !isNaN(Number(la)) && !isNaN(Number(lo))) return '<a href="https://maps.google.com/?q='+esc(la)+','+esc(lo)+'" target="_blank" rel="noopener" style="color:#1a6fd1;font-weight:600">'+esc(Number(la).toFixed(5))+', '+esc(Number(lo).toFixed(5))+'</a>';
+    return '<span style="color:#a3271f">location not available</span>';
+  }
+  function paintDash(){
+    var card=document.getElementById('attDashCard'); if(!card) return;
+    var body=document.getElementById('attDashBody'); if(!body) return;
+    var rec=attCurRec_(), x=readLoc()||{}, u=S.user||{};
+    var shift=u.DutyStart?('Shift '+fmtDutyTime(u.DutyStart)+(u.DutyEnd?('–'+fmtDutyTime(u.DutyEnd)):'')):'';
+    var st=String((rec&&rec.status)||'').toLowerCase();
+    var tag, tagCss;
+    if(rec && /leave/.test(st) && !rec.checkIn){ tag='On leave'; tagCss='background:#eef2ff;color:#3b4cc0'; }
+    else if(!rec || !rec.checkIn){ tag='Not checked in'; tagCss='background:#fff4e5;color:#a35a00'; }
+    else if(!rec.checkOut){ tag='Checked in '+rec.checkIn; tagCss='background:#e6f6ec;color:#17803d'; }
+    else { tag='Done '+rec.checkIn+'–'+rec.checkOut; tagCss='background:#eef0f3;color:#4b5260'; }
+    var inb=!rec || !rec.checkIn;
+    var btn;
+    if(ATT.sending) btn='<button class="btn" id="attDashBtn" disabled style="background:#9aa0a6;border-color:#9aa0a6">Sending punch…</button>';
+    else if(inb) btn='<button class="btn" id="attDashBtn" data-k="in" style="background:#1fa64a;border-color:#1fa64a">&#8853; Check in</button>';
+    else if(!rec.checkOut) btn='<button class="btn" id="attDashBtn" data-k="out" style="background:#DA1017;border-color:#DA1017">&#8854; Check out</button>';
+    else btn='<span style="font-weight:700;color:#17803d;padding:10px 4px">&#10003; '+(rec._night?'Night shift done':'Done for today')+'</span>';
+    var lines='';
+    if(rec && rec.checkIn){
+      var li=x['in']||{};
+      lines+='<div>&#128344; In <b>'+esc(rec.checkIn)+'</b>'+(String(rec.late)==='yes'?' <span style="color:#a35a00">· late (½ day)</span>':'')+' · &#128205; '+attDashPlace_(rec.latIn||li.lat, rec.lngIn||li.lng, rec.addrIn)+'</div>';
+      if(rec.checkOut){ var lo=x.out||{}; lines+='<div>&#128340; Out <b>'+esc(rec.checkOut)+'</b> · &#128205; '+attDashPlace_(rec.latOut||lo.lat, rec.lngOut||lo.lng, '')+'</div>'; }
+      if(rec._queued) lines+='<div style="color:#8a5a00">&#9729; saved on this phone — sending by itself</div>';
+    }
+    var html='<div class="bx">&#128339;</div>'+
+      '<div class="mid"><b>Attendance</b> <span class="tag" style="'+tagCss+'">'+esc(tag)+'</span>'+
+        '<div class="s">Today'+(shift?(' · '+esc(shift)):'')+' · <a href="#" id="attDashOpen" style="color:#1a6fd1">Open Attendance</a></div>'+
+        (lines?'<div class="loc">'+lines+'</div>':'')+'</div>'+
+      '<span class="sp"></span>'+btn;
+    if(body._h!==html){ body.innerHTML=html; body._h=html; }
+    var b=document.getElementById('attDashBtn'); if(b && !b.disabled) b.onclick=function(){ doMark(b.getAttribute('data-k')); };
+    var o=document.getElementById('attDashOpen'); if(o) o.onclick=function(e){ e.preventDefault(); if(typeof go==='function') go('attendance'); };
+  }
+  function attDashStyles_(){
+    if(document.getElementById('attDashCss')) return;
+    var s=document.createElement('style'); s.id='attDashCss';
+    s.textContent='#attDashCard{background:#fff;border:1px solid #bfe5cc;border-radius:16px;box-shadow:var(--shadow);padding:16px 20px;margin:0 0 16px}'+
+      '#attDashBody{display:flex;align-items:center;gap:18px}'+
+      '#attDashCard .bx{width:52px;height:52px;border-radius:14px;background:#1fa64a;color:#fff;font-size:24px;display:flex;align-items:center;justify-content:center;flex:none}'+
+      '#attDashCard b{font-size:17px}#attDashCard .loc b{font-size:inherit}#attDashCard .s{color:var(--grey);font-size:13.5px;margin-top:2px}#attDashCard .sp{flex:1}'+
+      '#attDashCard .tag{display:inline-block;font-size:12px;font-weight:700;padding:2px 9px;border-radius:10px;margin-left:4px;vertical-align:2px}'+
+      '#attDashCard .loc{font-size:13.5px;margin-top:6px;line-height:1.7;color:#333}'+
+      '#attDashCard .btn{min-width:150px;justify-content:center;font-size:15px;padding:12px 18px;touch-action:manipulation}'+
+      '@media(max-width:640px){#attDashBody{flex-wrap:wrap}#attDashCard .btn{width:100%;font-size:17px;padding:14px}#attDashCard .sp{display:none}}';
+    document.head.appendChild(s);
+  }
+  var _attDashLoadTs=0;
+  function attDashLoad_(){
+    if(Date.now()-_attDashLoadTs < 60000) return; _attDashLoadTs=Date.now();
+    API.cachedAttendance(ymNow()).then(function(r){ if(r && r.records && !(ATT.recs||[]).length){ ATT.recs=mergeServerRecs(r.records, Object.assign({}, r, {cached:true, _preload:true})); paintDash(); } }).catch(function(){});
+    API.myAttendance(ymNow()).then(function(r){ if(r && r.ok){ ATT.recs=mergeServerRecs(r.records, r); paintDash(); } }).catch(function(){});
+  }
+  function attDashTick_(){
+    try{
+      var tasks=document.getElementById('dashTasks'), crm=document.getElementById('crmDashCard'), mkt=document.getElementById('mktDashCard');
+      var ref=crm||mkt||tasks, card=document.getElementById('attDashCard');
+      if(!ref || !ref.parentNode || !attDashWanted_()){ if(card) card.style.display='none'; return; }
+      attDashStyles_();
+      if(!card){ card=document.createElement('div'); card.id='attDashCard'; card.innerHTML='<div id="attDashBody"></div>'; }
+      card.style.display='';
+      if(card.nextSibling!==ref || card.parentNode!==ref.parentNode) ref.parentNode.insertBefore(card, ref);   // always FIRST, above Nakoda CRM
+      warmGeo(); attDashLoad_(); paintDash();
+    }catch(e){}
+  }
+  try{ setInterval(attDashTick_, 1500); }catch(e){}
+
   window.renderAttendance=renderAttendance;
 })();
 
