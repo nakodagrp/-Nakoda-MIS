@@ -7,7 +7,8 @@
 <meta name="theme-color" content="#DA1017">
 <link rel="icon" href="icons/favicon.png">
 <link rel="manifest" href="manifest.webmanifest">
-<!-- v459c: the MIS runs on Apps Script. This GitHub page now SHOWS the Apps Script MIS inside itself, so the
+<!-- v459d: the frame is "credentialless" (no Google cookies → no multi-account error); the MIS login is kept here.
+     v459c: the MIS runs on Apps Script. This GitHub page now SHOWS the Apps Script MIS inside itself, so the
      old MIS icon on every phone keeps working — nobody has to remove or re-add anything.
      (…/exec?wrap=<this page> tells the MIS to come back here when it reloads, e.g. after Logout.) -->
 <style>
@@ -18,7 +19,7 @@
 </style>
 </head>
 <body>
-<iframe id="mis" title="Nakoda MIS" allow="geolocation *; camera *; microphone *; clipboard-read *; clipboard-write *; fullscreen *; web-share *"></iframe>
+<iframe id="mis" title="Nakoda MIS" credentialless allow="geolocation *; camera *; microphone *; clipboard-read *; clipboard-write *; fullscreen *; web-share *"></iframe>
 <div id="slow"><a id="slowA" href="#" target="_blank" rel="noopener">MIS not opening? Tap here</a></div>
 <script>
   var NK_MIS = 'https://script.google.com/macros/s/AKfycbyqVSShH6jsBFYCFhZ-BMa2G5V4VDLYepufI_enlKWutLsi9Jigzo_EmSKSfbj7pO4/exec';
@@ -31,6 +32,16 @@
   /* safety: if the MIS frame never loads, offer to open it directly after 12 s */
   var loaded = false; document.getElementById('mis').onload = function(){ loaded = true; document.getElementById('slow').style.display = 'none'; };
   setTimeout(function(){ if(!loaded) document.getElementById('slow').style.display = 'block'; }, 12000);
+  /* v459d: keep the MIS login for the credentialless frame (it forgets its own storage) */
+  var KEY = 'nk_mis_login', sent = false, reloaded = false;
+  window.addEventListener('message', function(ev){
+    if(!/^https:\/\/[a-z0-9-]+\.googleusercontent\.com$/i.test(ev.origin) || !ev.data) return;
+    var d = ev.data, saved = {};
+    try{ saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; }catch(e){}
+    if(d.nk === 'hello'){ try{ ev.source.postMessage({nk:'tok', tok:sent ? '' : (saved.tok || ''), uid:saved.uid || ''}, ev.origin); }catch(e){} sent = true; }
+    else if(d.nk === 'save'){ try{ d.tok ? localStorage.setItem(KEY, JSON.stringify({tok:String(d.tok), uid:String(d.uid || '')})) : localStorage.removeItem(KEY); }catch(e){} }
+    else if(d.nk === 'reload' && !reloaded){ reloaded = true; var f = document.getElementById('mis'); f.src = NK_MIS + '?wrap=' + encodeURIComponent(here) + '&r=1' + (location.hash || ''); }
+  });
   /* #crmcard=… links arriving while the page is open */
   window.addEventListener('hashchange', function(){ document.getElementById('mis').src = NK_MIS + '?wrap=' + encodeURIComponent(here) + (location.hash || ''); });
 </script>
