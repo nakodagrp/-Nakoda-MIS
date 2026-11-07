@@ -6,18 +6,48 @@
 <title>Nakoda MIS</title>
 <meta name="theme-color" content="#DA1017">
 <link rel="icon" href="icons/favicon.png">
-<!-- v458: the MIS now runs on Apps Script. This old GitHub address forwards everyone there automatically
-     (bookmarks, home-screen icons, "Back to MIS" buttons, #crmcard= links from the CRM). -->
+<!-- v459b: the MIS runs on Apps Script. This old GitHub address forwards everyone there.
+     BUT: the old MIS icon on a phone is an installed app. Google's Apps Script page cannot open inside that
+     app window ("Sorry, unable to open the file at present"), so there we show a button that opens Chrome. -->
 <script>
   var NK_MIS = 'https://script.google.com/macros/s/AKfycbyqVSShH6jsBFYCFhZ-BMa2G5V4VDLYepufI_enlKWutLsi9Jigzo_EmSKSfbj7pO4/exec';
   try{ if('serviceWorker' in navigator) navigator.serviceWorker.getRegistrations().then(function(r){ r.forEach(function(x){ x.unregister(); }); }); }catch(e){}
   try{ if(window.caches) caches.keys().then(function(k){ k.forEach(function(n){ caches.delete(n); }); }); }catch(e){}
-  location.replace(NK_MIS + (location.hash || ''));
+  var standalone = false;
+  try{ standalone = window.matchMedia('(display-mode: standalone)').matches || window.matchMedia('(display-mode: fullscreen)').matches || window.navigator.standalone === true; }catch(e){}
+  var android = /Android/i.test(navigator.userAgent);
+  var target = NK_MIS + (location.hash || '');
+  if(!standalone) location.replace(target);          /* normal browser tab → straight to the new MIS */
 </script>
-<meta http-equiv="refresh" content="2;url=https://script.google.com/macros/s/AKfycbyqVSShH6jsBFYCFhZ-BMa2G5V4VDLYepufI_enlKWutLsi9Jigzo_EmSKSfbj7pO4/exec">
-<style>body{font-family:'Segoe UI',Roboto,Arial,sans-serif;background:#f6f7f9;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;color:#2b2b2b}
-.c{background:#fff;border-radius:16px;padding:28px 32px;text-align:center;box-shadow:0 4px 16px rgba(16,24,40,.08)}a{color:#DA1017;font-weight:700}</style>
+<style>body{font-family:'Segoe UI',Roboto,Arial,sans-serif;background:#f6f7f9;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;color:#2b2b2b;padding:16px;box-sizing:border-box}
+.c{background:#fff;border-radius:18px;padding:26px 24px;text-align:center;box-shadow:0 4px 16px rgba(16,24,40,.08);max-width:420px;width:100%}
+.b{display:block;background:#DA1017;color:#fff;text-decoration:none;font-weight:800;font-size:17px;padding:15px;border-radius:14px;margin:18px 0 10px}
+.s{font-size:13.5px;color:#555;line-height:1.55;text-align:left;background:#f7f8fa;border-radius:12px;padding:12px 14px;margin-top:14px}
+.s b{color:#2b2b2b}</style>
 </head>
-<body><div class="c"><b style="font-size:18px">Opening the new Nakoda MIS…</b><br><br>
-<a href="https://script.google.com/macros/s/AKfycbyqVSShH6jsBFYCFhZ-BMa2G5V4VDLYepufI_enlKWutLsi9Jigzo_EmSKSfbj7pO4/exec">Tap here if it does not open</a></div></body>
+<body><div class="c">
+  <div style="font-size:20px;font-weight:800">Nakoda MIS has moved</div>
+  <div style="font-size:14px;color:#686868;margin-top:6px" id="msg">Opening the new Nakoda MIS…</div>
+  <a class="b" id="go" href="#">Open the new MIS in Chrome</a>
+  <div class="s" id="how" style="display:none">
+    <b>Do this once:</b><br>
+    1. Tap the red button above — the MIS opens in Chrome.<br>
+    2. In Chrome tap <b>⋮</b> ▸ <b>Add to Home screen</b> ▸ Add.<br>
+    3. Long-press this <b>old</b> MIS icon ▸ <b>Uninstall</b> / Remove.<br>
+    From then on, open the MIS with the <b>new</b> icon.
+  </div>
+</div>
+<script>
+  var go = document.getElementById('go');
+  if(standalone){
+    document.getElementById('msg').textContent = 'This old MIS icon cannot open the new MIS. Open it in Chrome and add a new icon.';
+    document.getElementById('how').style.display = 'block';
+    /* Android: an intent link makes Chrome itself open the page (not this old app window) */
+    go.href = android ? 'intent://' + target.replace(/^https:\/\//, '') + '#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=' + encodeURIComponent(target) + ';end' : target;
+    if(!android) go.target = '_blank';
+  } else {
+    go.href = target; go.textContent = 'Tap here if it does not open';
+  }
+</script>
+</body>
 </html>
