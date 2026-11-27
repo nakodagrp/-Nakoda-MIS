@@ -1685,7 +1685,7 @@ function initInstall(){
    someone their app is stale, which matters a lot here: staff who assumed the mismatch banner was just
    always-on noise had no reliable signal to go tap "Check update" after a real deploy. Bump this to
    match sw.js's CACHE_VERSION on every deploy that changes sw.js — the two must always agree. */
-var APP_BUILD='v485';   /* v485 (= v484 task system + the v483 changes): branch / month / refresh in the top bar · CRM / Marketing / PathConnect / Sales boxes out of the left menu · Follow-ups + Leave out of the app bar, icons in full colour (homebar.js) · KRA & KPI: level boxes are buttons (tap → lift + only those people), doctors left out, list + every profile instant from the saved copy (kra.js; backend 52_WorkKra / 45_DashHub op 'persons'). */  /* v484 was: */      /* v484: TASK SYSTEM — new My Tasks page (every task in one list: checklist, given tasks, own tasks, leave + attendance approvals, new-date requests, old MIS tasks, app tasks; tabs Today · Overdue · Upcoming · Approvals · Given by me · Done · Team), Dashboard My tasks today = same list, + Give a task / + My own task, New date, Done with photo / note / number proof, Checklist setup page (MIS admin), old Recurring menu hidden once paused (tasks2.js, dashhub.js, leave2.js; backend 53_Tasks.gs + 52_WorkKra.gs). */  /* v482 was: */   /* v482: Home app bar in design H4 — pastel gradient bar, coloured app icons, red KRA trophy (homebar.js, dashhub.js). */  /* v481 was: */      /* v481: HOME redesign (design D) — red app bar with clickable app icons that lift on touch (homebar.js), KRA & KPI one row on the Dashboard → new KRA & KPI tab with profile cards + person dashboard (kra.js; backend 52_WorkKra / 45_DashHub op 'person'). */  /* v480 was: */      /* v480: ACCOUNTS REMOVED COMPLETELY — Dashboard 'By branch · business' block + 'not counted' strip gone, no Accounts calls, accounts.js / finance.js / statementtable.js / bankpreview.js out of the bundle (backend 03_Router v480; 18_Accounts, 19_BankImport, 36_DoctorCot deleted). */  /* v479 was: */      /* v479: ACCOUNTS removed from the menu (navtrim.js). All Accounts data is copied to Google Drive once by ZZ_ExportAccounts.gs (folder per branch + month) for the accountant. */  /* v478 was: */      /* v478: LEAVE — own sheet 'Nakoda Leave — data', Approve / Reject / Apply change the screen at once, no buttons after a decision, 🌴 Leave card on the Dashboard (leave2.js; backend 50_LeaveV2.gs v478, op 'notice'). */  /* v477 was: */      /* v477: KRA & KPI table in its own scroll box — titles fixed on top, # + name fixed on the left; Marketing 'messages failed' task gets ✓ Close (Dashboard + Follow-ups; backend 43_FollowupHub op 'close' — back only if more messages fail). */  /* v476 was: */      /* v476: My tasks + Follow-ups — a task the doer finished in the app disappears at once (fresh read when the MIS comes back on screen); Follow-ups ✓ Done has NO popup (PC check = off your list until tomorrow), doer gets Open ↗; NEW KRA & KPI — work done · on time · not done · late from every system + attendance, manager = 50% own + 50% team, best first, Excellent/Good/Average/Poor (dashhub.js, fuhub.js; backend 43_FollowupHub, 45_DashHub, 52_WorkKra); Executive Assistant = Director (05_Employees, 50_LeaveV2). */  /* v475 was: */      /* v475: Payslip tab shows ONLY the latest payslip (no month list); old / broken rows ignored (payslip.js). */  /* v474 was: */   /* v474: Payslip on phones — the payslip table stays a real table (MIS phone rule turned it into empty cards) and fits the screen (payslip.js). */  /* v473 was: */   /* v473: PAYSLIP tab (payslip.js) — staff see their own payslips (MIS ▸ Payslip, red dot = new, Dashboard card, Download PDF); ₹ Nakoda Payroll button for Accountant / Anurag Shukla. Backend 51_PayBridge.gs (router 'pay'). */  /* v472 was: */   /* v472: Leave — pick ANY days (24, 25, 28…) in one request, each Full / First half / Second half; HR approves everyone incl. MIS, PC, CRM Head, Content Creator, EA (backend 50_LeaveV2.gs v472); 'System Administrator' never an approver. */  /* v471 was: */    /* v471: NEW LEAVE SYSTEM (leave2.js + backend 50_LeaveV2.gs, router 'lv2'): team calendar, monthly report + Excel, Sunday workers, Apply for leave window, Approve / Reject popup with note, first approval wins, FYI to other approvers, cards on My Tasks. Leave back in the menu. */  /* v470 was: */    /* v470: Recurring Tasks back in the menu (recurring.js back in the bundle). Calendar kept. Still removed: Patient CRM, CRM Performance, Sample Collection, Leave, Field Work, Inventory, Payment Request, Payroll, Bulk Message Send, Timely Message. */  /* v469 was: */    /* v469: MENU — Calendar back; Recurring Tasks, Patient CRM, CRM Performance, Sample Collection, Leave, Field Work, Inventory, Payment Request, Payroll, Bulk Message Send, Timely Message removed; their front-end files (messaging, leave, inventory, stockauto, purchase, payreq, recurring, patients, quicklog) no longer in the bundle. */  /* v468 was: */    /* v468: MENU TRIM — Calendar, Patient CRM, CRM Performance, Sample Collection, Leave, Field Work, Inventory, Payment Request, Payroll, Bulk Message Send, Timely Message removed from the menu (navtrim.js; screens only — no backend / data change). */  /* v467 was: */    /* v467: Dashboard My tasks — Open opens THAT app at that lead (CRM patient / cold lead, PathConnect lead, Marketing campaigns) in a new tab, signed in; back on the MIS the list is asked again and a finished task disappears (dashhub.js). Apps: CRM Index v2.19, PathConnect Index v1.11, Marketing Index v1.9. */  /* v466 was: */    /* v466: Dashboard My tasks → Open shows ONLY that lead on the Follow-ups page (banner + Show all). */  /* v465 was: */    /* v465: Follow-ups FMS tab — REAL numbers at every step from each app (fmsFeed: Nakoda CRM, PathConnect, Marketing) + 'N open' under each. Backend 43_FollowupHub.gs v465. */  /* v464 was: */    /* v464: Follow-ups — By person / FMS tabs keep their own chip; every FMS shows its full flow. */  /* v463 was: */    /* v463: FOLLOW-UPS — 5 boxes clickable (instant), By person tables (FMS · Step · Task · Lead · Due · Status), FMS tab, ⏰ Call later, Excel. Backend 43_FollowupHub.gs v463. */  /* v462 was: */    /* v462: NAKODA SALES button — sidebar (under PathConnect CRM) + Dashboard card with your due today / overdue camp-lead follow-ups and visits this week; opens Nakoda Sales already signed in (saleslink.js; backend 42_SalesBridge 'url', no change). */  /* v461 was: */   /* v461: Attendance card on the Dashboard loads first and shows 'Checking…' instead of a wrong Check in until the server answers; reloads when the app is reopened; KRA & KPI / card sending start 4 s later (dashhub.js). */  /* v460 was: */   /* v460: MIS screens back on GitHub (fast open, offline punch queue, background sync) + v458/v459 Dashboard (dashhub.js: My tasks · KRA & KPI · card sending all branches · by-branch business) + v457 view-only attendance kept. */  /* v457 was: */   /* v457: Sihir Mehta can VIEW all staff attendance (Attendance → All staff — view only). Backend 46_AttViewers.gs. */  /* v456 was: */    /* v456: WhatsApp Templates menu also for the CRM Head role (needs 44_WaTplCrmHead.gs). Also rebuilds v455 (Follow-ups filter CSS) from the root files. */  /* v455 was: */    /* v455: Follow-ups — filter row (branch / people / search) no longer stretched full width (fuhub.js CSS). */    /* v454 was: */    /* v454: FOLLOW-UPS — doer name first (like the old PC page) with their phone, Call / WhatsApp to the doer, ✓ Completed; a follow-up appears only 5 min before its time (CRM date-only = 09:00), no next-7-days list (fuhub.js + 43_FollowupHub.gs v454). */    /* v453 was: */    /* v453: FOLLOW-UPS page rebuilt — every follow-up from Nakoda CRM + PathConnect CRM + Nakoda Marketing, one tab per app, ✓ Done saves in the app (fuhub.js; backend 43_FollowupHub.gs). Old overdue tasks / attendance / training items removed from this page. Menu item shown to everyone (own follow-ups; managers see all). */    /* v452 was: */    /* v452: ATTENDANCE — out more than 15 min before shift end = Half day (note text; rule in 41_EarlyOut.gs). Merged with v450 (cards any number, cardbatch in pclink.js) + v451 (CRM no login, crmlink.js), which were missing from the root files. */  /* v451 was: */    /* v451: Open CRM button signs in to the CRM by itself (no CRM login page). */  /* v450 was: */   /* v450: Membership Cards — send any number of cards at once (split in parts of 200 by the page, cardbatch.js). */  /* v449 was: */   /* v449: PathConnect CRM (Digital Pathology + Pathoflex sales CRM) — sidebar button + Dashboard card with your due-today / overdue follow-ups (pclink.js). Backend: 41_PcBridge.gs + 1 line in 03_Router.gs. */    /* v448 was: */    /* v448: Attendance card first on the Dashboard — Check in / Check out there + In / Out time and location. */    /* v447: iPhone Check in safety net (card only rebuilt when it changed) + build-bundle.py refuses a bundle that lost a fix. */    /* v446: MERGE — v445 (Nakoda Marketing button) + v444 iPhone Check in / Check out fix, which the Marketing build had left out (it was built from older files). */    /* v445: Nakoda Marketing button opens Marketing's own Apps Script link (told to the MIS by Marketing itself) — no /mkt/ folder on GitHub. */  /* v444 was: */   /* v444: NAKODA MARKETING button — sidebar (above Bulk Message Send) + Dashboard card; Marketing is a separate app in /mkt/ (mktlink.js). Backend: 37_MktBridge.gs + 03_Router.gs (v444). */  /* v443 was: */   /* v443: DOCTOR COT — Accounts tab (+ ADD: date, branch, amount, photo, note) + Dashboard by-branch column; Cash shown after COT. Needs 36_DoctorCot.gs + 03_Router.gs. */    /* v442: MEMBERSHIP CARDS — click (or touch) and drag down the tick boxes to tick many cards at once. */    /* v441: Nakoda CRM button also for Samira Pathan (by name, crmlink.js). */    /* v440: ATTENDANCE — your day-by-day list shows the real punch location (needs 35_AttMyLoc.gs). */    /* v439: ATTENDANCE — IN / OUT photo boxes removed (Approve screen + your day-by-day list); time + location only. */    /* v438: ATTENDANCE — no selfie; punch = time + location (shown on the card). */  /* v437: Nakoda CRM button only for MIS / Director / Operations Manager / CRM roles (crmlink.js). */  /* v436: */   /* v436: Nakoda CRM "Send card (WhatsApp API)" opens the MIS card popup (crmlink.js #crmcard=). */    /* v435: Open CRM button — Nakoda CRM is a separate app in /crm/ (crmlink.js); MIS backend adds the 'crm' bridge (29_CrmBridge.gs). */  /* v434: */   /* v434: Bulk Message Send / Timely Message — once-only rule: the same template is never sent twice to the same mobile (Skipped), a different template still goes. */  /* v433: */   /* v433: Dashboard cards board — Per day / Issued also count cards SENT by Bulk Message Send (every branch, each person once). Backend v433 (34_CardBulkSent.gs). */  /* v432: */    /* v432: Membership Cards — Issued from / to date filter with a summary (Bulk Message Send cards counted) and an Issued column; Dashboard cards board — Per day shows the number only. */  /* v431: */    /* v431: Attendance — 3h-shift staff no longer Half day for a full shift (limit = shift length − 15 min, max 4h); night duty can punch out after 12 midnight (closes yesterday's shift); the screen no longer wipes a real check-in because of a stale offline copy. Backend v431 (33_AttNight.gs). */  /* v430: */    /* v430: Bulk Message Send — ⚙ Limit per campaign (messages per day, rest stay Pending); Dashboard Membership cards — Per day column + day picker, Issued = 1st → selected day. */  /* v429: Bulk Message Send — Add Leads sends up to 1,000 leads in one trip and the server dedupes by reading 3 columns, not the whole sheet. */  /* v428: */   /* v428: Branches — "Use my current location" no longer fails with "allow location access" when GPS is merely slow: 20 s GPS try + network fallback, real reason shown, accuracy (±m) shown. */  /* v427:   /* v427: Attendance — an older day's saved punch sent today no longer shows as today's check-in (the phantom "In ✓" + Check out button); a refused punch no longer leaves "Done for today" on screen. */  /* v426:   /* v426: release of the v425 attendance fixes (early-out half day, lost punch-out, forgot punch-out = half day, no-location reason). */  /* v425:   /* v425: Attendance — forgot to punch out = Half day even when a manager approved the check-in (31_AttFix.gs attHourlyFix_); the punch card warns when location is blocked / on a computer, and the note now says WHY there was no location. */  /* v424:   /* v424: Attendance — an early check-out (under 4h) stays Half day: setting Full day on such a day now asks for a reason; approvals can no longer wipe a punch-out; a past day with no punch-out says "No punch-out received". Backend v424 (31_AttFix.gs + 03_Router.gs). */  /* v423:   /* v423: Bulk Message Send / Timely Message for CRM staff (own branch only, enforced server-side) + an "Are you sure?" popup on Cancel/Delete campaign. */  /* v422:   /* v422: Membership Cards — branch staff see only their own branch's cards; Operations Manager / MIS / Director see all with a branch filter (30_CardScope.gs). Also carries backend v420–v421. */  /* v419:   /* v419: Bulk Message Send — card templates send each lead THEIR OWN card again (drawn from the real card design, 8 at a time, Drive direct link when WhatsBizAPI refuses); see sw.js's v419 note. */  /* v416:   /* v416: Bulk Message Send — card templates with an image use the previous (18 Sep) method exactly: one image + {{3}}.. filled once; see sw.js's v416 note. */  /* v415:   /* v415: Bulk Message Send — card templates get a "One image for everyone" mode (default): upload one image, fill {{3}}.. once, like the original screen; see sw.js's v415 note. */  /* v414:   /* v414: Bulk Message Send — Card design per template (upload a blank card, drag fields, every lead's card is drawn from it); see sw.js's v414 note. */  /* v413:   /* v413: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: drag-and-drop card picture box (remembered per template), "Fix pictures & retry failed" with a what-was-fixed banner and per-row notes, and the top bar now also shows the BACKEND build (Router 'version' → backendBuild); see sw.js's v413 note. */  /* v410:   /* v410: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send makes its own card pictures + sample card picture fallback; see sw.js's v410 note. app.js itself only changed by this version-number line. */  /* v409: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: Add Leads now REPLACES a mismatched card instead of skipping that person forever, and the "preparing card pictures" step no longer re-fetches the whole company's card list — see sw.js's v409 note. app.js itself only changed by this version-number line. */  /* v408: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send / Timely Message: Patient Delivery gets a "Retry failed (N)" button that resets a campaign's already-failed leads back to Pending in place (no delete + re-upload, which would just be reported as duplicates) so the next automatic send actually retries them — see sw.js's v408 note. app.js itself only changed by this version-number line. */  /* v406: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: Gold / Platinum 7 campaigns now create the missing membership cards from the Excel; see sw.js's v406 note. app.js itself only changed by this version-number line. */  /* v405: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: "Next batch" note + Change time button on Campaign History, explanation box in Patient Delivery, Total Leads tile fix; see sw.js's v405 note. app.js itself only changed by this version-number line. */  /* v404: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: a Delete button on Completed/Failed campaigns (was Cancel only while active); see sw.js's v404 note. app.js itself only changed by this version-number line. */  /* v403: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send round 3: every active template is listed; card templates (Gold / Platinum / Platinum+ / Diamond / membership_card / Benefits) are filled per recipient from that person's OWN card; see sw.js's v403 note. app.js itself only changed by this one version-number line. */
+var APP_BUILD='v486';   /* v486: TASKS — popups open and close at once (staff list kept on the phone, Done / Give / New date / Approve change the list at once and save in the background; a failed save shows a red message and reopens the popup with your text); tasks you gave that the doer finished turn GREEN (My Tasks ▸ Given by me on top, Dashboard "✓ Tasks you gave — finished today" rows + Done by them chip, ✕ hides) — tasks2.js; backend 53_Tasks v486. */  /* v485 was: */   /* v485 (= v484 task system + the v483 changes): branch / month / refresh in the top bar · CRM / Marketing / PathConnect / Sales boxes out of the left menu · Follow-ups + Leave out of the app bar, icons in full colour (homebar.js) · KRA & KPI: level boxes are buttons (tap → lift + only those people), doctors left out, list + every profile instant from the saved copy (kra.js; backend 52_WorkKra / 45_DashHub op 'persons'). */  /* v484 was: */      /* v484: TASK SYSTEM — new My Tasks page (every task in one list: checklist, given tasks, own tasks, leave + attendance approvals, new-date requests, old MIS tasks, app tasks; tabs Today · Overdue · Upcoming · Approvals · Given by me · Done · Team), Dashboard My tasks today = same list, + Give a task / + My own task, New date, Done with photo / note / number proof, Checklist setup page (MIS admin), old Recurring menu hidden once paused (tasks2.js, dashhub.js, leave2.js; backend 53_Tasks.gs + 52_WorkKra.gs). */  /* v482 was: */   /* v482: Home app bar in design H4 — pastel gradient bar, coloured app icons, red KRA trophy (homebar.js, dashhub.js). */  /* v481 was: */      /* v481: HOME redesign (design D) — red app bar with clickable app icons that lift on touch (homebar.js), KRA & KPI one row on the Dashboard → new KRA & KPI tab with profile cards + person dashboard (kra.js; backend 52_WorkKra / 45_DashHub op 'person'). */  /* v480 was: */      /* v480: ACCOUNTS REMOVED COMPLETELY — Dashboard 'By branch · business' block + 'not counted' strip gone, no Accounts calls, accounts.js / finance.js / statementtable.js / bankpreview.js out of the bundle (backend 03_Router v480; 18_Accounts, 19_BankImport, 36_DoctorCot deleted). */  /* v479 was: */      /* v479: ACCOUNTS removed from the menu (navtrim.js). All Accounts data is copied to Google Drive once by ZZ_ExportAccounts.gs (folder per branch + month) for the accountant. */  /* v478 was: */      /* v478: LEAVE — own sheet 'Nakoda Leave — data', Approve / Reject / Apply change the screen at once, no buttons after a decision, 🌴 Leave card on the Dashboard (leave2.js; backend 50_LeaveV2.gs v478, op 'notice'). */  /* v477 was: */      /* v477: KRA & KPI table in its own scroll box — titles fixed on top, # + name fixed on the left; Marketing 'messages failed' task gets ✓ Close (Dashboard + Follow-ups; backend 43_FollowupHub op 'close' — back only if more messages fail). */  /* v476 was: */      /* v476: My tasks + Follow-ups — a task the doer finished in the app disappears at once (fresh read when the MIS comes back on screen); Follow-ups ✓ Done has NO popup (PC check = off your list until tomorrow), doer gets Open ↗; NEW KRA & KPI — work done · on time · not done · late from every system + attendance, manager = 50% own + 50% team, best first, Excellent/Good/Average/Poor (dashhub.js, fuhub.js; backend 43_FollowupHub, 45_DashHub, 52_WorkKra); Executive Assistant = Director (05_Employees, 50_LeaveV2). */  /* v475 was: */      /* v475: Payslip tab shows ONLY the latest payslip (no month list); old / broken rows ignored (payslip.js). */  /* v474 was: */   /* v474: Payslip on phones — the payslip table stays a real table (MIS phone rule turned it into empty cards) and fits the screen (payslip.js). */  /* v473 was: */   /* v473: PAYSLIP tab (payslip.js) — staff see their own payslips (MIS ▸ Payslip, red dot = new, Dashboard card, Download PDF); ₹ Nakoda Payroll button for Accountant / Anurag Shukla. Backend 51_PayBridge.gs (router 'pay'). */  /* v472 was: */   /* v472: Leave — pick ANY days (24, 25, 28…) in one request, each Full / First half / Second half; HR approves everyone incl. MIS, PC, CRM Head, Content Creator, EA (backend 50_LeaveV2.gs v472); 'System Administrator' never an approver. */  /* v471 was: */    /* v471: NEW LEAVE SYSTEM (leave2.js + backend 50_LeaveV2.gs, router 'lv2'): team calendar, monthly report + Excel, Sunday workers, Apply for leave window, Approve / Reject popup with note, first approval wins, FYI to other approvers, cards on My Tasks. Leave back in the menu. */  /* v470 was: */    /* v470: Recurring Tasks back in the menu (recurring.js back in the bundle). Calendar kept. Still removed: Patient CRM, CRM Performance, Sample Collection, Leave, Field Work, Inventory, Payment Request, Payroll, Bulk Message Send, Timely Message. */  /* v469 was: */    /* v469: MENU — Calendar back; Recurring Tasks, Patient CRM, CRM Performance, Sample Collection, Leave, Field Work, Inventory, Payment Request, Payroll, Bulk Message Send, Timely Message removed; their front-end files (messaging, leave, inventory, stockauto, purchase, payreq, recurring, patients, quicklog) no longer in the bundle. */  /* v468 was: */    /* v468: MENU TRIM — Calendar, Patient CRM, CRM Performance, Sample Collection, Leave, Field Work, Inventory, Payment Request, Payroll, Bulk Message Send, Timely Message removed from the menu (navtrim.js; screens only — no backend / data change). */  /* v467 was: */    /* v467: Dashboard My tasks — Open opens THAT app at that lead (CRM patient / cold lead, PathConnect lead, Marketing campaigns) in a new tab, signed in; back on the MIS the list is asked again and a finished task disappears (dashhub.js). Apps: CRM Index v2.19, PathConnect Index v1.11, Marketing Index v1.9. */  /* v466 was: */    /* v466: Dashboard My tasks → Open shows ONLY that lead on the Follow-ups page (banner + Show all). */  /* v465 was: */    /* v465: Follow-ups FMS tab — REAL numbers at every step from each app (fmsFeed: Nakoda CRM, PathConnect, Marketing) + 'N open' under each. Backend 43_FollowupHub.gs v465. */  /* v464 was: */    /* v464: Follow-ups — By person / FMS tabs keep their own chip; every FMS shows its full flow. */  /* v463 was: */    /* v463: FOLLOW-UPS — 5 boxes clickable (instant), By person tables (FMS · Step · Task · Lead · Due · Status), FMS tab, ⏰ Call later, Excel. Backend 43_FollowupHub.gs v463. */  /* v462 was: */    /* v462: NAKODA SALES button — sidebar (under PathConnect CRM) + Dashboard card with your due today / overdue camp-lead follow-ups and visits this week; opens Nakoda Sales already signed in (saleslink.js; backend 42_SalesBridge 'url', no change). */  /* v461 was: */   /* v461: Attendance card on the Dashboard loads first and shows 'Checking…' instead of a wrong Check in until the server answers; reloads when the app is reopened; KRA & KPI / card sending start 4 s later (dashhub.js). */  /* v460 was: */   /* v460: MIS screens back on GitHub (fast open, offline punch queue, background sync) + v458/v459 Dashboard (dashhub.js: My tasks · KRA & KPI · card sending all branches · by-branch business) + v457 view-only attendance kept. */  /* v457 was: */   /* v457: Sihir Mehta can VIEW all staff attendance (Attendance → All staff — view only). Backend 46_AttViewers.gs. */  /* v456 was: */    /* v456: WhatsApp Templates menu also for the CRM Head role (needs 44_WaTplCrmHead.gs). Also rebuilds v455 (Follow-ups filter CSS) from the root files. */  /* v455 was: */    /* v455: Follow-ups — filter row (branch / people / search) no longer stretched full width (fuhub.js CSS). */    /* v454 was: */    /* v454: FOLLOW-UPS — doer name first (like the old PC page) with their phone, Call / WhatsApp to the doer, ✓ Completed; a follow-up appears only 5 min before its time (CRM date-only = 09:00), no next-7-days list (fuhub.js + 43_FollowupHub.gs v454). */    /* v453 was: */    /* v453: FOLLOW-UPS page rebuilt — every follow-up from Nakoda CRM + PathConnect CRM + Nakoda Marketing, one tab per app, ✓ Done saves in the app (fuhub.js; backend 43_FollowupHub.gs). Old overdue tasks / attendance / training items removed from this page. Menu item shown to everyone (own follow-ups; managers see all). */    /* v452 was: */    /* v452: ATTENDANCE — out more than 15 min before shift end = Half day (note text; rule in 41_EarlyOut.gs). Merged with v450 (cards any number, cardbatch in pclink.js) + v451 (CRM no login, crmlink.js), which were missing from the root files. */  /* v451 was: */    /* v451: Open CRM button signs in to the CRM by itself (no CRM login page). */  /* v450 was: */   /* v450: Membership Cards — send any number of cards at once (split in parts of 200 by the page, cardbatch.js). */  /* v449 was: */   /* v449: PathConnect CRM (Digital Pathology + Pathoflex sales CRM) — sidebar button + Dashboard card with your due-today / overdue follow-ups (pclink.js). Backend: 41_PcBridge.gs + 1 line in 03_Router.gs. */    /* v448 was: */    /* v448: Attendance card first on the Dashboard — Check in / Check out there + In / Out time and location. */    /* v447: iPhone Check in safety net (card only rebuilt when it changed) + build-bundle.py refuses a bundle that lost a fix. */    /* v446: MERGE — v445 (Nakoda Marketing button) + v444 iPhone Check in / Check out fix, which the Marketing build had left out (it was built from older files). */    /* v445: Nakoda Marketing button opens Marketing's own Apps Script link (told to the MIS by Marketing itself) — no /mkt/ folder on GitHub. */  /* v444 was: */   /* v444: NAKODA MARKETING button — sidebar (above Bulk Message Send) + Dashboard card; Marketing is a separate app in /mkt/ (mktlink.js). Backend: 37_MktBridge.gs + 03_Router.gs (v444). */  /* v443 was: */   /* v443: DOCTOR COT — Accounts tab (+ ADD: date, branch, amount, photo, note) + Dashboard by-branch column; Cash shown after COT. Needs 36_DoctorCot.gs + 03_Router.gs. */    /* v442: MEMBERSHIP CARDS — click (or touch) and drag down the tick boxes to tick many cards at once. */    /* v441: Nakoda CRM button also for Samira Pathan (by name, crmlink.js). */    /* v440: ATTENDANCE — your day-by-day list shows the real punch location (needs 35_AttMyLoc.gs). */    /* v439: ATTENDANCE — IN / OUT photo boxes removed (Approve screen + your day-by-day list); time + location only. */    /* v438: ATTENDANCE — no selfie; punch = time + location (shown on the card). */  /* v437: Nakoda CRM button only for MIS / Director / Operations Manager / CRM roles (crmlink.js). */  /* v436: */   /* v436: Nakoda CRM "Send card (WhatsApp API)" opens the MIS card popup (crmlink.js #crmcard=). */    /* v435: Open CRM button — Nakoda CRM is a separate app in /crm/ (crmlink.js); MIS backend adds the 'crm' bridge (29_CrmBridge.gs). */  /* v434: */   /* v434: Bulk Message Send / Timely Message — once-only rule: the same template is never sent twice to the same mobile (Skipped), a different template still goes. */  /* v433: */   /* v433: Dashboard cards board — Per day / Issued also count cards SENT by Bulk Message Send (every branch, each person once). Backend v433 (34_CardBulkSent.gs). */  /* v432: */    /* v432: Membership Cards — Issued from / to date filter with a summary (Bulk Message Send cards counted) and an Issued column; Dashboard cards board — Per day shows the number only. */  /* v431: */    /* v431: Attendance — 3h-shift staff no longer Half day for a full shift (limit = shift length − 15 min, max 4h); night duty can punch out after 12 midnight (closes yesterday's shift); the screen no longer wipes a real check-in because of a stale offline copy. Backend v431 (33_AttNight.gs). */  /* v430: */    /* v430: Bulk Message Send — ⚙ Limit per campaign (messages per day, rest stay Pending); Dashboard Membership cards — Per day column + day picker, Issued = 1st → selected day. */  /* v429: Bulk Message Send — Add Leads sends up to 1,000 leads in one trip and the server dedupes by reading 3 columns, not the whole sheet. */  /* v428: */   /* v428: Branches — "Use my current location" no longer fails with "allow location access" when GPS is merely slow: 20 s GPS try + network fallback, real reason shown, accuracy (±m) shown. */  /* v427:   /* v427: Attendance — an older day's saved punch sent today no longer shows as today's check-in (the phantom "In ✓" + Check out button); a refused punch no longer leaves "Done for today" on screen. */  /* v426:   /* v426: release of the v425 attendance fixes (early-out half day, lost punch-out, forgot punch-out = half day, no-location reason). */  /* v425:   /* v425: Attendance — forgot to punch out = Half day even when a manager approved the check-in (31_AttFix.gs attHourlyFix_); the punch card warns when location is blocked / on a computer, and the note now says WHY there was no location. */  /* v424:   /* v424: Attendance — an early check-out (under 4h) stays Half day: setting Full day on such a day now asks for a reason; approvals can no longer wipe a punch-out; a past day with no punch-out says "No punch-out received". Backend v424 (31_AttFix.gs + 03_Router.gs). */  /* v423:   /* v423: Bulk Message Send / Timely Message for CRM staff (own branch only, enforced server-side) + an "Are you sure?" popup on Cancel/Delete campaign. */  /* v422:   /* v422: Membership Cards — branch staff see only their own branch's cards; Operations Manager / MIS / Director see all with a branch filter (30_CardScope.gs). Also carries backend v420–v421. */  /* v419:   /* v419: Bulk Message Send — card templates send each lead THEIR OWN card again (drawn from the real card design, 8 at a time, Drive direct link when WhatsBizAPI refuses); see sw.js's v419 note. */  /* v416:   /* v416: Bulk Message Send — card templates with an image use the previous (18 Sep) method exactly: one image + {{3}}.. filled once; see sw.js's v416 note. */  /* v415:   /* v415: Bulk Message Send — card templates get a "One image for everyone" mode (default): upload one image, fill {{3}}.. once, like the original screen; see sw.js's v415 note. */  /* v414:   /* v414: Bulk Message Send — Card design per template (upload a blank card, drag fields, every lead's card is drawn from it); see sw.js's v414 note. */  /* v413:   /* v413: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: drag-and-drop card picture box (remembered per template), "Fix pictures & retry failed" with a what-was-fixed banner and per-row notes, and the top bar now also shows the BACKEND build (Router 'version' → backendBuild); see sw.js's v413 note. */  /* v410:   /* v410: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send makes its own card pictures + sample card picture fallback; see sw.js's v410 note. app.js itself only changed by this version-number line. */  /* v409: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: Add Leads now REPLACES a mismatched card instead of skipping that person forever, and the "preparing card pictures" step no longer re-fetches the whole company's card list — see sw.js's v409 note. app.js itself only changed by this version-number line. */  /* v408: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send / Timely Message: Patient Delivery gets a "Retry failed (N)" button that resets a campaign's already-failed leads back to Pending in place (no delete + re-upload, which would just be reported as duplicates) so the next automatic send actually retries them — see sw.js's v408 note. app.js itself only changed by this version-number line. */  /* v406: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: Gold / Platinum 7 campaigns now create the missing membership cards from the Excel; see sw.js's v406 note. app.js itself only changed by this version-number line. */  /* v405: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: "Next batch" note + Change time button on Campaign History, explanation box in Patient Delivery, Total Leads tile fix; see sw.js's v405 note. app.js itself only changed by this version-number line. */  /* v404: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send: a Delete button on Completed/Failed campaigns (was Cancel only while active); see sw.js's v404 note. app.js itself only changed by this version-number line. */  /* v403: SYNCED TO sw.js's CACHE_VERSION — Bulk Message Send round 3: every active template is listed; card templates (Gold / Platinum / Platinum+ / Diamond / membership_card / Benefits) are filled per recipient from that person's OWN card; see sw.js's v403 note. app.js itself only changed by this one version-number line. */
 /* v402 (superseded by v403): SYNCED TO sw.js's CACHE_VERSION — see that file's v402 note (Bulk
    Message Send / Timely Message can now use "membership_benefits" templates safely, per-recipient
    card lookup). app.js itself only changed by this one version-number line. */
@@ -13445,18 +13445,23 @@ function renderMembershipCards(){
 
   /* ---------------- loading ---------------- */
   function load(what, fresh){
-    if(ST.busy[what]) return; ST.busy[what] = 1;
+    if(ST.busy[what]){ ST.again = ST.again || {}; ST.again[what] = 1; return; }   /* v486: a load asked while busy runs right after (a person picked during a refresh was lost) */
+    ST.busy[what] = 1;
     var body = {op:what};
     if(what === 'tasks'){ if(ST.who) body.who = ST.who; }
     if(what === 'kpi'){ body.period = ST.period.kpi; body.branch = branchPick(); body.all = ST.all; body.role = ST.role; }
     if(what === 'cards'){ body.period = ST.period.cards; body.branch = branchPick(); }
     if(fresh) body.fresh = true;
+    var askedWho = ST.who;
+    var next = function(){ if(ST.again && ST.again[what]){ ST.again[what] = 0; setTimeout(function(){ load(what, true); }, 30); return true; } return false; };
     post(body).then(function(r){
       ST.busy[what] = 0;
+      if(what === 'tasks' && askedWho !== ST.who){ if(!next()) load(what); return; }   /* answer is for the person shown before → drop it */
       if(r && r.ok){ ST.data[what] = r; ST.at[what] = Date.now(); save(); }
       else if(!ST.data[what]) ST.data[what] = {ok:false, error:(r && r.error) || 'No answer'};
+      next();
       paint(what);
-    }, function(e){ ST.busy[what] = 0; if(!ST.data[what]) ST.data[what] = {ok:false, error:'Network: ' + (e && e.message || e)}; paint(what); });
+    }, function(e){ ST.busy[what] = 0; next(); if(!ST.data[what]) ST.data[what] = {ok:false, error:'Network: ' + (e && e.message || e)}; paint(what); });
   }
   function loadAll(fresh){ load('tasks', fresh); load('kpi', fresh); load('cards', fresh); }
   function paint(what){ try{ if(what === 'tasks') paintTasks(); else if(what === 'kpi') paintKpi(); else paintCards(); }catch(e){ var b = $({tasks:'dhTasks', kpi:'dhKpi', cards:'dhCards'}[what]); if(b) b.innerHTML = '<div class="dh-empty">Could not show this block: ' + E(e.message) + '</div>'; } }
@@ -13742,6 +13747,7 @@ function renderMembershipCards(){
     if(t !== ST.lastTok){
       if(ST.data.__tok !== t){ ST.data = {__tok:t}; save(); }     /* never show another person's numbers */
       ST.lastTok = t; ST.who = '';
+      if(!ST.data.tasks && window.__tkCached){ var c0 = window.__tkCached(); if(c0) ST.data.tasks = c0; }   /* v486 speed: last list on this phone shows at once */
       paint('tasks'); paint('kpi'); paint('cards');
       load('tasks'); ST.at.kpi = Math.max(ST.at.kpi || 0, Date.now() - 596000); ST.at.cards = Math.max(ST.at.cards || 0, Date.now() - 596000);   /* v461: KRA & KPI and card sending follow ~4 s later */
     }
@@ -13754,6 +13760,7 @@ function renderMembershipCards(){
     css();
     document.addEventListener('click', function(e){ var t = e.target; if(t && (t.id === 'dashRefresh' || (t.closest && t.closest('#dashRefresh')))) loadAll(true); }, true);
     tick(); setInterval(tick, 1500);
+    setInterval(function(){ if(signedIn() && tok() !== ST.lastTok) tick(); }, 150);   /* v486 speed: start loading right after login (was up to 1.5 s later) */
   }
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
@@ -14151,8 +14158,13 @@ function renderMembershipCards(){
 
   /* ---------- Approve / Reject popup (note optional) ---------- */
   function findLeave(id){ var a = ((L.data || {}).toApprove || []).concat((N.data || {}).toApprove || []); return a.filter(function(l){ return l.leaveId === id; })[0]; }
-  function decide(id, how){
-    var l = findLeave(id); if(!l) return;
+  function decide(id, how, onGo, again){
+    var l = findLeave(id);
+    if(!l){   /* v486: leave list not loaded yet (slow server) → fetch it, then open — the tap is never lost */
+      if(again){ say('This leave was already decided or cancelled', true); return; }
+      say('Opening…');
+      post('notice', {}).then(function(r){ if(r && r.ok){ N.data = r; N.at = Date.now(); try{ paintDash(); }catch(e){} } decide(id, how, onGo, true); }, function(){ say('No connection — try again', true); });
+      return; }
     var dt = l.dayType === 'first' ? 'First half' : l.dayType === 'second' ? 'Second half' : 'Full day';
     var ov = overlay('<div class="lv-h"><h3>' + (how === 'reject' ? 'Reject' : 'Approve') + ' leave — ' + E(l.empName) + '</h3><span class="lv-x" id="dX" style="font-size:20px">✕</span></div>' +
       '<div class="lv-mut">' + E(l.role) + (l.branch ? ' · ' + E(brName(l.branch)) : '') + '</div>' + chips(l) +
@@ -14170,7 +14182,7 @@ function renderMembershipCards(){
       var keepL = L.data && L.data.toApprove, keepN = N.data && N.data.toApprove, keepU = L.data && L.data.updates;
       if(L.data){ L.data.toApprove = (L.data.toApprove || []).filter(function(x){ return x.leaveId !== id; }); L.data.updates = [{kind:'byme', leave:done}].concat(L.data.updates || []); }
       if(N.data) N.data.toApprove = (N.data.toApprove || []).filter(function(x){ return x.leaveId !== id; });
-      closeOv(); paint(); paintTasks(); paintDash();
+      closeOv(); paint(); paintTasks(); paintDash(); if(onGo){ try{ onGo(decision); }catch(e){} }
       say((decision === 'approve' ? '✓ Approved' : '✕ Rejected') + ' — ' + l.empName + ' · ' + datesText(l));
       post('decide', {data:{leaveId:id, decision:decision, note:note}}).then(function(res){
         if(!res || !res.ok){
@@ -14255,7 +14267,8 @@ function renderMembershipCards(){
 
   window.renderLeave = function(){ css(); var p = $id('page-leave'); if(p && !L.data) p.innerHTML = '<div class="lv-card">Loading leaves…</div>'; else paint(); load(); };
   window.__lv2Load = load;
-  window.__lv2Decide = function(id, how){ decide(id, how); };   /* v484: My Tasks / Dashboard rows (tasks2.js) */
+  window.__lv2Decide = function(id, how, onGo){ decide(id, how, onGo); };   /* v484: My Tasks / Dashboard rows (tasks2.js) */
+  window.__lv2Repaint = function(){ try{ paintTasks(); }catch(e){} try{ paintDash(); }catch(e){} };   /* v486: redraw the leave cards once the task list is on (no double Approve) */
   if(typeof window.renderMyTasks === 'function' && !window.renderMyTasks.__lv2){
     var rt = window.renderMyTasks;
     window.renderMyTasks = function(){ var r = rt.apply(this, arguments); try{ tasksBox(); if(!L.data || Date.now() - L.at > 60000) load(); else paintTasks(); }catch(e){} return r; };
@@ -14867,7 +14880,10 @@ function renderMembershipCards(){
 
 /* ==== tasks2.js =========================================================== */
 /* ============================================================================================
- *  Nakoda MIS — TASK SYSTEM (Checklist + Delegation)                          tasks2.js   v484
+ *  Nakoda MIS — TASK SYSTEM (Checklist + Delegation)                          tasks2.js   v486
+ *  v486: popups open + close at once (staff list kept on the phone, saving in the background — the list
+ *        changes at once, a failed save shows a red message and reopens the popup); tasks I gave that the
+ *        doer finished turn GREEN (My Tasks ▸ Given by me on top + Dashboard "finished today" rows, ✕ hides).
  * --------------------------------------------------------------------------------------------
  *  Backend: 53_Tasks.gs (router 'tk').  Loads LAST in the bundle.
  *  · My Tasks page (replaces the old tabs): Today · Overdue · Upcoming · Approvals · Given by me · Done · Team
@@ -14882,7 +14898,7 @@ function renderMembershipCards(){
  * ============================================================================================ */
 (function(){
   var CFG = window.NAKODA_CONFIG || {};
-  var T = {all:null, page:null, tab:'today', who:'', staff:null, master:null, admin:false, recurPaused:false, team:null, dashChip:'all', dashMore:false, ok:null};
+  var T = {all:null, page:null, tab:'today', who:'', staff:null, master:null, admin:false, recurPaused:false, team:null, dashChip:'all', dashMore:false, ok:null, dash:null};
   var DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   function $id(i){ return document.getElementById(i); }
   function E(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
@@ -14918,6 +14934,8 @@ function renderMembershipCards(){
       '.tk-dchips{display:flex;gap:6px;flex-wrap:wrap}.tk-dchips span{border:1px solid #dfe1e5;border-radius:16px;padding:6px 11px;font-size:13px;font-weight:700;cursor:pointer}.tk-dchips span.on{background:#232326;color:#fff;border-color:#232326}' +
       '.tk-tbl{width:100%;border-collapse:collapse;font-size:13.5px}.tk-tbl th{text-align:left;color:#6b6b70;font-size:12px;padding:8px;border-bottom:1px solid #ecedf0;white-space:nowrap}.tk-tbl td{padding:9px 8px;border-bottom:1px solid #f2f2f4}' +
       '.nav-group.tk-grp-nav{display:flex}' +
+      '.tk-row.tk-green{background:#E9F7EE;border-radius:12px;padding-left:10px;padding-right:10px;border-top:1px solid #fff}.tk-row.tk-busy{opacity:.55}' +
+      '.tk-x{border:1px solid #dfe1e5;background:#fff;border-radius:9px;width:32px;height:32px;cursor:pointer;font-weight:700}' +
       '@media(max-width:700px){.tk-row .x{flex-basis:100%}.tk-acts{width:100%;justify-content:flex-end}.tk-2{grid-template-columns:1fr}.tk-card{padding:13px}}';
     document.head.appendChild(s);
   }
@@ -14931,8 +14949,10 @@ function renderMembershipCards(){
   function groupOf(x){ if(x.overdue) return 'overdue'; if(x.src === 'leave' || x.src === 'newdate' || (x.src === 'mis' && /attendance|leave/i.test(x.type || ''))) return 'approvals'; return 'today'; }
   function timePill(x){
     var g = groupOf(x);
+    if(x._green && (x.status === 'done' || x.status === 'late')) return ['✓ DONE' + (x.doneAt ? ' ' + String(x.doneAt).slice(11, 16) : ''), '#1FA34A', '#fff'];
     if(x.status === 'done') return ['DONE' + (x.doneAt ? ' ' + String(x.doneAt).slice(11, 16) : ''), '#E6F4EA', '#137333'];
     if(x.status === 'late') return ['DONE LATE' + (x.doneAt ? ' ' + String(x.doneAt).slice(11, 16) : ''), '#FEF0DC', '#9A5B00'];
+    if(x.status === 'revision' || (x.ask && x.src !== 'newdate')) return ['NEW DATE ASKED', '#FEF0DC', '#9A5B00'];   /* waiting for the giver — even when overdue */
     if(g === 'overdue') return [x.src === 'checklist' && x.lateMin ? 'LATE ' + x.lateMin + ' min' : 'OVERDUE' + (x.due && x.due < today() ? ' ' + dm(x.due) : ''), '#FCE8E6', '#DA1017'];
     if(g === 'approvals') return ['Approve', '#FEF0DC', '#9A5B00'];
     if(x.status === 'revision') return ['NEW DATE ASKED', '#FEF0DC', '#9A5B00'];
@@ -14947,22 +14967,29 @@ function renderMembershipCards(){
   function rowHtml(x, r, mode){
     var mine = !r || r.mine !== false, acts = '';
     var i = ' data-k="' + E(x.k) + '"';
-    if(mode === 'given'){
+    var fin = (mode === 'given' || mode === 'fin') && (x.status === 'done' || x.status === 'late') && x.src !== 'mis';
+    if(fin){
+      x._green = 1;
+      acts = (x.status === 'late' ? '<span class="tk-tag" style="background:#FEF0DC;color:#9A5B00">Late' + (x.lateMin ? ' ' + x.lateMin + ' min' : '') + '</span>' : '<span class="tk-tag" style="background:#E6F4EA;color:#137333">On time</span>') +
+             (/^https?:/.test(x.proof || '') ? '<a class="tk-btn" target="_blank" rel="noopener" href="' + E(x.proof) + '">📷 View proof</a>' : '') +
+             (mode === 'fin' ? '<button class="tk-x" title="Hide" data-act="hide"' + i + '>✕</button>' : '');
+    } else if(mode === 'given'){
       if(x.ask) acts = '<span class="tk-btn tk-red" data-act="nd-yes" data-rev="' + E(x.ask.revId) + '"' + i + '>Approve</span><span class="tk-btn" data-act="nd-no" data-rev="' + E(x.ask.revId) + '"' + i + '>Reject</span>';
       else if(x.src === 'mis') acts = '<span class="tk-btn" data-act="mis"' + i + '>Open</span>';
       else if(x.status === 'pending' || x.status === 'overdue') acts = '<span class="tk-btn" data-act="cancel"' + i + '>Cancel</span>';
     } else if(mode !== 'done'){
       if(x.src === 'checklist' && mine) acts = '<span class="tk-btn tk-red" data-act="done"' + i + '>' + (x.proofNeed === 'photo' ? '📷 Done' : '✓ Done') + '</span>';
-      else if((x.src === 'delegation' || x.src === 'own') && mine) acts = (x.status !== 'revision' && (x.revisions || 0) < 2 ? '<span class="tk-btn" data-act="newdate"' + i + '>New date</span>' : '') + '<span class="tk-btn tk-red" data-act="done"' + i + '>' + (x.proofNeed === 'photo' ? '📷 Done' : '✓ Done') + '</span>';
+      else if((x.src === 'delegation' || x.src === 'own') && mine) acts = (x.status !== 'revision' && !x.ask && (x.revisions || 0) < 2 ? '<span class="tk-btn" data-act="newdate"' + i + '>New date</span>' : '') + '<span class="tk-btn tk-red" data-act="done"' + i + '>' + (x.proofNeed === 'photo' ? '📷 Done' : '✓ Done') + '</span>';
       else if(x.src === 'leave') acts = '<span class="tk-btn tk-red" data-act="lv-yes"' + i + '>Approve</span><span class="tk-btn" data-act="lv-no"' + i + '>Reject</span>';
       else if(x.src === 'newdate') acts = '<span class="tk-btn tk-red" data-act="nd-yes" data-rev="' + E(x.id) + '"' + i + '>Approve</span><span class="tk-btn" data-act="nd-no" data-rev="' + E(x.id) + '"' + i + '>Reject</span>';
       else if(x.src === 'mis') acts = '<span class="tk-btn' + (x.overdue ? ' tk-red' : '') + '" data-act="mis"' + i + '>Open</span>';
       else if(x.app) acts = (x.mobile ? '<a class="tk-btn" href="tel:+91' + E(String(x.mobile).replace(/\D/g, '').slice(-10)) + '">📞 Call</a>' : '') + '<span class="tk-btn" data-act="app"' + i + '>Open ↗</span>';
     }
     var sub = x.sub || '';
-    if(mode === 'given' && x.doerName) sub = '→ ' + x.doerName + (x.ask ? ' · asks ' + dm(String(x.ask.newDue).slice(0, 10)) + ' — “' + x.ask.reason + '”' : '') + (x.revisions ? ' · new dates ' + x.revisions : '');
+    if(fin) sub = (mode === 'fin' ? x.doerName + ' finished it' : '→ ' + x.doerName) + (x.status === 'late' ? ' · ' + (x.lateMin ? x.lateMin + ' min ' : '') + 'late' : ' · on time') + (x.proof && !/^https?:/.test(x.proof) ? ' · “' + x.proof + '”' : (x.proof ? ' · proof ✓' : ''));
+    else if(mode === 'given' && x.doerName) sub = '→ ' + x.doerName + (x.ask ? ' · asks ' + dm(String(x.ask.newDue).slice(0, 10)) + ' — “' + x.ask.reason + '”' : '') + (x.revisions ? ' · new dates ' + x.revisions : '');
     else if(x.revisions && mode !== 'given') sub += ' · new dates ' + x.revisions + '/2';
-    return '<div class="tk-row">' + pill(timePill(x)) + pill(tagOf(x, r)) + '<div class="x"><b>' + E(x.title) + '</b><small>' + E(sub) + (x.note ? ' · ' + E(x.note) : '') + '</small></div><div class="tk-acts">' + acts + '</div></div>';
+    return '<div class="tk-row' + (fin ? ' tk-green' : '') + (x._busy ? ' tk-busy' : '') + '">' + pill(timePill(x)) + pill(tagOf(x, r)) + '<div class="x"><b>' + E(x.title) + '</b><small>' + E(sub) + (x.note ? ' · ' + E(x.note) : '') + '</small></div><div class="tk-acts">' + acts + '</div></div>';
   }
   function bindRows(box, r, list, reload){
     var by = {}; list.forEach(function(x){ by[x.k] = x; });
@@ -14971,23 +14998,51 @@ function renderMembershipCards(){
     });
   }
 
-  /* ---------------- actions ---------------- */
-  function afterChange(reload, msg){ if(msg) say(msg); setTimeout(function(){ if(reload) reload(); if(window.__dhReloadTasks) window.__dhReloadTasks(); }, 300); }
+  /* ---------------- actions (v486: everything changes on screen at once, saving runs in the background) ---------------- */
+  function nowStr(){ var d = new Date(Date.now() + 330 * 60000); return d.toISOString().slice(0, 16).replace('T', ' '); }
+  function repaint(){
+    try{ if(T.dash && T.dash.box && document.body.contains(T.dash.box)) window.__tkPaintDash(T.dash.box, T.dash.r, T.dash.setWho, T.dash.reload); }catch(e){}
+    try{ var p = pageBox(); if(T.page && p && !p.classList.contains('hidden')) paintPage(); }catch(e){}
+  }
+  function lists(){ var out = []; if(T.dash && T.dash.r) out.push(T.dash.r); if(T.page && T.page !== (T.dash && T.dash.r)) out.push(T.page); return out; }
+  function dropItem(k){ lists().forEach(function(r){ ['items', 'upcoming'].forEach(function(f){ if(r[f]) r[f] = r[f].filter(function(x){ return x.k !== k; }); }); }); }
+  function refresh(reload){ setTimeout(function(){ if(reload) reload(); if(window.__dhReloadTasks) window.__dhReloadTasks(); }, 400); }
+  function afterChange(reload, msg){ if(msg) say(msg); refresh(reload); }
+  function hiddenSet(){ try{ return JSON.parse(localStorage.getItem('tk_hide_' + today()) || '{}'); }catch(e){ return {}; } }
+  function hideKey(k){ try{ var h = hiddenSet(); h[k] = 1; localStorage.setItem('tk_hide_' + today(), JSON.stringify(h)); }catch(e){} }
   function act(a, x, r, reload, el){
     if(a === 'done') return doneBox(x, reload);
     if(a === 'newdate') return newDateBox(x, reload);
-    if(a === 'cancel'){ if(!confirm('Cancel this task for ' + (x.doerName || '') + '?')) return; el.setAttribute('disabled', '1');
-      return post('cancel', {id:x.id}).then(function(res){ if(!res.ok) { el.removeAttribute('disabled'); return say(res.error, true); } afterChange(reload, 'Task cancelled'); }); }
-    if(a === 'nd-yes' || a === 'nd-no'){ el.setAttribute('disabled', '1');
-      return post('decide', {revId:el.getAttribute('data-rev'), approve:a === 'nd-yes'}).then(function(res){ if(!res.ok){ el.removeAttribute('disabled'); return say(res.error, true); } afterChange(reload, a === 'nd-yes' ? '✓ New date approved' : '✕ New date rejected'); }); }
-    if(a === 'lv-yes' || a === 'lv-no'){ if(window.__lv2Decide){ window.__lv2Decide(x.id, a === 'lv-yes' ? 'approve' : 'reject'); setTimeout(function(){ afterChange(reload); }, 2500); } else if(window.go) window.go('leave'); return; }
+    if(a === 'hide'){ hideKey(x.k); repaint(); return; }
+    if(a === 'cancel'){ if(!confirm('Cancel this task for ' + (x.doerName || '') + '?')) return;
+      lists().forEach(function(q){ if(q.givenByMe) q.givenByMe = q.givenByMe.filter(function(y){ return y.k !== x.k; }); }); repaint(); say('Task cancelled');
+      return post('cancel', {id:x.id}).then(function(res){ if(!res.ok){ say(res.error, true); } refresh(reload); }); }
+    if(a === 'nd-yes' || a === 'nd-no'){
+      var rev = el.getAttribute('data-rev'), yes = a === 'nd-yes';
+      lists().forEach(function(q){ if(q.items) q.items = q.items.filter(function(y){ return !(y.src === 'newdate' && y.id === rev); }); (q.givenByMe || []).forEach(function(y){ if(y.ask && y.ask.revId === rev){ if(yes){ y.due = String(y.ask.newDue).slice(0, 10); y.dueFull = y.ask.newDue; y.revisions = (y.revisions || 0) + 1; } y.ask = null; y.status = 'pending'; } }); });
+      repaint(); say(yes ? '✓ New date approved' : '✕ New date rejected');
+      return post('decide', {revId:rev, approve:yes}).then(function(res){ if(!res.ok) say(res.error, true); refresh(reload); }); }
+    if(a === 'lv-yes' || a === 'lv-no'){ if(window.__lv2Decide){ window.__lv2Decide(x.id, a === 'lv-yes' ? 'approve' : 'reject', function(){   /* v486: row leaves the moment the leave popup is confirmed */
+        lists().forEach(function(q){ if(q.items) q.items = q.items.filter(function(y){ return y.k !== x.k; }); }); repaint(); setTimeout(function(){ refresh(reload); }, 2500); }); } else if(window.go) window.go('leave'); return; }
     if(a === 'mis') return openMis(x);
     if(a === 'app'){ var url = (r && r.urls || {})[x.app]; if(url && window.__dhOpenLink) window.__dhOpenLink(x.app, x.k, x.ref, x.mobile, url); else if(window.go){ window.__fuFocus = {app:x.app, ref:x.ref || '', k:x.k || '', name:x.title || ''}; window.go('taskmon'); } return; }
   }
   /* old MIS task → the same popup as before (tasks.js taskShared.open needs the task list first) */
+  /* v486 speed: old MIS task list fetched in the background when the list has MIS rows → Open is instant */
+  function teamWarm(){ if(T.team || T.teamBusy) return; T.teamBusy = 1;   /* v486 speed: managers' Team tab fetched in the background */
+    post('team', {}).then(function(r){ T.teamBusy = 0; T.team = r && r.ok ? r.people : []; if(T.tab === 'team') paintPage(); }, function(){ T.teamBusy = 0; }); }
+  function misWarm(r){
+    var A = window.API; if(!A || !A.listMyTasks || !r || !(r.items || []).concat(r.givenByMe || []).some(function(x){ return x.src === 'mis'; })) return;
+    if(T.misBusy || (T.misAt && Date.now() - T.misAt < 120000)) return; T.misBusy = 1;
+    A.listMyTasks().then(function(q){ var l = (q && q.tasks) || [];
+      var fin = function(l2){ T.misList = l2; T.misAt = Date.now(); T.misBusy = 0; };
+      if(A.listAssignedByMe) A.listAssignedByMe().then(function(q2){ fin(l.concat((q2 && q2.tasks) || [])); }, function(){ fin(l); }); else fin(l);
+    }, function(){ T.misBusy = 0; });
+  }
   function openMis(x){
     var A = window.API, open = function(list){ if(window.taskShared) window.taskShared.open(x.ref, list || [], []); else if(window.openTaskDetail) window.openTaskDetail(x.ref); };
     var has = function(l){ return (l || []).some(function(t){ return String(t.taskId) === String(x.ref); }); };
+    if(T.misList && has(T.misList)){ open(T.misList); T.misAt = 0; misWarm({items:[{src:'mis'}]}); return; }
     if(!A || !A.listMyTasks) return open([]);
     say('Opening…');
     A.listMyTasks().then(function(r){
@@ -15001,32 +15056,34 @@ function renderMembershipCards(){
     alert(title); return null;
   }
   function closeM(){ if(typeof window.closeModal === 'function') window.closeModal(); }
+  /* ✓ Done — the row leaves at once; the server is told in the background (a failure brings the row back) */
   function doneBox(x, reload){
     var need = x.proofNeed || 'none';
-    var send = function(proof, btn){
-      if(btn){ btn.setAttribute('disabled', '1'); btn.textContent = 'Saving…'; }
-      post('done', {id:x.id, proof:proof || ''}).then(function(res){
-        if(!res.ok){ if(btn){ btn.removeAttribute('disabled'); btn.textContent = 'Save'; } return say(res.error, true); }
-        closeM(); afterChange(reload, res.item && res.item.status === 'late' ? '✓ Done — late' + (res.item.lateMin ? ' by ' + res.item.lateMin + ' min' : '') : '✓ Done — on time');
-      });
+    var finish = function(sendProof){
+      var late = nowStr() > (x.dueFull || (x.due + ' 23:59'));
+      dropItem(x.k);
+      lists().forEach(function(q){ if(q.done) q.done.unshift(Object.assign({}, x, {status:late ? 'late' : 'done', doneAt:nowStr(), _busy:0})); });
+      repaint(); say(late ? '✓ Done — late' : '✓ Done — on time');
+      Promise.resolve().then(sendProof).then(function(proof){
+        if(proof && proof.error) throw new Error(proof.error);
+        return post('done', {id:x.id, proof:(proof && proof.url) || proof || ''});
+      }).then(function(res){
+        if(!res.ok) throw new Error(res.error);
+        if(res.item && res.item.status === 'late' && !late) say('✓ Done — late' + (res.item.lateMin ? ' by ' + res.item.lateMin + ' min' : ''));
+        refresh(reload);
+      }).catch(function(e){ say('Not saved: ' + (e && e.message || e) + ' — the task is back in your list', true); refresh(reload); });
     };
-    if(need === 'none') return send('', null);
+    if(need === 'none') return finish(function(){ return ''; });
     var m = modal('Done — ' + x.title,
-      need === 'photo' ? '<label>Photo (needed)</label><input type="file" accept="image/*" capture="environment" id="tkPh"><div class="tk-hint" id="tkPhS"></div>'
+      need === 'photo' ? '<label>Photo (needed)</label><input type="file" accept="image/*" capture="environment" id="tkPh">'
                        : '<label>' + (need === 'number' ? 'Number (needed)' : 'Note (needed)') + '</label><input id="tkPr" ' + (need === 'number' ? 'inputmode="decimal"' : '') + ' placeholder="' + (need === 'number' ? 'e.g. 12450' : 'what was done') + '">',
       '<button class="tk-btn" onclick="closeModal()">Cancel</button> <button class="tk-btn tk-red" id="tkSv">Save</button>');
     if(!m) return;
-    var sv = $id('tkSv');
-    sv.onclick = function(){
-      if(need !== 'photo'){ var v = ($id('tkPr').value || '').trim(); if(!v) return say('Write the ' + need, true); return send(v, sv); }
+    $id('tkSv').onclick = function(){
+      if(need !== 'photo'){ var v = ($id('tkPr').value || '').trim(); if(!v) return say('Write the ' + need, true); closeM(); return finish(function(){ return v; }); }
       var f = $id('tkPh').files[0]; if(!f) return say('Take or pick the photo', true);
-      sv.setAttribute('disabled', '1'); sv.textContent = 'Uploading…';
-      shrink(f, function(data){
-        post('photo', {dataUri:data, ref:x.id}).then(function(res){
-          if(!res.ok){ sv.removeAttribute('disabled'); sv.textContent = 'Save'; return say(res.error, true); }
-          send(res.url, sv);
-        });
-      });
+      closeM();
+      finish(function(){ return new Promise(function(ok){ shrink(f, function(data){ ok(post('photo', {dataUri:data, ref:x.id}).then(function(res){ return res.ok ? {url:res.url} : {error:res.error}; })); }); }); });
     };
   }
   function shrink(file, cb){
@@ -15037,44 +15094,77 @@ function renderMembershipCards(){
     }; img.src = rd.result; };
     rd.readAsDataURL(file);
   }
-  function newDateBox(x, reload){
+  function newDateBox(x, reload, pre){
+    pre = pre || {};
     var m = modal('Ask for a new date', '<div class="tk-hint">' + E(x.title) + ' · now due ' + E(dm(x.due)) + (x.time ? ' ' + E(x.time) : '') + '</div>' +
-      '<div class="tk-2"><div><label>New date</label><input type="date" id="tkNd" min="' + today() + '" value="' + E(x.due > today() ? x.due : today()) + '"></div><div><label>Time (optional)</label><input type="time" id="tkNt"></div></div>' +
-      '<label>Reason (needed)</label><input id="tkNr" placeholder="why the new date">' +
+      '<div class="tk-2"><div><label>New date</label><input type="date" id="tkNd" min="' + today() + '" value="' + E(pre.date || (x.due > today() ? x.due : today())) + '"></div><div><label>Time (optional)</label><input type="time" id="tkNt" value="' + E(pre.time || '') + '"></div></div>' +
+      '<label>Reason (needed)</label><input id="tkNr" placeholder="why the new date" value="' + E(pre.reason || '') + '">' +
       '<div class="tk-note">' + (x.src === 'own' ? 'Your own task — the new date applies at once (still counted).' : 'Goes to ' + E(x.byName || 'the giver') + ' to approve. Max 2 new dates per task.') + '</div>',
       '<button class="tk-btn" onclick="closeModal()">Cancel</button> <button class="tk-btn tk-red" id="tkNs">Send</button>');
     if(!m) return;
     $id('tkNs').onclick = function(){
-      var b = this, d = $id('tkNd').value, t = $id('tkNt').value, rs = ($id('tkNr').value || '').trim();
-      if(!d) return say('Pick the new date', true); if(!rs) return say('Write the reason', true);
-      b.setAttribute('disabled', '1');
-      post('revise', {id:x.id, date:d, time:t, reason:rs}).then(function(res){ if(!res.ok){ b.removeAttribute('disabled'); return say(res.error, true); } closeM(); afterChange(reload, x.src === 'own' ? '✓ New date set' : '✓ Sent to ' + (x.byName || 'the giver')); });
+      var v = {date:$id('tkNd').value, time:$id('tkNt').value, reason:($id('tkNr').value || '').trim()};
+      if(!v.date) return say('Pick the new date', true); if(!v.reason) return say('Write the reason', true);
+      closeM();
+      lists().forEach(function(q){ ['items', 'upcoming'].forEach(function(f){ (q[f] || []).forEach(function(y){ if(y.k === x.k){ if(x.src === 'own'){ y.due = v.date; y.time = v.time; y.dueFull = v.date + ' ' + (v.time || '18:00'); y.overdue = false; y.revisions = (y.revisions || 0) + 1; } else y.status = 'revision'; } }); }); });
+      repaint(); say(x.src === 'own' ? '✓ New date set' : '✓ Sent to ' + (x.byName || 'the giver'));
+      post('revise', {id:x.id, date:v.date, time:v.time, reason:v.reason}).then(function(res){
+        if(!res.ok){ say(res.error, true); newDateBox(x, reload, v); }
+        refresh(reload);
+      });
     };
   }
-  function staff(cb){
-    if(T.staff) return cb(T.staff);
-    post('staff', {}).then(function(r){ if(r.ok){ T.staff = r.staff; cb(T.staff); } else say(r.error, true); });
+  /* staff list — kept on the phone so + Give a task opens at once; refreshed in the background */
+  var STAFF_KEY = 'tk_staff_v1';
+  function staffCached(){
+    if(T.staff) return T.staff;
+    try{ var c = JSON.parse(localStorage.getItem(STAFF_KEY) || 'null'); if(c && c.list && c.list.length){ T.staff = c.list; T._staffAt = c.at || 0; return T.staff; } }catch(e){}
+    return null;
   }
-  function giveBox(own, reload){
+  function staffRefresh(cb){
+    if(T._staffBusy) return; T._staffBusy = 1;
+    post('staff', {}).then(function(r){ T._staffBusy = 0; if(r.ok){ T.staff = r.staff; T._staffAt = Date.now(); try{ localStorage.setItem(STAFF_KEY, JSON.stringify({at:T._staffAt, list:r.staff})); }catch(e){} if(cb) cb(T.staff); } }, function(){ T._staffBusy = 0; });
+  }
+  function staffWarm(){ var c = staffCached(); if(!c || Date.now() - (T._staffAt || 0) > 6 * 3600 * 1000) staffRefresh(); }
+  function staff(cb){
+    var c = staffCached();
+    if(c){ cb(c); if(Date.now() - (T._staffAt || 0) > 6 * 3600 * 1000) staffRefresh(); return; }
+    cb(null); staffRefresh(function(list){ var box = $id('tkWhoBox'); if(box) box.innerHTML = whoSelect(list); var b2 = $id('ckWhoBox'); if(b2 && T._ckFill) T._ckFill(list); });
+  }
+  function whoSelect(list){
+    var me = (window.S && S.user && S.user.EmpID) || '';
+    if(!list) return '<select id="tkGw" disabled><option value="">Loading names…</option></select>';
+    return '<select id="tkGw"><option value="">— pick a person —</option>' + list.map(function(q){ return '<option value="' + E(q.empId) + '">' + E(q.name) + (q.role ? ' · ' + E(q.role) : '') + (q.branch ? ' · ' + E(q.branch) : '') + (q.empId === me ? ' (me)' : '') + '</option>'; }).join('') + '</select>';
+  }
+  function giveBox(own, reload, pre){
+    pre = pre || {};
     staff(function(list){
       var me = (window.S && S.user && S.user.EmpID) || '';
-      var opts = list.map(function(s){ return '<option value="' + E(s.empId) + '"' + (s.empId === me ? ' selected' : '') + '>' + E(s.name) + (s.role ? ' · ' + E(s.role) : '') + (s.branch ? ' · ' + E(s.branch) : '') + (s.empId === me ? ' (me)' : '') + '</option>'; }).join('');
       var m = modal(own ? 'My own task' : 'Give a task',
-        '<label>Task</label><input id="tkGt" placeholder="what has to be done">' +
-        '<label>Details (optional)</label><textarea id="tkGd" rows="2"></textarea>' +
-        (own ? '' : '<label>Doer — anyone, or yourself</label><select id="tkGw"><option value="">— pick a person —</option>' + opts + '</select>') +
-        '<div class="tk-2"><div><label>Deadline date</label><input type="date" id="tkGdt" min="' + today() + '" value="' + today() + '"></div><div><label>Time (optional)</label><input type="time" id="tkGtm"></div></div>' +
+        '<label>Task</label><input id="tkGt" placeholder="what has to be done" value="' + E(pre.task || '') + '">' +
+        '<label>Details (optional)</label><textarea id="tkGd" rows="2">' + E(pre.details || '') + '</textarea>' +
+        (own ? '' : '<label>Doer — anyone, or yourself</label><div id="tkWhoBox">' + whoSelect(list) + '</div>') +
+        '<div class="tk-2"><div><label>Deadline date</label><input type="date" id="tkGdt" min="' + today() + '" value="' + E(pre.date || today()) + '"></div><div><label>Time (optional)</label><input type="time" id="tkGtm" value="' + E(pre.time || '') + '"></div></div>' +
         '<div class="tk-2"><div><label>Priority</label><select id="tkGp"><option>Normal</option><option>High</option></select></div><div><label>Proof when done</label><select id="tkGpr"><option value="none">None</option><option value="photo">Photo</option><option value="note">Note</option><option value="number">Number</option></select></div></div>' +
         '<div class="tk-note">With a time → late after that time. No time → late after the doer\'s duty end.</div>',
         '<button class="tk-btn" onclick="closeModal()">Cancel</button> <button class="tk-btn tk-red" id="tkGs">' + (own ? 'Add my task' : 'Give task') + '</button>');
       if(!m) return;
-      if(!own) $id('tkGw').value = '';
+      if(pre.priority) $id('tkGp').value = pre.priority; if(pre.proof) $id('tkGpr').value = pre.proof;
+      if(!own && pre.doerId && $id('tkGw')){ $id('tkGw').value = pre.doerId; try{ $id('tkGw').dispatchEvent(new Event('change', {bubbles:true})); }catch(e){} }
       $id('tkGs').onclick = function(){
-        var b = this, task = ($id('tkGt').value || '').trim(), doer = own ? me : $id('tkGw').value;
-        if(!task) return say('Write the task', true); if(!doer) return say('Pick the doer', true);
-        b.setAttribute('disabled', '1');
-        post('give', {task:task, details:$id('tkGd').value, doerId:doer, date:$id('tkGdt').value, time:$id('tkGtm').value, priority:$id('tkGp').value, proof:$id('tkGpr').value})
-          .then(function(res){ if(!res.ok){ b.removeAttribute('disabled'); return say(res.error, true); } closeM(); afterChange(reload, own ? '✓ Your task is added' : '✓ Task given to ' + (res.item && res.item.doerName || '')); });
+        var v = {task:($id('tkGt').value || '').trim(), details:$id('tkGd').value, doerId:own ? me : ($id('tkGw') ? $id('tkGw').value : ''), date:$id('tkGdt').value, time:$id('tkGtm').value, priority:$id('tkGp').value, proof:$id('tkGpr').value};
+        if(!v.task) return say('Write the task', true); if(!v.doerId) return say('Pick the doer', true);
+        var who = ((staffCached() || []).filter(function(q){ return q.empId === v.doerId; })[0] || {}).name || '';
+        closeM();
+        var tmp = {k:'tmp|' + Date.now(), src:v.doerId === me ? 'own' : 'delegation', id:'', title:v.task, sub:v.doerId === me ? 'My own task' : '→ ' + who, due:v.date, time:v.time,
+                   dueFull:v.date + ' ' + (v.time || '18:00'), hasTime:!!v.time, status:'pending', doerId:v.doerId, doerName:who, byName:'me', _busy:1, proofNeed:v.proof};
+        if(v.doerId === me){ lists().forEach(function(q){ if(v.date <= today()){ if(q.items) q.items.push(tmp); } else if(q.upcoming) q.upcoming.push(tmp); }); }
+        else lists().forEach(function(q){ if(q.givenByMe) q.givenByMe.unshift(tmp); });
+        repaint(); say(v.doerId === me ? '✓ Your task is added' : '✓ Task given to ' + (who || 'them'));
+        post('give', v).then(function(res){
+          if(!res.ok){ dropItem(tmp.k); lists().forEach(function(q){ if(q.givenByMe) q.givenByMe = q.givenByMe.filter(function(y){ return y.k !== tmp.k; }); }); repaint(); say('Not saved: ' + res.error, true); giveBox(own, reload, v); return; }
+          refresh(reload);
+        });
       };
     });
   }
@@ -15082,28 +15172,45 @@ function renderMembershipCards(){
   /* ---------------- list loader ---------------- */
   function loadAll(o){
     return post('all', o).then(function(r){
-      if(r && r.ok){ T.ok = true; window.__tkListOn = true; T.admin = !!r.admin; T.recurPaused = !!r.recurPaused; if(r.today) T.today = r.today; side(); }
+      if(r && r.ok){ var first = !window.__tkListOn; T.ok = true; window.__tkListOn = true; if(first && window.__lv2Repaint){ try{ window.__lv2Repaint(); }catch(e){} }   /* leave card drops its approvals (they are rows here) */
+        T.admin = !!r.admin; T.recurPaused = !!r.recurPaused; if(r.today) T.today = r.today; side(); staffWarm(); if(!o.who){ keep(r, !!o.full); setTimeout(function(){ misWarm(r); ckWarm(); if(o.full && (r.people || []).length) teamWarm(); }, 1500); } }
       else if(T.ok === null) T.ok = false;
       return r;
     });
   }
   window.__tkAll = function(o){ return loadAll({who:o.who || '', fresh:!!o.fresh}); };
+  /* v486 speed: last good list kept on this phone per person → Dashboard and My Tasks paint at once after login, fresh list replaces it ~1 server trip later */
+  function uid(){ try{ return String((window.S && S.user && (S.user.EmpID || S.user.LoginID)) || ''); }catch(e){ return ''; } }
+  function ckKey(full){ return 'tk_last_' + (full ? 'p_' : 'd_') + uid(); }
+  function keep(r, full){ try{ if(!uid() || !r || !r.ok || !r.mine) return; var s = JSON.stringify({at:Date.now(), r:r}); if(s.length < 600000) localStorage.setItem(ckKey(full), s); }catch(e){} }
+  function cached(full){
+    try{ if(!uid()) return null; var c = JSON.parse(localStorage.getItem(ckKey(full)) || 'null'); if(!c || !c.r || Date.now() - c.at > 12 * 3600000) return null;
+      var d = new Date(), loc = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+      if(c.r.today && c.r.today !== loc) return null; c.r._cached = 1; return c.r; }catch(e){ return null; } }
+  document.addEventListener('click', function(e){ var b = e.target && e.target.closest && e.target.closest('#logoutBtn,[data-act="logout"]'); if(!b) return;   /* logout wipes the kept lists, like the app's own cache */
+    try{ Object.keys(localStorage).forEach(function(k){ if(k.indexOf('tk_last_') === 0) localStorage.removeItem(k); }); }catch(e2){} }, true);
+  window.__tkCached = function(){ var r = cached(false) || cached(true); if(r){ r.__tk = 1; } return r; };
 
   /* ---------------- Dashboard card ---------------- */
   window.__tkPaintDash = function(box, r, setWho, reload){
     css();
-    var counts = r.counts || {}, chip = T.dashChip;
-    var list = r.items.filter(function(x){ return chip === 'all' || groupOf(x) === chip || x.src === chip; });
+    T.dash = {box:box, r:r, setWho:setWho, reload:reload};
+    var hid = hiddenSet(), fin = (r.doneByThem || []).filter(function(x){ return !hid[x.k]; });
+    var counts = {all:r.items.length}, chip = T.dashChip;   /* counted here so instant changes show at once */
+    r.items.forEach(function(x){ var g = groupOf(x); counts[g] = (counts[g] || 0) + 1; counts[x.src] = (counts[x.src] || 0) + 1; });
+    var list = chip === 'givendone' ? [] : r.items.filter(function(x){ return chip === 'all' || groupOf(x) === chip || x.src === chip; });
     var who = r.mine ? 'My' : (((r.people || []).filter(function(p){ return p.empId === r.who; })[0] || {name:r.who}).name + '’s');
     var chips = [['all', 'All', counts.all || 0], ['overdue', 'Overdue', counts.overdue], ['approvals', 'Approvals', counts.approvals], ['checklist', 'Checklist', counts.checklist], ['delegation', 'Delegation', counts.delegation], ['own', 'My task', counts.own], ['mis', 'MIS', counts.mis]];
     (r.apps || []).forEach(function(a){ if(counts[a.id] && a.id !== 'mis') chips.push([a.id, a.name, counts[a.id]]); });
+    if(fin.length) chips.push(['givendone', 'Done by them', fin.length]);
     var h = '<div class="tk-h"><h3><span class="tk-n">1</span>' + E(who) + ' tasks today' + (counts.overdue ? ' <span class="tk-tag" style="background:#FCE8E6;color:#DA1017">' + counts.overdue + ' overdue</span>' : '') + '</h3><span class="tk-sp"></span>' +
       (r.mine ? '<span class="tk-btn" id="tkDOwn">+ My own task</span><span class="tk-btn tk-red" id="tkDGive">+ Give a task</span>' : '') +
       ((r.people || []).length ? '<select class="tk-sel" id="tkDWho"><option value="">Me</option>' + r.people.map(function(p){ return '<option value="' + E(p.empId) + '"' + (!r.mine && r.who === p.empId ? ' selected' : '') + '>' + E(p.name) + '</option>'; }).join('') + '</select>' : '') + '</div>';
-    h += '<div class="tk-chips">' + chips.filter(function(c){ return c[0] === 'all' || c[2]; }).map(function(c){ return '<span class="tk-chip' + (chip === c[0] ? ' on' : '') + '" data-chip="' + E(c[0]) + '">' + E(c[1]) + ' <i>' + (c[2] || 0) + '</i></span>'; }).join('') + '</div>';
-    if(!list.length) h += '<div class="tk-empty">Nothing due today 🎉</div>';
-    var show = T.dashMore ? list : list.slice(0, 8);
+    h += '<div class="tk-chips">' + chips.filter(function(c){ return c[0] === 'all' || c[2]; }).map(function(c){ return '<span class="tk-chip' + (chip === c[0] ? ' on' : '') + '" data-chip="' + E(c[0]) + '"' + (c[0] === 'givendone' ? ' style="border-color:#1FA34A;color:#137333;background:' + (chip === c[0] ? '#d6f0de' : '#E9F7EE') + '"' : '') + '>' + E(c[1]) + ' <i>' + (c[2] || 0) + '</i></span>'; }).join('') + '</div>';
+    if(!list.length && chip !== 'givendone') h += '<div class="tk-empty">Nothing due today 🎉</div>';
+    var show = T.dashMore ? list : list.slice(0, 8).concat(list.slice(8).filter(function(x){ return x._busy; }));   /* a task just added always shows */
     h += show.map(function(x){ return rowHtml(x, r, 'dash'); }).join('');
+    if(fin.length && (chip === 'all' || chip === 'givendone')) h += '<div class="tk-grp" style="color:#137333">✓ TASKS YOU GAVE — FINISHED TODAY</div>' + fin.map(function(x){ return rowHtml(x, r, 'fin'); }).join('');
     h += '<div class="tk-more">' + (list.length > 8 ? '<a id="tkDMore">' + (T.dashMore ? 'Show less ↑' : 'View all ' + list.length + ' →') + '</a> · ' : '') + '<a id="tkDOpen">Open My Tasks →</a></div>';
     var errs = Object.keys(r.errors || {}).filter(function(k){ return r.errors[k] && k !== 'misUp' && k !== 'misOld'; });
     if(errs.length) h += '<div class="tk-hint">Some apps did not answer right now — their tasks appear when they answer.</div>';
@@ -15114,7 +15221,7 @@ function renderMembershipCards(){
     if($id('tkDOwn')) $id('tkDOwn').onclick = function(){ giveBox(true, reload); };
     if($id('tkDGive')) $id('tkDGive').onclick = function(){ giveBox(false, reload); };
     if($id('tkDWho')) $id('tkDWho').onchange = function(){ setWho(this.value); };
-    bindRows(box, r, r.items, reload);
+    bindRows(box, r, r.items.concat(fin), reload);
   };
 
   /* ---------------- My Tasks page ---------------- */
@@ -15122,7 +15229,12 @@ function renderMembershipCards(){
   function pageBox(){ return $id('page-tasks'); }
   function renderPage(){
     var p = pageBox(); if(!p) return; css();
+    if(T.pageUid !== uid()){ T.page = null; T.team = null; T.who = ''; T.pageUid = uid(); }   /* another person signed in on this phone */
     if(T.ok === false && oldRender) return oldRender();
+    if(!T.page && !T.who){   /* v486 speed: paint at once from the last full list, or from today's Dashboard list (other tabs fill in a moment) */
+      var c = cached(true);
+      if(!c && T.dash && T.dash.r && T.dash.r.mine){ c = {}; for(var k in T.dash.r) c[k] = T.dash.r[k]; c._partial = 1; }
+      if(c) T.page = c; }
     if(!T.page) p.innerHTML = '<div class="tk-card"><div class="tk-empty">Loading your tasks…</div></div>';
     else paintPage();
     loadAll({who:T.who, full:true}).then(function(r){
@@ -15130,11 +15242,11 @@ function renderMembershipCards(){
       else if(!T.page){ if(oldRender){ T.ok = false; oldRender(); } else p.innerHTML = '<div class="tk-card"><div class="tk-empty">' + E(r && r.error || 'Could not load') + '</div></div>'; }
     });
   }
-  function reloadPage(){ T.team = null; renderPage(); }
+  function reloadPage(){ renderPage(); if(T.team && !T.teamBusy){ T.teamBusy = 1; post('team', {}).then(function(r){ T.teamBusy = 0; if(r && r.ok){ T.team = r.people; if(T.tab === 'team') paintPage(); } }, function(){ T.teamBusy = 0; }); } }   /* v486: team table kept while it refreshes */
   function paintPage(){
     var p = pageBox(), r = T.page; if(!p || !r) return;
     var items = r.items || [], over = items.filter(function(x){ return groupOf(x) === 'overdue'; }), appr = items.filter(function(x){ return groupOf(x) === 'approvals'; }), tod = items.filter(function(x){ return groupOf(x) === 'today'; });
-    var tabs = [['today', 'Today', items.length], ['overdue', 'Overdue', over.length], ['upcoming', 'Upcoming', (r.upcoming || []).length], ['approvals', 'Approvals', appr.length], ['given', 'Given by me', (r.givenByMe || []).length], ['done', 'Done', (r.done || []).length]];
+    var tabs = [['today', 'Today', items.length], ['overdue', 'Overdue', over.length], ['upcoming', 'Upcoming', r._partial ? '' : (r.upcoming || []).length], ['approvals', 'Approvals', appr.length], ['given', 'Given by me', r._partial ? '' : (r.givenByMe || []).length], ['done', 'Done', r._partial ? '' : (r.done || []).length]];
     if((r.people || []).length) tabs.push(['team', 'Team', '']);
     var h = '<div class="tk-card"><div class="tk-h"><h3 style="font-size:24px">My Tasks</h3><span class="tk-sp"></span>' +
       ((r.people || []).length ? '<select class="tk-sel" id="tkPWho"><option value="">' + E((window.S && S.user && S.user.FullName) || 'Me') + ' (me)</option>' + r.people.map(function(q){ return '<option value="' + E(q.empId) + '"' + (!r.mine && r.who === q.empId ? ' selected' : '') + '>' + E(q.name) + '</option>'; }).join('') + '</select>' : '') +
@@ -15146,8 +15258,13 @@ function renderMembershipCards(){
     if(T.tab === 'today'){ body = sec('OVERDUE', over) + sec('WAITING FOR MY APPROVAL', appr) + sec('DUE TODAY', tod); if(!items.length) body = '<div class="tk-empty">Nothing due today 🎉</div>'; }
     else if(T.tab === 'overdue') body = sec('', over) || '<div class="tk-empty">Nothing overdue 👍</div>';
     else if(T.tab === 'approvals') body = sec('', appr) || '<div class="tk-empty">Nothing waiting for your approval</div>';
+    else if(r._partial && /^(upcoming|given|done)$/.test(T.tab)) body = '<div class="tk-empty">Loading…</div>';
     else if(T.tab === 'upcoming') body = sec('', r.upcoming || [], 'up') || '<div class="tk-empty">Nothing coming up</div>';
-    else if(T.tab === 'given') body = sec('', r.givenByMe || [], 'given') || '<div class="tk-empty">You have not given a task yet. Tap “+ Give a task”.</div>';
+    else if(T.tab === 'given'){
+      var gb = r.givenByMe || [], gDone = gb.filter(function(x){ return x.src !== 'mis' && (x.status === 'done' || x.status === 'late'); }), gOpen = gb.filter(function(x){ return gDone.indexOf(x) < 0; });
+      gDone.sort(function(a, b){ return String(a.doneAt) < String(b.doneAt) ? 1 : -1; });
+      body = (sec('DONE BY THEM', gDone, 'given') + sec('STILL OPEN', gOpen, 'given')) || '<div class="tk-empty">You have not given a task yet. Tap “+ Give a task”.</div>';
+    }
     else if(T.tab === 'done') body = sec('LAST 7 DAYS', r.done || [], 'done') || '<div class="tk-empty">Nothing done in the last 7 days</div>';
     else if(T.tab === 'team') body = teamHtml();
     p.innerHTML = h + body + '</div>';
@@ -15158,7 +15275,7 @@ function renderMembershipCards(){
     bindRows(p, r, all, reloadPage);
   }
   function teamHtml(){
-    if(!T.team){ post('team', {}).then(function(r){ T.team = r.ok ? r.people : []; if(T.tab === 'team') paintPage(); }); return '<div class="tk-empty">Loading team…</div>'; }
+    if(!T.team){ teamWarm(); return '<div class="tk-empty">Loading team…</div>'; }
     if(!T.team.length) return '<div class="tk-empty">No team members found</div>';
     return '<div style="overflow-x:auto"><table class="tk-tbl"><tr><th>Person</th><th>Checklist today</th><th>Done</th><th>Late</th><th>Open</th><th>Overdue given tasks</th></tr>' +
       T.team.map(function(q){ return '<tr><td><b>' + E(q.name) + '</b> <span style="color:#8a8a90">' + E(q.branch || '') + '</span></td><td>' + q.today + '</td><td>' + q.done + '</td><td' + (q.late ? ' style="color:#DA1017;font-weight:700"' : '') + '>' + q.late + '</td><td>' + q.open + '</td><td' + (q.overdueDel ? ' style="color:#DA1017;font-weight:700"' : '') + '>' + q.overdueDel + '</td></tr>'; }).join('') + '</table></div>';
@@ -15179,12 +15296,22 @@ function renderMembershipCards(){
     if(c.freq === 'Y') return 'Every year on ' + c.days;
     return '';
   }
-  function renderCk(){
+  function ckFetch(){ if(T.ckP) return T.ckP;   /* one request at a time (page open + background warm share it) */
+    T.ckP = post('master', {}).then(function(r){ T.ckP = null; return r; }, function(e){ T.ckP = null; return {ok:false, error:'Network'}; }); return T.ckP; }
+  function ckWarm(){ if(!T.admin || (T.ckAt && Date.now() - T.ckAt < 300000)) return;   /* v486 speed: admin's checklist list fetched in the background */
+    ckFetch().then(function(r){ if(r && r.ok && !(T.master || []).some(function(c){ return c._busy; })){ T.master = r.rows; T.ckAt = Date.now(); } }); }
+  function renderCk(force){
     var p = ckPage(); if(!p) return; css();
-    p.innerHTML = '<div class="tk-card"><div class="tk-empty">Loading…</div></div>';
-    post('master', {}).then(function(r){
-      if(!r.ok){ p.innerHTML = '<div class="tk-card"><div class="tk-empty">' + E(r.error) + '</div></div>'; return; }
-      T.master = r.rows;
+    if(T.master) paintCk({ok:true, rows:T.master}); else p.innerHTML = '<div class="tk-card"><div class="tk-empty">Loading…</div></div>';
+    (force ? post('master', {}) : ckFetch()).then(function(r){
+      if(!r.ok){ if(!T.master) p.innerHTML = '<div class="tk-card"><div class="tk-empty">' + E(r.error) + '</div></div>'; return; }
+      var busy = (T.master || []).filter(function(c){ return c._busy; });   /* rows still saving stay */
+      T.master = r.rows.filter(function(c){ return !busy.some(function(b){ return b.ckId && b.ckId === c.ckId; }); }).concat(busy); T.ckAt = Date.now();
+      paintCk({ok:true, rows:T.master});
+    });
+  }
+  function paintCk(r){
+    var p = ckPage(); if(!p) return; {
       var h = '<div class="tk-card"><div class="tk-h"><h3 style="font-size:24px">Checklist setup</h3><span class="tk-sp"></span><span class="tk-btn tk-red" id="tkCkNew">+ New checklist task</span></div>' +
         '<div class="tk-hint">Repeating tasks. Every night at 00:30 the system puts them on each doer\'s My Tasks. Holiday / week off → no task. Doer on approved leave → backup. % = done on time, last 30 days.</div>';
       if(!r.rows.length) h += '<div class="tk-empty">No checklist tasks yet. Tap “+ New checklist task”.</div>';
@@ -15195,10 +15322,11 @@ function renderMembershipCards(){
       p.innerHTML = h;
       $id('tkCkNew').onclick = function(){ ckBox(null); };
       [].forEach.call(p.querySelectorAll('[data-ck]'), function(el){ el.onclick = function(){ ckBox(T.master.filter(function(c){ return c.ckId === el.getAttribute('data-ck'); })[0]); }; });
-    });
+    }
   }
   function ckBox(c){
     staff(function(list){
+      if(!list){ say('Loading names…'); staffRefresh(function(){ ckBox(c); }); return; }
       c = c || {freq:'D', days:'Mon,Tue,Wed,Thu,Fri,Sat', active:'Y', proof:'none'};
       var opt = function(sel){ return '<option value="">— pick —</option>' + list.map(function(s){ return '<option value="' + E(s.empId) + '"' + (s.empId === sel ? ' selected' : '') + '>' + E(s.name) + (s.branch ? ' · ' + E(s.branch) : '') + '</option>'; }).join(''); };
       var st = {freq:c.freq || 'D', days:String(c.days || '')};
@@ -15240,10 +15368,14 @@ function renderMembershipCards(){
         var row = {ckId:c.ckId || '', task:$id('ckT').value.trim(), how:$id('ckH').value.trim(), doerId:$id('ckD').value, backupId:$id('ckB').value, freq:st.freq, days:st.days,
                    time:$id('ckTm').value, proof:$id('ckP').value, start:$id('ckS').value, active:$id('ckA').value};
         if(!row.task) return say('Write the task', true); if(!row.doerId) return say('Pick the doer', true);
-        b.setAttribute('disabled', '1');
-        post('save', {row:row, today:!!($id('ckNow') && $id('ckNow').checked)}).then(function(res){
-          if(!res.ok){ b.removeAttribute('disabled'); return say(res.error, true); }
-          closeM(); say('✓ Saved' + (res.madeToday ? ' — today\'s task made' : ' — starts ' + (row.start && row.start > today() ? dm(row.start) : 'tomorrow'))); renderCk();
+        var nowToo = !!($id('ckNow') && $id('ckNow').checked), keepM = (T.master || []).slice();
+        var nm = function(id){ var s = (list || []).filter(function(q){ return q.empId === id; })[0]; return s ? s.name : id; };
+        var temp = {}; for(var k in c) temp[k] = c[k]; for(var k2 in row) temp[k2] = row[k2]; temp.doerName = nm(row.doerId); temp.backupName = row.backupId ? nm(row.backupId) : ''; temp._busy = 1;
+        T.master = row.ckId ? keepM.map(function(q){ return q.ckId === row.ckId ? temp : q; }) : keepM.concat([temp]);
+        closeM(); paintCk({ok:true, rows:T.master}); say('Saving…');   /* v486: popup closes at once, saved in the background */
+        post('save', {row:row, today:nowToo}).then(function(res){
+          if(!res || !res.ok){ T.master = keepM; paintCk({ok:true, rows:T.master}); say('Not saved — ' + ((res && res.error) || 'try again'), true); var c2 = {}; for(var k3 in c) c2[k3] = c[k3]; for(var k4 in row) c2[k4] = row[k4]; return ckBox(c2); }
+          say('✓ Saved' + (res.madeToday ? ' — today\'s task made' : ' — starts ' + (row.start && row.start > today() ? dm(row.start) : 'tomorrow'))); temp._busy = 0; if(res.ckId) temp.ckId = res.ckId; T.ckAt = 0; renderCk(true);
         });
       };
     });
